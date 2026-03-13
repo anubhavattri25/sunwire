@@ -1,0 +1,39 @@
+prisma:error 
+Invalid `prisma.article.findMany()` invocation in
+C:\Users\Anubhav\.gemini\antigravity-browser-profile\sunwire\backend\services\articleProcessor.js:87:47
+
+  84   return { processed: 0, inserted: 0, duplicatesSkipped: 0 };
+  85 }
+  86 
+→ 87 const recentArticles = await prisma.article.findMany(
+Can't reach database server at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`
+
+Please make sure your database server is running at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`.
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`
+
+Please make sure your database server is running at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`.
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`
+
+Please make sure your database server is running at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`.
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`
+
+Please make sure your database server is running at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`.
+prisma:error 
+Invalid `prisma.$queryRaw()` invocation:
+
+
+Can't reach database server at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`
+
+Please make sure your database server is running at `db.zybkvoutdfnpskjvhheq.supabase.co:5432`.

@@ -1,0 +1,280 @@
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "functions": {
+    "api/page.js": {
+      "maxDuration": 60,
+      "includeFiles": "templates/index.html"
+    },
+    "api/article-page.js": {
+      "maxDuration": 60,
+      "includeFiles": "{templates/article.html,templates/404.html}"
+    },
+    "api/article.js": {
+      "maxDuration": 60
+    },
+    "api/ingest.js": {
+      "maxDuration": 60
+    },
+    "api/news.js": {
+      "maxDuration": 60
+    },
+    "api/sitemap.js": {
+      "maxDuration": 60
+    }
+  },
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [
+        {
+          "type": "host",
+          "value": "www.sunwire.in"
+        }
+      ],
+      "destination": "https://sunwire.in/:path*",
+      "permanent": true
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/sitemap.xml",
+      "destination": "/api/sitemap"
+    },
+    {
+      "source": "/page/:page",
+      "destination": "/api/page?page=:page"
+    },
+    {
+      "source": "/ai/page/:page",
+      "destination": "/api/page?filter=ai&page=:page"
+    },
+    {
+      "source": "/tech/page/:page",
+      "destination": "/api/page?filter=tech&page=:page"
+    },
+    {
+      "source": "/entertainment/page/:page",
+      "destination": "/api/page?filter=entertainment&page=:page"
+    },
+    {
+      "source": "/sports/page/:page",
+      "destination": "/api/page?filter=sports&page=:page"
+    },
+    {
+      "source": "/business/page/:page",
+      "destination": "/api/page?filter=business&page=:page"
+    },
+    {
+      "source": "/ai",
+      "destination": "/api/page?filter=ai"
+    },
+    {
+      "source": "/tech",
+      "destination": "/api/page?filter=tech"
+    },
+    {
+      "source": "/entertainment",
+      "destination": "/api/page?filter=entertainment"
+    },
+    {
+      "source": "/sports",
+      "destination": "/api/page?filter=sports"
+    },
+    {
+      "source": "/business",
+      "destination": "/api/page?filter=business"
+    },
+    {
+      "source": "/ai/:slug",
+      "destination": "/api/article-page?category=ai&slug=:slug"
+    },
+    {
+      "source": "/tech/:slug",
+      "destination": "/api/article-page?category=tech&slug=:slug"
+    },
+    {
+      "source": "/entertainment/:slug",
+      "destination": "/api/article-page?category=entertainment&slug=:slug"
+    },
+    {
+      "source": "/sports/:slug",
+      "destination": "/api/article-page?category=sports&slug=:slug"
+    },
+    {
+      "source": "/business/:slug",
+      "destination": "/api/article-page?category=business&slug=:slug"
+    },
+    {
+      "source": "/latest/:slug",
+      "destination": "/api/article-page?category=latest&slug=:slug"
+    },
+    {
+      "source": "/news/:id/:slug*",
+      "destination": "/api/article-redirect?id=:id"
+    },
+    {
+      "source": "/article",
+      "destination": "/api/article-redirect"
+    },
+    {
+      "source": "/",
+      "destination": "/api/page"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/index.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/app.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/styles.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/article.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/article.css",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/analytics.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/app-search.mjs",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/app-widgets.mjs",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/article-related.mjs",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/favicon.svg",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/social-card.svg",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
+      "source": "/404.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/api/health",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/ingest",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/article",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=300, stale-while-revalidate=900"
+        }
+      ]
+    },
+    {
+      "source": "/api/news",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=60, stale-while-revalidate=30"
+        }
+      ]
+    },
+    {
+      "source": "/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    }
+  ]
+}

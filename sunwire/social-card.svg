@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" role="img" aria-labelledby="title desc">
+  <title id="title">SunWire</title>
+  <desc id="desc">SunWire latest news across AI, tech, entertainment, sports, and business.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" x2="0" y1="0" y2="1">
+      <stop offset="0%" stop-color="#faefcb" />
+      <stop offset="100%" stop-color="#f6e7b5" />
+    </linearGradient>
+    <radialGradient id="glow1" cx="0.12" cy="0.18" r="0.28">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.42" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+    <radialGradient id="glow2" cx="0.8" cy="0.06" r="0.24">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0" />
+    </radialGradient>
+  </defs>
+  <rect width="1200" height="630" fill="url(#bg)" />
+  <rect width="1200" height="630" fill="url(#glow1)" />
+  <rect width="1200" height="630" fill="url(#glow2)" />
+  <g opacity="0.1">
+    <path d="M0 0h1200v630H0z" fill="none" />
+    <path d="M0 0h1200M0 70h1200M0 140h1200M0 210h1200M0 280h1200M0 350h1200M0 420h1200M0 490h1200M0 560h1200M0 630h1200" stroke="#111111" stroke-width="1" />
+    <path d="M0 0v630M70 0v630M140 0v630M210 0v630M280 0v630M350 0v630M420 0v630M490 0v630M560 0v630M630 0v630M700 0v630M770 0v630M840 0v630M910 0v630M980 0v630M1050 0v630M1120 0v630M1190 0v630" stroke="#111111" stroke-width="1" />
+  </g>
+  <g transform="translate(84 84)">
+    <rect x="0" y="0" width="1032" height="462" rx="34" fill="#fffdf7" stroke="rgba(17,17,17,0.08)" />
+    <rect x="54" y="54" width="160" height="160" rx="30" fill="#ffcb05" />
+    <circle cx="134" cy="134" r="54" fill="#211c12" />
+    <path d="M101 153c10 11 23 17 33 17 21 0 34-17 34-33 0-15-10-28-25-31-7 0-15 3-20 8-5 5-8 11-8 19h21c0-5 3-9 8-9 5 0 8 5 8 12 0 9-6 15-16 15-6 0-13-3-23-11z" fill="#ffcb05" />
+    <text x="264" y="122" fill="#111111" font-family="'Inter Tight', Inter, sans-serif" font-size="116" font-weight="900" letter-spacing="-6">SUNWIRE</text>
+    <text x="266" y="182" fill="#5c5448" font-family="Inter, sans-serif" font-size="28" font-weight="800" letter-spacing="3">BE THE FIRST TO KNOW</text>
+    <text x="58" y="314" fill="#111111" font-family="'Inter Tight', Inter, sans-serif" font-size="64" font-weight="800" letter-spacing="-2">Latest AI, tech, entertainment,</text>
+    <text x="58" y="384" fill="#111111" font-family="'Inter Tight', Inter, sans-serif" font-size="64" font-weight="800" letter-spacing="-2">sports, and business news.</text>
+    <text x="58" y="448" fill="#5c5448" font-family="Inter, sans-serif" font-size="28" font-weight="600">Fast reads, clean summaries, canonical links, and structured coverage from SunWire.</text>
+  </g>
+</svg>

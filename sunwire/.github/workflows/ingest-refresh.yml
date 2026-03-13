@@ -1,0 +1,17 @@
+name: Refresh Ingestion Cache
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Trigger Sunwire ingest refresh
+        run: |
+          response=$(curl --silent --show-error --fail "https://sunwire.in/api/ingest")
+          echo "$response"
