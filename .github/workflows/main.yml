@@ -23,6 +23,11 @@ jobs:
           cd sunwire
           npm install
 
+      - name: Generate Prisma client
+        run: |
+          cd sunwire
+          npx prisma generate
+
       - name: Run news pipeline
         run: |
           cd sunwire
