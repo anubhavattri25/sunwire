@@ -9,28 +9,34 @@ jobs:
   ingest:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: sunwire
-
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - run: npm install --ignore-scripts
+      - name: Install dependencies
+        run: |
+          cd sunwire
+          npm install
 
-      - run: npm install -g prisma
+      - name: Install Prisma CLI
+        run: |
+          cd sunwire
+          npm install -g prisma
 
       - name: Generate Prisma Client
         run: |
-          SCHEMA=$(find . -name "schema.prisma" | head -n 1)
-          prisma generate --schema=$SCHEMA
+          cd sunwire
+          prisma generate --schema=backend/prisma/schema.prisma
 
       - name: Run news pipeline
-        run: node backend/services/journalisticPipeline.js
+        run: |
+          cd sunwire
+          node backend/services/journalisticPipeline.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
