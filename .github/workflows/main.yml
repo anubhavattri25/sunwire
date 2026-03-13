@@ -23,15 +23,12 @@ jobs:
           cd sunwire
           npm install --ignore-scripts
 
-      - name: Install Prisma CLI
-        run: |
-          cd sunwire
-          npm install prisma --save-dev
-
       - name: Generate Prisma Client
         run: |
           cd sunwire
-          npx prisma generate --schema=backend/prisma/schema.prisma
+          SCHEMA=$(find . -name "schema.prisma" | head -n 1)
+          echo "Using schema: $SCHEMA"
+          node node_modules/prisma/build/index.js generate --schema="$SCHEMA"
 
       - name: Run news pipeline
         run: |
