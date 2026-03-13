@@ -1,26 +1,32 @@
 const { fetchNews } = require("./newsIngestor");
 const { saveArticle } = require("./articleProcessor");
+const { buildArticlesFromTopics } = require("./journalisticPipeline");
 
 async function runPipeline() {
   try {
     console.log("🚀 Sunwire pipeline started");
 
-    console.log("📰 Fetching news...");
-    const articles = await fetchNews();
+    console.log("📰 Fetching raw news...");
+    const rawArticles = await fetchNews();
 
-    if (!articles || articles.length === 0) {
-      console.log("⚠️ No news fetched.");
+    if (!rawArticles || rawArticles.length === 0) {
+      console.log("⚠️ No raw news fetched");
       return;
     }
 
-    console.log("Articles fetched:", articles.length);
+    console.log("Raw articles fetched:", rawArticles.length);
+
+    console.log("🧠 Building journalistic articles...");
+    const articles = await buildArticlesFromTopics(rawArticles);
+
+    console.log("Generated articles:", articles.length);
 
     for (const article of articles) {
-      console.log("💾 Saving article:", article.title);
+      console.log("💾 Saving:", article.title);
       await saveArticle(article);
     }
 
-    console.log("✅ Pipeline finished successfully");
+    console.log("✅ Sunwire pipeline finished");
 
   } catch (err) {
     console.error("❌ Pipeline failed:", err);
