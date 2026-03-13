@@ -23,7 +23,7 @@ jobs:
         working-directory: sunwire/backend
 
       - name: Run pipeline
-        run: node journalisticPipeline.js
+        run: node backend/journalisticPipeline.js
         working-directory: sunwire/backend
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
