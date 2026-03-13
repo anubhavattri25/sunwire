@@ -2,15 +2,15 @@ name: Sunwire News Pipeline
 
 on:
   schedule:
-    - cron: "*/20 * * * *"
-  workflow_dispatch:
+    - cron: "*/20 * * * *"   # runs every 20 minutes
+  workflow_dispatch:        # allows manual run from GitHub
 
 jobs:
   ingest:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repo
+      - name: Checkout repository
         uses: actions/checkout@v4
 
       - name: Setup Node
@@ -19,10 +19,14 @@ jobs:
           node-version: 18
 
       - name: Install dependencies
-        run: npm install
+        run: |
+          cd sunwire
+          npm install
 
-      - name: Run pipeline
-        run: node backend/services/journalisticPipeline.js
+      - name: Run Sunwire pipeline
+        run: |
+          cd sunwire
+          node backend/services/journalisticPipeline.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
