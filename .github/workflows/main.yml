@@ -18,23 +18,17 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install dependencies (skip postinstall)
-        run: |
-          cd sunwire
-          npm install --ignore-scripts
+      - name: Install dependencies
+        run: npm install --ignore-scripts
 
-      - name: Install Prisma CLI globally
+      - name: Install Prisma CLI
         run: npm install -g prisma
 
       - name: Generate Prisma client
-        run: |
-          cd sunwire
-          prisma generate
+        run: prisma generate
 
       - name: Run news pipeline
-        run: |
-          cd sunwire
-          node backend/journalisticPipeline.js
+        run: node backend/journalisticPipeline.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
