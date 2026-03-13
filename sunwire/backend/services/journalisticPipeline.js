@@ -1,3 +1,24 @@
+async function runPipeline() {
+
+  console.log("🚀 Sunwire pipeline started")
+
+  console.log("Fetching news...")
+
+  const articles = await fetchNews()
+
+  console.log("Articles fetched:", articles.length)
+
+  for (const article of articles) {
+
+    console.log("Saving article:", article.title)
+
+    await saveArticle(article)
+  }
+
+  console.log("✅ Pipeline finished")
+}
+
+runPipeline()
 const { logEvent } = require("../utils/logger");
 const { resolveArticleImage } = require("./imageFetcher");
 const { summarizeNews } = require("./summarizeNews");
@@ -400,3 +421,18 @@ module.exports = {
   clusterTopics,
   normalizeTitle,
 };
+async function runPipeline() {
+  console.log("Sunwire pipeline started");
+
+  // your pipeline logic
+}
+
+runPipeline()
+  .then(() => {
+    console.log("Pipeline finished");
+    process.exit(0);
+  })
+  .catch((err) => {
+    console.error("Pipeline failed:", err);
+    process.exit(1);
+  });
