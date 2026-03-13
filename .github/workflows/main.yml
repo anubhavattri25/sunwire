@@ -10,27 +10,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-      - name: Show repository structure (debug)
+      - name: Show project files
         run: ls -R
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 18
 
-      - name: Install dependencies
-        run: npm install --ignore-scripts
+      - run: npm install --ignore-scripts
 
-      - name: Install Prisma CLI
-        run: npm install -g prisma
+      - run: npm install -g prisma
 
-      - name: Generate Prisma client
+      - name: Generate Prisma Client
         run: |
           SCHEMA=$(find . -name "schema.prisma" | head -n 1)
-          echo "Found schema at $SCHEMA"
           prisma generate --schema=$SCHEMA
 
       - name: Run news pipeline
