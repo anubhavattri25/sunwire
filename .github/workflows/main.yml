@@ -2,8 +2,8 @@ name: Sunwire News Pipeline
 
 on:
   schedule:
-    - cron: "*/20 * * * *"   # runs every 20 minutes
-  workflow_dispatch:        # allow manual run
+    - cron: "*/20 * * * *"
+  workflow_dispatch:
 
 jobs:
   ingest:
@@ -22,4 +22,4 @@ jobs:
         run: npm install
 
       - name: Run news pipeline
-        run: node backend/services/journalisticPipeline.js
+        run: node sunwire/backend/services/journalisticPipeline.js
