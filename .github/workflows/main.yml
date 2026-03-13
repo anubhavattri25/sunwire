@@ -20,17 +20,13 @@ jobs:
 
       - run: npm install -g prisma
 
-      - name: Generate Prisma client
+      - name: Generate Prisma Client
         run: |
           SCHEMA=$(find . -name "schema.prisma" | head -n 1)
-          echo "Using schema $SCHEMA"
           prisma generate --schema=$SCHEMA
 
       - name: Run news pipeline
-        run: |
-          FILE=$(find . -name "journalisticPipeline.js" | head -n 1)
-          echo "Running pipeline from $FILE"
-          node $FILE
+        run: node backend/services/journalisticPipeline.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
