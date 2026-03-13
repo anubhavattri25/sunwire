@@ -2,8 +2,8 @@ name: Sunwire News Pipeline
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
-  workflow_dispatch:
+    - cron: "*/20 * * * *"   # runs every 20 minutes
+  workflow_dispatch:        # allow manual run
 
 jobs:
   ingest:
@@ -13,27 +13,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 18
 
       - name: Install dependencies
-        run: |
-          cd sunwire
-          npm install --ignore-scripts
-
-      - name: Generate Prisma Client
-        run: |
-          cd sunwire
-          SCHEMA=$(find . -name "schema.prisma" | head -n 1)
-          echo "Using schema: $SCHEMA"
-          node node_modules/prisma/build/index.js generate --schema="$SCHEMA"
+        run: npm install
 
       - name: Run news pipeline
-        run: |
-          cd sunwire
-          node backend/services/journalisticPipeline.js
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: node backend/services/journalisticPipeline.js
