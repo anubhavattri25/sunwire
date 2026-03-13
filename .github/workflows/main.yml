@@ -13,7 +13,10 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
+      - name: Show repository structure (debug)
+        run: ls -R
+
+      - name: Setup Node
         uses: actions/setup-node@v4
         with:
           node-version: 18
@@ -25,7 +28,10 @@ jobs:
         run: npm install -g prisma
 
       - name: Generate Prisma client
-        run: prisma generate --schema=backend/prisma/schema.prisma
+        run: |
+          SCHEMA=$(find . -name "schema.prisma" | head -n 1)
+          echo "Found schema at $SCHEMA"
+          prisma generate --schema=$SCHEMA
 
       - name: Run news pipeline
         run: node backend/journalisticPipeline.js
