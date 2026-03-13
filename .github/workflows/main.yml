@@ -2,7 +2,7 @@ name: Sunwire News Pipeline
 
 on:
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/10 * * * *"   # every 10 minutes
   workflow_dispatch:
 
 jobs:
@@ -18,10 +18,10 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install dependencies
+      - name: Install dependencies (skip postinstall)
         run: |
           cd sunwire
-          npm install
+          npm install --ignore-scripts
 
       - name: Generate Prisma client
         run: |
