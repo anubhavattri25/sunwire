@@ -25,7 +25,7 @@ jobs:
         run: npm install -g prisma
 
       - name: Generate Prisma client
-        run: prisma generate
+        run: prisma generate --schema=backend/prisma/schema.prisma
 
       - name: Run news pipeline
         run: node backend/journalisticPipeline.js
