@@ -2,8 +2,8 @@ name: Sunwire News Pipeline
 
 on:
   schedule:
-    - cron: "*/10 * * * *"   # runs every 10 minutes
-  workflow_dispatch:
+    - cron: "*/10 * * * *"   # run every 10 minutes
+  workflow_dispatch:        # allow manual run
 
 jobs:
   ingest:
@@ -18,15 +18,11 @@ jobs:
         with:
           node-version: 18
 
-      - name: Install backend dependencies
-        run: |
-          cd backend
-          npm install
+      - name: Install dependencies
+        run: npm install
 
       - name: Run news pipeline
-        run: |
-          cd backend
-          node journalisticPipeline.js
+        run: node journalisticPipeline.js
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
