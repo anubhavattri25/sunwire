@@ -12,9 +12,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Show project files
-        run: ls -R
-
       - uses: actions/setup-node@v4
         with:
           node-version: 18
@@ -23,13 +20,17 @@ jobs:
 
       - run: npm install -g prisma
 
-      - name: Generate Prisma Client
+      - name: Generate Prisma client
         run: |
           SCHEMA=$(find . -name "schema.prisma" | head -n 1)
+          echo "Using schema $SCHEMA"
           prisma generate --schema=$SCHEMA
 
       - name: Run news pipeline
-        run: node backend/journalisticPipeline.js
+        run: |
+          FILE=$(find . -name "journalisticPipeline.js" | head -n 1)
+          echo "Running pipeline from $FILE"
+          node $FILE
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
