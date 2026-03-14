@@ -1400,6 +1400,7 @@ function isUsefulStory(story) {
   const ageDays = sourcePublishedMs ? ((Date.now() - sourcePublishedMs) / (1000 * 60 * 60 * 24)) : 0;
   if (cleanText(story.title).length < 12) return false;
   if (cleanText(story.rawText || story.fullDescription).length < 30) return false;
+  if ((story.summary || "").split(" ").length < 60) return false;
   if (story.source !== "SunWire Archive" && sourcePublishedMs && ageDays > 21) return false;
   if (story.category === "entertainment" && story.source === "Engadget") {
     if (/(game|gaming|gamer|indie|nintendo|switch|xbox|playstation|ps5|steam|esports|studio|franchise|government|policy|regulation|law|rules|copyright|ban)/i.test(combined)) {
@@ -1929,6 +1930,7 @@ async function runSourceTask(sourceName, categoryHint, task) {
 }
 
 async function fetchAllSources() {
+
   googleTrendsState = {
     generatedAt: "",
     topics: [],
@@ -1939,97 +1941,116 @@ async function fetchAllSources() {
     { sourceName: "The Verge", feedUrl: "https://www.theverge.com/rss/index.xml" },
     { sourceName: "Wired", feedUrl: "https://www.wired.com/feed/rss" },
     { sourceName: "Ars Technica", feedUrl: "https://feeds.arstechnica.com/arstechnica/technology-lab" },
-    { sourceName: "Engadget", feedUrl: "https://www.engadget.com/rss.xml" },
-    { sourceName: "VentureBeat AI", feedUrl: "https://venturebeat.com/ai/feed/", options: { category: "ai", priority: 6 } },
     { sourceName: "MIT Tech Review", feedUrl: "https://www.technologyreview.com/feed/" },
-    { sourceName: "HackerNoon AI", feedUrl: "https://hackernoon.com/tagged/ai/feed", options: { category: "ai" } },
-    { sourceName: "Variety", feedUrl: "https://variety.com/feed/", options: { category: "entertainment", priority: 6 } },
-    { sourceName: "The Hollywood Reporter", feedUrl: "https://www.hollywoodreporter.com/feed/", options: { category: "entertainment", priority: 8 } },
-    { sourceName: "Billboard", feedUrl: "https://www.billboard.com/feed/", options: { category: "entertainment", priority: 5 } },
+
+    { sourceName: "BBC News", feedUrl: "https://feeds.bbci.co.uk/news/rss.xml", options: { priority: 22 } },
+    { sourceName: "Reuters Tech", feedUrl: "https://www.reutersagency.com/feed/?best-topics=technology", options: { priority: 22 } },
+    { sourceName: "Guardian Tech", feedUrl: "https://www.theguardian.com/uk/technology/rss", options: { priority: 20 } },
+    { sourceName: "CNBC", feedUrl: "https://www.cnbc.com/id/100003114/device/rss/rss.html", options: { priority: 20 } },
+
+    { sourceName: "NDTV", feedUrl: "https://feeds.feedburner.com/ndtvnews-top-stories", options: { priority: 22 } },
+    { sourceName: "Times of India", feedUrl: "https://timesofindia.indiatimes.com/rssfeedstopstories.cms", options: { priority: 22 } },
+    { sourceName: "Indian Express", feedUrl: "https://indianexpress.com/section/india/feed/", options: { priority: 22 } },
+    { sourceName: "Economic Times", feedUrl: "https://economictimes.indiatimes.com/rssfeedsdefault.cms", options: { priority: 22 } },
+
+    { sourceName: "Variety", feedUrl: "https://variety.com/feed/", options: { category: "entertainment", priority: 8 } },
+    { sourceName: "Hollywood Reporter", feedUrl: "https://www.hollywoodreporter.com/feed/", options: { category: "entertainment", priority: 8 } },
+
     { sourceName: "ESPN", feedUrl: "https://www.espn.com/espn/rss/news", options: { category: "sports", priority: 8 } },
-    { sourceName: "BBC Sport", feedUrl: "https://feeds.bbci.co.uk/sport/rss.xml", options: { category: "sports", priority: 6 } },
-    { sourceName: "Sky Sports", feedUrl: "https://www.skysports.com/rss/12040", options: { category: "sports", priority: 6 } },
-    { sourceName: "NDTV", feedUrl: "https://feeds.feedburner.com/ndtvnews-top-stories", options: { priority: 18 } },
-    { sourceName: "Times of India", feedUrl: "https://timesofindia.indiatimes.com/rssfeedstopstories.cms", options: { priority: 18 } },
-    { sourceName: "Indian Express", feedUrl: "https://indianexpress.com/section/india/feed/", options: { priority: 20 } },
-    { sourceName: "The Economic Times", feedUrl: "https://economictimes.indiatimes.com/rssfeedsdefault.cms", options: { priority: 20 } },
+    { sourceName: "BBC Sport", feedUrl: "https://feeds.bbci.co.uk/sport/rss.xml", options: { category: "sports", priority: 7 } },
   ];
 
   const tasks = [
-    { sourceName: "Hacker News AI Search", categoryHint: "ai", task: () => fetchHackerNews("artificial intelligence OR llm OR openai OR machine learning OR ai agents", [0, 1, 2, 3]) },
-    { sourceName: "Hacker News Tech Search", categoryHint: "tech", task: () => fetchHackerNews("technology OR software OR cloud OR chips OR cybersecurity", [0, 1, 2, 3]) },
-    { sourceName: "Hacker News Latest", categoryHint: "all", task: () => fetchHackerNewsLatest([0, 1, 2, 3]) },
-    { sourceName: "Reddit AI/Tech New", categoryHint: "all", task: () => fetchReddit(["artificial", "MachineLearning", "technology", "programming"], "", "new") },
-    { sourceName: "Reddit AI/Tech Hot", categoryHint: "all", task: () => fetchReddit(["artificial", "MachineLearning", "technology", "programming"], "", "hot") },
-    { sourceName: "Reddit Entertainment New", categoryHint: "entertainment", task: () => fetchReddit(["movies", "bollywood", "television", "popculturechat"], "entertainment", "new") },
-    { sourceName: "Reddit Entertainment Hot", categoryHint: "entertainment", task: () => fetchReddit(["movies", "bollywood", "television", "popculturechat"], "entertainment", "hot") },
-    { sourceName: "Reddit Sports New", categoryHint: "sports", task: () => fetchReddit(["sports", "cricket", "soccer", "tennis"], "sports", "new") },
-    { sourceName: "Reddit Sports Hot", categoryHint: "sports", task: () => fetchReddit(["sports", "cricket", "soccer", "tennis"], "sports", "hot") },
-    { sourceName: "Reddit India", categoryHint: "all", task: () => fetchReddit(["india", "indiasocial", "IndiaSpeaks", "bollywood", "cricket"], "", "hot", 80, "Reddit India") },
-    { sourceName: "X Trends India", categoryHint: "all", task: () => fetchXTrendsIndia() },
-    { sourceName: "YouTube India", categoryHint: "all", task: () => fetchYouTubeTrendingIndia() },
-    { sourceName: "DEV Community", categoryHint: "all", task: () => fetchDevTo() },
-    ...feedSources.map((feed) => ({
+
+    { sourceName: "Hacker News AI", categoryHint: "ai",
+      task: () => fetchHackerNews(
+        "artificial intelligence OR llm OR openai OR machine learning OR ai agents",
+        [0,1,2,3]
+      )
+    },
+
+    { sourceName: "Hacker News Tech", categoryHint: "tech",
+      task: () => fetchHackerNews(
+        "technology OR software OR cloud OR chips OR cybersecurity",
+        [0,1,2,3]
+      )
+    },
+
+    { sourceName: "Hacker News Latest", categoryHint: "all",
+      task: () => fetchHackerNewsLatest([0,1,2,3])
+    },
+
+    ...feedSources.map(feed => ({
       sourceName: feed.sourceName,
       categoryHint: feed.options?.category || SOURCE_CATEGORY_HINTS[feed.sourceName] || "",
-      task: () => fetchRssViaRss2Json(feed.sourceName, feed.feedUrl, feed.options || {}),
+      task: () => fetchRssViaRss2Json(feed.sourceName, feed.feedUrl, feed.options || {})
     })),
+
     {
       sourceName: "Google News AI",
       categoryHint: "ai",
-      task: () => fetchGoogleNewsQueries("Google News AI", [
-      "OpenAI OR Anthropic OR Gemini OR LLM OR AI agents",
-      "Nvidia OR AI chip OR model release OR generative AI startup"
-    ], { category: "ai", priority: 8 }),
+      task: () => fetchGoogleNewsQueries(
+        "Google News AI",
+        [
+          "OpenAI OR Anthropic OR Gemini OR AI model",
+          "Nvidia AI chip OR generative AI startup OR AI agents"
+        ],
+        { category: "ai", priority: 10 }
+      )
     },
+
     {
       sourceName: "Google News Tech",
       categoryHint: "tech",
-      task: () => fetchGoogleNewsQueries("Google News Tech", [
-      "cloud OR cybersecurity OR developer platform OR API launch",
-      "semiconductor OR GPU OR software release OR startup funding"
-    ], { category: "tech", priority: 6 }),
+      task: () => fetchGoogleNewsQueries(
+        "Google News Tech",
+        [
+          "software release OR cloud OR cybersecurity",
+          "startup funding OR semiconductor OR GPU"
+        ],
+        { category: "tech", priority: 8 }
+      )
     },
+
     {
       sourceName: "Google News Entertainment",
       categoryHint: "entertainment",
-      task: () => fetchGoogleNewsQueries("Google News Entertainment", [
-      "Bollywood celebrity OR actor OR actress OR movie trailer OR box office",
-      "Hollywood celebrity OR movie announcement OR award show OR relationship OR breakup",
-      "OTT release OR Netflix OR Prime Video OR JioHotstar OR YouTube creator controversy OR Instagram influencer"
-    ], { category: "entertainment", priority: 9 }),
+      task: () => fetchGoogleNewsQueries(
+        "Google News Entertainment",
+        [
+          "Bollywood box office OR actor interview OR celebrity controversy",
+          "Hollywood movie release OR trailer OR OTT series"
+        ],
+        { category: "entertainment", priority: 10 }
+      )
     },
+
     {
       sourceName: "Google News Sports",
       categoryHint: "sports",
-      task: () => fetchGoogleNewsQueries("Google News Sports", [
-      "India cricket OR IPL OR Virat Kohli OR Rohit Sharma OR Dhoni",
-      "Messi OR Ronaldo OR Champions League OR football transfer",
-      "Olympics OR Indian athlete OR match controversy OR sports injury"
-    ], { category: "sports", priority: 9 }),
-    },
-    {
-      sourceName: "Google News India Public Interest",
-      categoryHint: "all",
-      task: () => fetchGoogleNewsQueries("Google News India Public Interest", [
-      "India prime minister OR cabinet OR parliament OR supreme court OR government policy OR bill",
-      "India Nepal OR India Pakistan OR India China OR border tension OR defence OR military OR ceasefire",
-      "Iran war OR Israel Iran OR Ukraine Russia OR oil shock OR missile attack AND India impact"
-    ], { priority: 24 }),
-    },
-    {
-      sourceName: "Google News India Economy",
-      categoryHint: "all",
-      task: () => fetchGoogleNewsQueries("Google News India Economy", [
-      "India economy OR inflation OR rupee OR RBI OR budget OR tax OR GST",
-      "Oil price OR crude oil OR fuel price OR tariff OR exports OR imports AND India",
-      "Indian stock market OR Sensex OR Nifty OR bank shares OR market crash OR earnings"
-    ], { priority: 20 }),
-    },
+      task: () => fetchGoogleNewsQueries(
+        "Google News Sports",
+        [
+          "India cricket OR IPL OR Virat Kohli OR Rohit Sharma",
+          "football transfer OR Champions League OR Messi OR Ronaldo"
+        ],
+        { category: "sports", priority: 10 }
+      )
+    }
   ];
-  const googleTrendStories = await runSourceTask("Google Trends India", "all", () => fetchGoogleTrendsIndia());
-  const settled = await Promise.all(tasks.map(({ sourceName, categoryHint, task }) => runSourceTask(sourceName, categoryHint, task)));
-  return [...googleTrendStories, ...settled.flatMap((result) => result)];
+
+  const googleTrendStories =
+    await runSourceTask("Google Trends India","all",() => fetchGoogleTrendsIndia());
+
+  const settled =
+    await Promise.all(tasks.map(({sourceName,categoryHint,task}) =>
+      runSourceTask(sourceName,categoryHint,task)
+    ));
+
+  return [
+    ...googleTrendStories,
+    ...settled.flatMap(result => result)
+  ];
 }
 
 const CURATED_FALLBACK_STORIES = CURATED_FALLBACK_INPUTS.map((item) => normalizeStory(item));
