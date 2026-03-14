@@ -1,4 +1,4 @@
-const { getBackendCompatiblePayload } = require("../lib/server/backendCompat");
+
 const {
   SITE,
   buildArticleUrl,
@@ -50,11 +50,16 @@ module.exports = async (req, res) => {
   }
 
   try {
-    const payload = await getBackendCompatiblePayload({
-      page: 1,
-      pageSize: 1000,
-      filter: "all",
-    }).catch(() => null);
+    const snapshot = await runIngestion({
+  limit: 1000,
+  forceRefresh: false,
+  reason: "sitemap",
+}).catch(() => null);
+
+const payload = {
+  generatedAt: snapshot?.generatedAt || "",
+  stories: Array.isArray(snapshot?.stories) ? snapshot.stories : [],
+};
     const stories = Array.isArray(payload?.stories) ? payload.stories : [];
     const urls = new Set();
     const entries = [];
