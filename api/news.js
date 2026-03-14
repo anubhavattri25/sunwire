@@ -1,27 +1,31 @@
-const { ingestNewsSources } = require("../backend/services/newsIngestor");
 const prisma = require("../backend/config/database");
+const { ingestNewsSources } = require("../backend/services/newsIngestor");
 
 module.exports = async function handler(req, res) {
   try {
     const refresh = req.query.refresh === "1";
 
-    // If refresh requested → run ingestion pipeline
+    // run ingestion if refresh requested
     if (refresh) {
-      const rawArticles = await ingestNewsSources();
+      const articles = await ingestNewsSources();
 
-      // store articles in database
-      for (const article of rawArticles) {
-        await prisma.article.create({
-          data: article,
-        }).catch(() => {});
+      if (Array.isArray(articles) && articles.length) {
+        await Promise.all(
+          articles.map((article) =>
+            prisma.article
+              .create({ data: article })
+              .catch(() => null)
+          )
+        );
       }
     }
 
-    // fetch from database
     const stories = await prisma.article.findMany({
       orderBy: { published_at: "desc" },
       take: 100,
     });
+
+    res.setHeader("Cache-Control", "no-store");
 
     res.status(200).json({
       generatedAt: new Date().toISOString(),
@@ -32,11 +36,10 @@ module.exports = async function handler(req, res) {
       filter: "all",
       stories,
     });
-
-  } catch (error) {
+  } catch (err) {
     res.status(500).json({
       error: "Pipeline failed",
-      message: error.message,
+      message: err.message,
     });
   }
 };
