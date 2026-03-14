@@ -5,7 +5,7 @@ module.exports = async function handler(req, res) {
   try {
     const refresh = req.query.refresh === "1";
 
-    // run ingestion if refresh requested
+    // Run ingestion when refresh=1
     if (refresh) {
       const articles = await ingestNewsSources();
 
@@ -36,6 +36,7 @@ module.exports = async function handler(req, res) {
       filter: "all",
       stories,
     });
+
   } catch (err) {
     res.status(500).json({
       error: "Pipeline failed",
