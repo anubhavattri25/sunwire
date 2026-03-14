@@ -1,7 +1,12 @@
 function cleanText(text = "") {
   return String(text)
     .replace(/<[^>]*>/g, " ")
+    .replace(/happy reading/gi, "")
+    .replace(/read more/gi, "")
+    .replace(/click here/gi, "")
+    .replace(/subscribe now/gi, "")
     .replace(/&[a-zA-Z0-9#]+;/g, " ")
+    .replace(/\n+/g, " ")
     .replace(/\s+/g, " ")
     .trim();
 }

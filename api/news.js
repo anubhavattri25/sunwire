@@ -1,7 +1,6 @@
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
-const { getBackendCompatiblePayload, getLastBackendCompatError } = require("../lib/server/backendCompat");
 const {
   ALL_CATEGORIES,
   BUSINESS_COMPANY_TERMS,
