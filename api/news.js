@@ -2284,35 +2284,11 @@ res.status(200).json({
   page,
   pageSize,
   filter,
-  stories: paginated.map(toPublicStory)
+  stories: paginated.map(toPublicStory),
+  ...(includeDebug ? { debug: { pipeline: getPublicPipelineState() } } : {})
 });
-    if (backendPayload) {
-      res.setHeader("Cache-Control", `public, s-maxage=${CDN_NEWS_CACHE_SECONDS}, stale-while-revalidate=${CDN_NEWS_STALE_SECONDS}`);
-      res.status(200).json({
-        ...backendPayload,
-        ...(includeDebug ? { debug: { sourceMode: backendPayload.sourceMode } } : {}),
-      });
-      return;
-    }
-  }
 
-  logEvent("api.response.database_only", {
-    filter,
-    forceRefresh,
-    backendModeError: getLastBackendCompatError(),
-  });
-  res.setHeader("Cache-Control", `public, s-maxage=${CDN_NEWS_CACHE_SECONDS}, stale-while-revalidate=${CDN_NEWS_STALE_SECONDS}`);
-  res.status(200).json({
-    generatedAt: new Date().toISOString(),
-    totalStories: 0,
-    totalPages: 1,
-    page,
-    pageSize,
-    filter,
-    stories: [],
-    ...(includeDebug ? { debug: { pipeline: getPublicPipelineState(), sourceMode: "database_only", backendModeError: getLastBackendCompatError() } } : {}),
-  });
-
+};
 
 handler.runIngestion = runIngestion;
 handler.getPublicPipelineState = getPublicPipelineState;
