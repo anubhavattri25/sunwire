@@ -2312,7 +2312,7 @@ res.status(200).json({
     stories: [],
     ...(includeDebug ? { debug: { pipeline: getPublicPipelineState(), sourceMode: "database_only", backendModeError: getLastBackendCompatError() } } : {}),
   });
-};
+
 
 handler.runIngestion = runIngestion;
 handler.getPublicPipelineState = getPublicPipelineState;
