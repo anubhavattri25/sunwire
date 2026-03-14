@@ -1,16 +1,17 @@
-const { runPipeline } = require("./journalisticPipeline");
+const { ingestNewsSources } = require("./journalisticPipeline");
 
 (async () => {
   try {
-    console.log("Starting Sunwire ingestion...");
+    console.log("🚀 Starting Sunwire ingestion...");
 
-    await runPipeline();
+    await ingestNewsSources();
 
-    console.log("Pipeline finished successfully");
+    console.log("✅ Pipeline finished successfully");
 
     process.exit(0);
   } catch (err) {
-    console.error("Pipeline failed:", err);
+    console.error("❌ Pipeline failed:", err);
+
     process.exit(1);
   }
 })();

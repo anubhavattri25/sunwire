@@ -1,4 +1,4 @@
-const { fetchNews } = require("./newsIngestor");
+const fetchNews  = require("./newsIngestor");
 const { saveArticle } = require("./articleProcessor");
 const { buildArticlesFromTopics } = require("./journalisticPipeline");
 
