@@ -1,30 +1,32 @@
-name: Refresh Ingestion Cache
+name: Sunwire News Ingestion
 
 on:
   schedule:
-    # runs every 15 minutes
     - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
-  refresh:
+  ingest:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
     steps:
-      - name: Call Sunwire ingestion endpoint
+      - name: Trigger Sunwire ingestion
         run: |
-          echo "Triggering Sunwire ingestion..."
+          echo "Calling Sunwire ingestion endpoint..."
 
-          HTTP_RESPONSE=$(curl -s -o response.txt -w "%{http_code}" https://sunwire.in/api/ingest)
+          STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+          -H "Cache-Control: no-cache" \
+          -H "User-Agent: SunwireBot/1.0" \
+          https://sunwire.in/api/ingest)
 
-          echo "HTTP Status: $HTTP_RESPONSE"
+          echo "HTTP Status: $STATUS"
           echo "Response:"
           cat response.txt
 
-          if [ "$HTTP_RESPONSE" -ne 200 ]; then
-            echo "Ingestion request failed"
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Ingestion failed"
             exit 1
+          else
+            echo "✅ Ingestion triggered successfully"
           fi
-
-          echo "Ingestion completed successfully"
