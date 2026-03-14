@@ -2261,13 +2261,31 @@ const handler = async (req, res) => {
   const forceRefresh = String(req.query.refresh || req.query.force || "0") === "1";
   const includeDebug = String(req.query.debug || "0") === "1";
 
-  if (!forceRefresh) {
-    const backendPayload = await getBackendCompatiblePayload({
-      page,
-      pageSize,
-      filter,
-    });
+  const snapshot = await runIngestion({
+  limit: pageSize * page,
+  forceRefresh,
+  reason: "api"
+});
 
+const stories = applyDeskFilter(snapshot.stories, filter);
+
+const start = (page - 1) * pageSize;
+const paginated = stories.slice(start, start + pageSize);
+
+res.setHeader(
+  "Cache-Control",
+  `public, s-maxage=${CDN_NEWS_CACHE_SECONDS}, stale-while-revalidate=${CDN_NEWS_STALE_SECONDS}`
+);
+
+res.status(200).json({
+  generatedAt: snapshot.generatedAt,
+  totalStories: stories.length,
+  totalPages: Math.max(1, Math.ceil(stories.length / pageSize)),
+  page,
+  pageSize,
+  filter,
+  stories: paginated.map(toPublicStory)
+});
     if (backendPayload) {
       res.setHeader("Cache-Control", `public, s-maxage=${CDN_NEWS_CACHE_SECONDS}, stale-while-revalidate=${CDN_NEWS_STALE_SECONDS}`);
       res.status(200).json({
