@@ -1,4 +1,5 @@
 const axios = require('axios');
+const cheerio = require('cheerio');
 const prisma = require('../config/database');
 const {
   fetchPublisherArticle,
@@ -46,19 +47,74 @@ function normalizeArticle(article = {}) {
   };
 }
 
+
+async function fetchFullArticle(url) {
+  try {
+    const response = await axios.get(url, {
+      timeout: 10000,
+      headers: {
+        "User-Agent":
+          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
+      },
+    });
+
+    const $ = cheerio.load(response.data);
+
+    const text = $("article p, main p, .article p, .post p, .content p, .entry-content p, .story-body p, .node p")
+      .map((i, el) => $(el).text())
+      .get()
+      .join(" ");
+
+    return text.slice(0, 3000);
+  } catch (err) {
+    return "";
+  }
+}
 async function fetchRssSource(source) {
   const feed = await parseRssFeed(source.url);
   const items = Array.isArray(feed.items) ? feed.items : [];
-  return items.map((item) => normalizeArticle({
-    title: item.title,
-    summary: item.contentSnippet || item.summary || item.description,
-    content: item['content:encoded'] || item.content || item.contentSnippet || item.summary || item.description,
-    image_url: item.enclosure?.url || item['media:content']?.url || item['media:thumbnail']?.url || '',
-    source: source.name,
-    source_url: item.link,
-    published_at: item.isoDate || item.pubDate || new Date().toISOString(),
-    raw_source_payload: item,
-  }));
+  const limitedItems = items.slice(0, 15);
+ const articles = [];
+
+for (const item of items) {
+
+  let content =
+    item["content:encoded"] ||
+    item.content ||
+    item.contentSnippet ||
+    item.summary ||
+    item.description ||
+    "";
+
+  if (content.length < 200 && item.link) {
+    const scrapedContent = await fetchFullArticle(item.link);
+
+    if (scrapedContent.length > content.length) {
+      content = scrapedContent;
+    }
+  }
+
+  if (content && content.length > 120) {
+  articles.push(
+    normalizeArticle({
+      title: item.title,
+      summary: item.contentSnippet || item.summary || item.description,
+      content: content,
+      image_url:
+        item.enclosure?.url ||
+        item["media:content"]?.url ||
+        item["media:thumbnail"]?.url ||
+        "",
+      source: source.name,
+      source_url: item.link,
+      published_at: item.isoDate || item.pubDate || new Date().toISOString(),
+      raw_source_payload: item,
+    })
+  );
+}
+}
+
+return articles;
 }
 
 async function fetchGoogleSearchSource(source) {
