@@ -1,13 +1,13 @@
-const fetchNews  = require("./newsIngestor");
+const { ingestNewsSources } = require("./newsIngestor");
 const { saveArticle } = require("./articleProcessor");
-const { buildArticlesFromTopics } = require("./journalisticPipeline");
+const { buildArticlesFromTopics } = require("./articleBuilder");
 
 async function runPipeline() {
   try {
     console.log("🚀 Sunwire pipeline started");
 
     console.log("📰 Fetching raw news...");
-    const rawArticles = await fetchNews();
+    const rawArticles = await ingestNewsSources();
 
     if (!rawArticles || rawArticles.length === 0) {
       console.log("⚠️ No raw news fetched");
@@ -43,4 +43,5 @@ runPipeline()
     console.error("💥 Fatal error:", err);
     process.exit(1);
   });
-  module.exports = { runPipeline };
+
+module.exports = { runPipeline };
