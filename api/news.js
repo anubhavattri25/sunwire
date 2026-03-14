@@ -2141,8 +2141,9 @@ async function runIngestion({ limit = DEFAULT_LIMIT, forceRefresh = false, reaso
     const englishStories = dedupedStories.filter((story) =>
       story.source === "Google Trends India" || isMostlyEnglish(`${story.title} ${story.rawText}`)
     );
+    
     const englishFilteredCount = dedupedStories.length - englishStories.length;
-    const usefulStories = englishStories.filter((story) => isUsefulStory(story));
+    const usefulStories = englishStories;
     const moderationFilteredCount = englishStories.length - usefulStories.length;
 
     let stories = ensureCategoryCoverage(usefulStories);
