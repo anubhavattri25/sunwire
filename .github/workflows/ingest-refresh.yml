@@ -24,9 +24,9 @@ jobs:
           echo "Response:"
           cat response.txt
 
-          if [ "$STATUS" != "200" ]; then
+          if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
             echo "❌ Ingestion failed"
             exit 1
           else
-            echo "✅ Ingestion triggered successfully"
+            echo "✅ Request accepted"
           fi
