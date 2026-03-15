@@ -13,12 +13,89 @@ const {
   getArticlesFromPayload,
 } = require("../lib/server/ssrStories");
 const { buildHomeView, renderHomeTemplate } = require("../lib/ssr");
+const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
 const HOME_PAGE_SIZE = 30;
 const DESK_PAGE_SIZE = 20;
 const STORY_POOL_SIZE = 250;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(STORY_POOL_SIZE / HOME_PAGE_SIZE);
+
+function storyKey(story = {}) {
+  return String(story.id || story.sourceUrl || story.url || story.title || "").trim();
+}
+
+function collectVisibleStories(view = {}) {
+  const seen = new Set();
+  const stories = [];
+
+  [view.hero, ...(view.trending || [])]
+    .filter(Boolean)
+    .forEach((story) => {
+      const key = storyKey(story);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      stories.push(story);
+    });
+
+  [...(view.topSections || []), ...(view.moreSections || [])].forEach((section) => {
+    (section?.stories || []).forEach((story) => {
+      const key = storyKey(story);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      stories.push(story);
+    });
+  });
+
+  return stories;
+}
+
+function replaceStoriesWithMap(stories = [], replacements = new Map()) {
+  return (Array.isArray(stories) ? stories : []).map((story) => {
+    const key = storyKey(story);
+    return replacements.get(key) || story;
+  });
+}
+
+async function buildHydratedHomeView({
+  filter = "all",
+  page = 1,
+  totalPages = 1,
+  totalStories = 0,
+  pageStories = [],
+  allStories = [],
+} = {}) {
+  const initialView = buildHomeView({
+    filter,
+    page,
+    totalPages,
+    totalStories,
+    pageStories,
+    allStories,
+  });
+  const visibleStories = collectVisibleStories(initialView);
+
+  if (!visibleStories.length) return initialView;
+
+  const enrichedStories = await enrichStoriesWithImages(visibleStories, {
+    remoteFetchLimit: visibleStories.length,
+    concurrency: 4,
+  });
+  const replacementMap = new Map(
+    enrichedStories
+      .map((story) => [storyKey(story), story])
+      .filter(([key]) => Boolean(key))
+  );
+
+  return buildHomeView({
+    filter,
+    page,
+    totalPages,
+    totalStories,
+    pageStories: replaceStoriesWithMap(pageStories, replacementMap),
+    allStories: replaceStoriesWithMap(allStories, replacementMap),
+  });
+}
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
@@ -115,7 +192,7 @@ module.exports = async (req, res) => {
         totalPages = Math.max(1, Number(pagePayload?.totalPages) || totalPages);
       }
 
-      const view = buildHomeView({
+      const view = await buildHydratedHomeView({
         filter,
         page,
         totalPages,

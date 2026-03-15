@@ -2,6 +2,7 @@ const prisma = require("../backend/config/database");
 const { articleSelect } = require("../backend/models/Article");
 const { queryStories, toCompatStory } = require("../lib/server/backendCompat");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
+const { buildHomeView } = require("../lib/ssr");
 
 const NEWS_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const memoryNewsCache = globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ || new Map();
@@ -58,6 +59,78 @@ function buildNewsWhere(filter = "all") {
   };
 }
 
+function storyKey(story = {}) {
+  return String(story.id || story.sourceUrl || story.url || story.title || "").trim();
+}
+
+function collectVisibleStories(view = {}) {
+  const seen = new Set();
+  const stories = [];
+
+  [view.hero, ...(view.trending || [])]
+    .filter(Boolean)
+    .forEach((story) => {
+      const key = storyKey(story);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      stories.push(story);
+    });
+
+  [...(view.topSections || []), ...(view.moreSections || [])].forEach((section) => {
+    (section?.stories || []).forEach((story) => {
+      const key = storyKey(story);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      stories.push(story);
+    });
+  });
+
+  return stories;
+}
+
+function replaceStoriesWithMap(stories = [], replacements = new Map()) {
+  return (Array.isArray(stories) ? stories : []).map((story) => {
+    const key = storyKey(story);
+    return replacements.get(key) || story;
+  });
+}
+
+async function hydrateHomepagePoolPayload(payload = {}) {
+  const stories = Array.isArray(payload?.stories) ? payload.stories : [];
+  if (!stories.length) return payload;
+
+  const pageStories = stories.slice(0, 30);
+  const view = buildHomeView({
+    filter: "all",
+    page: 1,
+    totalPages: Math.max(1, Number(payload.totalPages) || 1),
+    totalStories: Number(payload.totalStories) || Number(payload.total) || stories.length,
+    pageStories,
+    allStories: stories,
+  });
+  const visibleStories = collectVisibleStories(view);
+
+  if (!visibleStories.length) return payload;
+
+  const enrichedStories = await enrichStoriesWithImages(visibleStories, {
+    remoteFetchLimit: visibleStories.length,
+    concurrency: 4,
+  });
+  const replacementMap = new Map(
+    enrichedStories
+      .map((story) => [storyKey(story), story])
+      .filter(([key]) => Boolean(key))
+  );
+  const nextStories = replaceStoriesWithMap(stories, replacementMap);
+
+  return {
+    ...payload,
+    stories: nextStories,
+    articles: nextStories,
+    pageStories: replaceStoriesWithMap(Array.isArray(payload?.pageStories) ? payload.pageStories : pageStories, replacementMap),
+  };
+}
+
 async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all" } = {}) {
   const safePage = Math.max(1, Number.parseInt(page || "1", 10) || 1);
   const safePageSize = Math.max(1, Number.parseInt(pageSize || "30", 10) || 30);
@@ -100,6 +173,8 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
 module.exports = async function handler(req, res) {
   const refresh = req.query.refresh === "1";
   const cacheKey = buildFrontendNewsCacheKey(req.query || {});
+  const requestedPage = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
+  const normalizedFilter = normalizeNewsFilter(req.query.filter || "all");
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -147,6 +222,10 @@ module.exports = async function handler(req, res) {
         pageSize: req.query.pageSize,
         filter: req.query.filter || "all",
       });
+    }
+
+    if (requestedPage === 1 && normalizedFilter === "all") {
+      payload = await hydrateHomepagePoolPayload(payload);
     }
 
     setMemoryCachedPayload(cacheKey, payload);
