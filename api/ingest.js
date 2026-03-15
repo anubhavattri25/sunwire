@@ -2,39 +2,45 @@ const newsHandler = require("./news");
 
 module.exports = async (req, res) => {
 
-  if (!["GET", "POST"].includes(req.method)) {
+  if (!["GET","POST"].includes(req.method)) {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  const key = String(req.query.key || "").trim();
-  const envSecret = String(process.env.INGEST_SECRET || "").trim();
+  // safer parsing for Vercel
+  const url = new URL(req.url, "http://localhost");
+  const key = (url.searchParams.get("key") || "").trim();
+
+  const envSecret = (process.env.INGEST_SECRET || "").trim();
 
   console.log("Incoming key:", key);
-  console.log("Server secret:", envSecret);
+  console.log("Server secret length:", envSecret.length);
 
   if (!key || key !== envSecret) {
     return res.status(403).json({
-      ok: false,
-      message: "Unauthorized request"
+      ok:false,
+      message:"Unauthorized request"
     });
   }
 
-  console.log("✅ GitHub triggered Sunwire ingestion");
+  console.log("GitHub triggered Sunwire ingestion");
 
   try {
     await newsHandler.runPipeline();
 
     return res.status(200).json({
-      ok: true,
-      message: "Sunwire pipeline executed successfully"
+      ok:true,
+      message:"Pipeline executed successfully"
     });
 
-  } catch (error) {
-    console.error("Pipeline error:", error);
+  } catch(err) {
+
+    console.error("Pipeline error:", err);
 
     return res.status(500).json({
-      ok: false,
-      error: "Pipeline execution failed"
+      ok:false,
+      message:"Pipeline failed"
     });
+
   }
+
 };
