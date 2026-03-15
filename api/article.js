@@ -11,6 +11,11 @@ const {
 } = require("../lib/article/shared");
 const { extractPrimaryArticleFromHtml } = require("../lib/article/sourceDiscovery");
 const { findStoryByIdentity } = require("../lib/server/backendCompat");
+const {
+  buildStoryPlaceholderImage,
+  hasRenderableStoryImage,
+  normalizeStoryImageUrl,
+} = require("../lib/server/storyImages");
 
 const ARTICLE_CACHE_HEADER = "public, s-maxage=300, stale-while-revalidate=600";
 const MIN_RICH_BODY_WORDS = 120;
@@ -155,12 +160,21 @@ function toArticlePayload(story = {}, requested = {}) {
 }
 
 async function enrichThinArticlePayload(payload = {}) {
-  if (!payload || !isThinArticleBody(payload.body, payload.summary, payload.title)) {
+  if (!payload) return payload;
+
+  const needsBodyRecovery = isThinArticleBody(payload.body, payload.summary, payload.title);
+  const needsImageRecovery = !hasRenderableStoryImage(payload.image);
+
+  if (!needsBodyRecovery && !needsImageRecovery) {
     return payload;
   }
 
   const sourceUrl = cleanText(payload.primarySource?.url || payload.sourceUrl || "");
-  if (!/^https?:\/\//i.test(sourceUrl)) return payload;
+  if (!/^https?:\/\//i.test(sourceUrl)) {
+    return needsImageRecovery
+      ? { ...payload, image: buildStoryPlaceholderImage(payload) }
+      : payload;
+  }
 
   try {
     const html = await fetchTextNoCache(sourceUrl, { timeoutMs: 6000 });
@@ -172,8 +186,15 @@ async function enrichThinArticlePayload(payload = {}) {
       payload.body,
     ]);
 
+    const recoveredImage = hasRenderableStoryImage(payload.image)
+      ? payload.image
+      : normalizeStoryImageUrl(extractImageFromHtml(html), sourceUrl);
+
     if (!nextBody || isThinArticleBody(nextBody, payload.summary, payload.title)) {
-      return payload;
+      return {
+        ...payload,
+        image: recoveredImage || buildStoryPlaceholderImage(payload),
+      };
     }
 
     const nextSummary = cleanText(
@@ -188,7 +209,7 @@ async function enrichThinArticlePayload(payload = {}) {
 
     return {
       ...payload,
-      image: payload.image || extractImageFromHtml(html) || "",
+      image: recoveredImage || buildStoryPlaceholderImage(payload),
       summary: nextSummary || payload.summary,
       body: nextBody,
       deepDive: buildDeepDive(nextBody),
@@ -200,7 +221,9 @@ async function enrichThinArticlePayload(payload = {}) {
       },
     };
   } catch (_) {
-    return payload;
+    return needsImageRecovery
+      ? { ...payload, image: buildStoryPlaceholderImage(payload) }
+      : payload;
   }
 }
 

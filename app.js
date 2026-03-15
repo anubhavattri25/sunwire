@@ -190,6 +190,16 @@ const CATEGORY_FALLBACK_IMAGES = {
   business: "https://images.unsplash.com/photo-1520607162513-77705c0f0d4a?auto=format&fit=crop&w=1400&q=80",
   news: "https://images.unsplash.com/photo-1495020689067-958852a7765e?auto=format&fit=crop&w=1400&q=80",
 };
+const PLACEHOLDER_PALETTES = [
+  { background: "1E3A8A", foreground: "F8FAFC" },
+  { background: "7C2D12", foreground: "FFFBEB" },
+  { background: "14532D", foreground: "F7FEE7" },
+  { background: "581C87", foreground: "FAF5FF" },
+  { background: "0F766E", foreground: "F0FDFA" },
+  { background: "9A3412", foreground: "FFF7ED" },
+  { background: "1F2937", foreground: "F9FAFB" },
+  { background: "831843", foreground: "FFF1F2" },
+];
 
 let currentStories = [];
 let currentCategoryMap = {};
@@ -471,14 +481,29 @@ function toDateKeyInTimezone(isoString, timeZone = DISPLAY_TIMEZONE) {
 }
 
 function buildFallbackImage(story = {}) {
-  const haystack = `${story.title || ""} ${story.summary || ""} ${story.source || ""} ${story.category || ""}`;
-  const matched = TOPIC_FALLBACK_IMAGES.find((entry) => entry.match.test(haystack));
-  if (matched) return matched.image;
-  return CATEGORY_FALLBACK_IMAGES[story.category || "news"] || CATEGORY_FALLBACK_IMAGES.news;
+  const paletteSeed = [
+    story.title,
+    story.summary,
+    story.category,
+    story.source,
+    story.sourceUrl,
+    story.url,
+  ].filter(Boolean).join("|");
+  const palette = PLACEHOLDER_PALETTES[
+    Array.from(paletteSeed).reduce((hash, char) => ((hash * 31) + char.charCodeAt(0)) >>> 0, 7)
+    % PLACEHOLDER_PALETTES.length
+  ];
+  const category = cleanText(String(story.category || "latest").replace(/[-_]+/g, " ")).toUpperCase();
+  const title = cleanText(story.title || "Sunwire story");
+  const compactTitle = title.length > 54 ? `${title.slice(0, 51).trim()}...` : title;
+  const source = cleanText(story.source || "Sunwire").slice(0, 28);
+  const text = [category, compactTitle, source].join(" | ");
+
+  return `https://placehold.co/1200x675/${palette.background}/${palette.foreground}?text=${encodeURIComponent(text)}`;
 }
 
 function storyImage(story = {}) {
-  const candidate = decodeHtmlEntities(String(story.image || story.image_url || "").trim());
+  const candidate = decodeHtmlEntities(String(story.image || story.image_url || story.image_storage_url || "").trim());
   const isValidRemote = /^https?:\/\//i.test(candidate) && !/\.svg(\?|$)/i.test(candidate);
   return isValidRemote ? candidate : buildFallbackImage(story);
 }

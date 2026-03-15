@@ -1,6 +1,7 @@
 const prisma = require("../backend/config/database");
-const { articleSelect, toApiArticle } = require("../backend/models/Article");
-const { queryStories } = require("../lib/server/backendCompat");
+const { articleSelect } = require("../backend/models/Article");
+const { queryStories, toCompatStory } = require("../lib/server/backendCompat");
+const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
 const NEWS_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const memoryNewsCache = globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ || new Map();
@@ -72,11 +73,13 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     take: safePageSize,
   });
 
-  const articles = records.map(toApiArticle);
-  const hasMore = articles.length === safePageSize;
+  const stories = await enrichStoriesWithImages(records.map(toCompatStory), {
+    allowRemoteFetch: false,
+  });
+  const hasMore = stories.length === safePageSize;
   const approximateTotal = hasMore
     ? (safePage * safePageSize) + 1
-    : ((safePage - 1) * safePageSize) + articles.length;
+    : ((safePage - 1) * safePageSize) + stories.length;
 
   return {
     generatedAt: new Date().toISOString(),
@@ -87,9 +90,9 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     totalPages: Math.max(1, Math.ceil(Math.max(1, approximateTotal) / safePageSize)),
     hasMore,
     filter: normalizedFilter,
-    articles,
-    stories: articles,
-    pageStories: articles,
+    articles: stories,
+    stories,
+    pageStories: stories,
     sourceMode: "light-fallback",
   };
 }
