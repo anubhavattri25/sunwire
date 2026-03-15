@@ -8,17 +8,18 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
 
     steps:
       - name: Trigger Sunwire ingestion
         run: |
           echo "Calling Sunwire ingestion endpoint..."
 
+          URL="https://sunwire.in/api/ingest?key=${{ secrets.INGEST_SECRET }}"
+
           STATUS=$(curl -s -o response.txt -w "%{http_code}" \
           -H "Cache-Control: no-cache" \
           -H "User-Agent: SunwireBot/1.0" \
-          https://sunwire.in/api/ingest?key=${{ secrets.INGEST_SECRET }})
+          "$URL")
 
           echo "HTTP Status: $STATUS"
           echo "Response:"
