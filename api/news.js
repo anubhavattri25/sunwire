@@ -1,6 +1,5 @@
 const prisma = require("../backend/config/database");
 const { articleSelect, toApiArticle } = require("../backend/models/Article");
-const { ingestNewsSources } = require("../backend/services/newsIngestor");
 const { queryStories } = require("../lib/server/backendCompat");
 
 const NEWS_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
@@ -117,6 +116,7 @@ module.exports = async function handler(req, res) {
 
     // Run ingestion when refresh=1
     if (refresh) {
+      const { ingestNewsSources } = require("../backend/services/newsIngestor");
       const articles = await ingestNewsSources();
 
       if (Array.isArray(articles) && articles.length) {
