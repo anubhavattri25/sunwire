@@ -7,6 +7,8 @@ module.exports = async (req, res) => {
     }
 
     const key = req.query.key;
+    console.log("KEY FROM REQUEST:", key);
+    console.log("ENV SECRET:", process.env.INGEST_SECRET);
 
     if (key !== process.env.INGEST_SECRET) {
       return res.status(403).json({
