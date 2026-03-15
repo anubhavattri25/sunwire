@@ -1,33 +1,21 @@
-name: Sunwire News Ingestion
+- name: Trigger Sunwire ingestion
+  env:
+    INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
+  run: |
+    echo "Calling Sunwire ingestion endpoint..."
 
-on:
-  schedule:
-    - cron: "*/15 * * * *"
-  workflow_dispatch:
+    STATUS=$(curl -s -o response.txt -w "%{http_code}" \
+      -H "Cache-Control: no-cache" \
+      -H "User-Agent: SunwireBot/1.0" \
+      "https://sunwire.in/api/ingest?key=$INGEST_SECRET")
 
-jobs:
-  ingest:
-    runs-on: ubuntu-latest
+    echo "HTTP Status: $STATUS"
+    echo "Response:"
+    cat response.txt
 
-    steps:
-      - name: Trigger Sunwire ingestion
-        run: |
-          echo "Calling Sunwire ingestion endpoint..."
-
-          URL="https://sunwire.in/api/ingest?key=${{ secrets.INGEST_SECRET }}"
-
-          STATUS=$(curl -s -o response.txt -w "%{http_code}" \
-          -H "Cache-Control: no-cache" \
-          -H "User-Agent: SunwireBot/1.0" \
-          "$URL")
-
-          echo "HTTP Status: $STATUS"
-          echo "Response:"
-          cat response.txt
-
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
-            echo "❌ Ingestion failed"
-            exit 1
-          else
-            echo "✅ Request accepted"
-          fi
+    if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
+      echo "❌ Ingestion failed"
+      exit 1
+    else
+      echo "✅ Request accepted"
+    fi
