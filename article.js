@@ -24,7 +24,7 @@ const dom = {
   articleTags: document.getElementById("articleTags"),
   primarySourceBlock: document.getElementById("primarySourceBlock"),
   primarySourceLink: document.getElementById("primarySourceLink"),
-  articleSource: document.getElementById("articleSource"),
+  articleSource: document.getElementById("articleSource") || document.getElementById("primarySourceLink"),
   articleImage: document.getElementById("articleImage"),
   articleImageCaption: document.getElementById("articleImageCaption"),
   keyPoints: document.getElementById("keyPoints"),
@@ -225,20 +225,12 @@ function readPreloadedArticleData() {
 function buildCanonicalArticleUrl(params = {}) {
   const storySlug = slugify(params.slug || params.t || params.title || params.id || "story");
   if (!storySlug) return `${SEO_SITE_ORIGIN}/`;
-  const rawCategory = cleanText(params.c || params.category || "latest").toLowerCase();
-  const routeCategory = rawCategory === "business" ? "business" : (rawCategory === "all" ? "latest" : rawCategory);
-  return `${SEO_SITE_ORIGIN}/${encodeURIComponent(routeCategory)}/${storySlug}`;
+  return `${SEO_SITE_ORIGIN}/article/${encodeURIComponent(storySlug)}`;
 }
 
 function buildArticleHref(story = {}) {
   const storySlug = slugify(story.slug || story.title || story.id || "story");
-  const routeCategory = normalizeDeskFilter(story.displayCategorySlug || story.category || "latest");
-  const categorySegment = routeCategory === "startups-funding"
-    ? "business"
-    : routeCategory === "all"
-      ? "latest"
-      : routeCategory;
-  return storySlug ? `/${encodeURIComponent(categorySegment)}/${storySlug}` : "/";
+  return storySlug ? `/article/${encodeURIComponent(storySlug)}` : "/";
 }
 
 function upsertJsonLdScript(id, payload) {
@@ -474,6 +466,7 @@ function applyArticleData(article = {}, fallback = {}) {
     : sanitizeArticleBody(article.body || summary).split(/\n{2,}/).map((entry) => cleanText(entry)).filter(Boolean);
   const publishedAt = article.published_at || article.publishedAt || fallback.publishedAt || "";
   const sourceName = article.source || fallback.source || "SunWire Desk";
+  const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
   const imageUrl = storyImage({ image: article.image || fallback.image || "" }, deskFilter);
   const readingTime = Number(article.estimatedReadingTime || 0) > 0 ? `${Number(article.estimatedReadingTime)} min read` : "4 min read";
   const tags = Array.isArray(article.tags) ? article.tags.slice(0, 5) : [];
@@ -483,8 +476,10 @@ function applyArticleData(article = {}, fallback = {}) {
   dom.articleAuthor.textContent = sourceName;
   dom.articleMeta.textContent = publishedAt ? `${fmtDate(publishedAt)} · ${timeAgo(publishedAt)}` : "Live now";
   dom.articleSummary.textContent = summary || "No verified summary available.";
+  if (dom.primarySourceBlock) dom.primarySourceBlock.hidden = !sourceUrl;
   if (dom.articleSource) {
-    dom.articleSource.href = article.sourceUrl || fallback.url || "/";
+    dom.articleSource.href = sourceUrl || "/";
+    dom.articleSource.textContent = cleanText(article.primarySource?.name || sourceName || "Original Source");
   }
   dom.articleImageCaption.textContent = `Source: ${sourceName}`;
   if (dom.articleReadingTime) dom.articleReadingTime.textContent = readingTime;
@@ -664,6 +659,9 @@ function attachNativeShare(title, text) {
 }
 
 function readStoryParams() {
+  const pathMatch = window.location.pathname.match(/^\/article\/([^/]+)$/i)
+    || window.location.pathname.match(/^\/(?:ai|tech|entertainment|sports|business|latest)\/([^/]+)$/i);
+  const pathSlug = pathMatch ? decodeURIComponent(pathMatch[1] || "") : "";
   const preloaded = readPreloadedArticleData();
   if (preloaded?.story) {
     return {
@@ -696,7 +694,7 @@ function readStoryParams() {
 
   return {
     id: params.get("id") || "",
-    slug: params.get("slug") || "",
+    slug: params.get("slug") || pathSlug,
     url: params.get("u") || "",
     title,
     source,
@@ -734,8 +732,10 @@ function renderInitialStoryState(story) {
   dom.articleAuthor.textContent = story.source || "SunWire Desk";
   dom.articleMeta.textContent = story.publishedAt ? `${fmtDate(story.publishedAt)} · ${timeAgo(story.publishedAt)}` : "Live now";
   dom.articleSummary.textContent = initialSummary;
+  if (dom.primarySourceBlock) dom.primarySourceBlock.hidden = !story.url;
   if (dom.articleSource) {
     dom.articleSource.href = story.url || "/";
+    dom.articleSource.textContent = cleanText(story.source || "Original Source");
   }
   dom.articleImageCaption.textContent = `Featured visual for ${deskLabel}.`;
   if (dom.articleReadingTime) dom.articleReadingTime.textContent = "4 min read";
@@ -827,12 +827,13 @@ async function loadStory() {
   });
 
   try {
-    const articleSlug = slugify(story.slug || "");
-    const query = new URLSearchParams({
-      category: deskFilter,
-    });
+    const articleSlug = slugify(story.slug || story.title || story.id || "");
     const article = articleSlug
-      ? await fetchJson(`/api/article/${encodeURIComponent(articleSlug)}?${query.toString()}`, { ttlMs: 15 * 60 * 1000 })
+      ? await fetchJson(`/api/article?${new URLSearchParams({
+        slug: articleSlug,
+        category: deskFilter,
+        id: story.id || "",
+      }).toString()}`, { ttlMs: 15 * 60 * 1000 })
       : await fetchJson(`/api/article?${new URLSearchParams({
         id: story.id,
         url: story.url,

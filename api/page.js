@@ -7,14 +7,15 @@ const {
   normalizePageNumber,
   readTemplate,
 } = require("../lib/seo");
-const { getStoriesForSsr } = require("../lib/server/ssrStories");
+const {
+  getStoriesForSsr,
+  getArticlesFromPayload,
+} = require("../lib/server/ssrStories");
 const { buildHomeView, renderHomeTemplate } = require("../lib/ssr");
 
-function applyFilter(stories = [], filter = "all") {
-  const normalizedFilter = normalizeFilter(filter);
-  if (normalizedFilter === "all") return stories;
-  return stories.filter((story) => normalizeFilter(story.category || "all") === normalizedFilter);
-}
+const HOME_PAGE_SIZE = 30;
+const DESK_PAGE_SIZE = 20;
+const STORY_POOL_SIZE = 250;
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
@@ -28,16 +29,45 @@ module.exports = async (req, res) => {
 
   if (!state.searchQuery) {
     try {
-      const payload = await getStoriesForSsr({ pageSize: 250, reason: "page_ssr" });
-      const allStories = Array.isArray(payload?.stories) ? payload.stories : [];
       const filter = normalizeFilter(query.filter || "all");
-      const filteredStories = applyFilter(allStories, filter);
-      const totalStories = filteredStories.length;
-      const pageSize = filter === "all" ? 30 : 20;
-      const totalPages = Math.max(1, Math.ceil(totalStories / pageSize));
-      const page = Math.min(normalizePageNumber(query.page || 1), totalPages);
-      const startIndex = (page - 1) * pageSize;
-      const pageStories = filteredStories.slice(startIndex, startIndex + pageSize);
+      const requestedPage = normalizePageNumber(query.page || 1);
+      const pageSize = filter === "all" ? HOME_PAGE_SIZE : DESK_PAGE_SIZE;
+
+      let pagePayload = await getStoriesForSsr({
+        page: requestedPage,
+        pageSize,
+        filter,
+        reason: "page_ssr",
+      });
+
+      const computedTotalStories = Number(pagePayload?.totalStories) || Number(pagePayload?.total) || 0;
+      const computedTotalPages = Math.max(
+        1,
+        Number(pagePayload?.totalPages) || Math.ceil(Math.max(1, computedTotalStories) / pageSize)
+      );
+      const page = Math.min(requestedPage, computedTotalPages);
+
+      if (page !== requestedPage) {
+        pagePayload = await getStoriesForSsr({
+          page,
+          pageSize,
+          filter,
+          reason: "page_ssr_clamped",
+        });
+      }
+
+      const poolPayload = await getStoriesForSsr({
+        page: 1,
+        pageSize: STORY_POOL_SIZE,
+        filter: "all",
+        reason: "page_ssr_pool",
+      });
+
+      const pageStories = getArticlesFromPayload(pagePayload);
+      const allStories = getArticlesFromPayload(poolPayload);
+      const totalStories = Number(pagePayload?.totalStories) || Number(pagePayload?.total) || pageStories.length;
+      const totalPages = Math.max(1, Number(pagePayload?.totalPages) || computedTotalPages);
+
       const view = buildHomeView({
         filter,
         page,
@@ -47,14 +77,14 @@ module.exports = async (req, res) => {
         allStories,
       });
 
-      view.pageStories = pageStories;
       state = {
         ...buildHomeState({ ...query, filter, page }),
         nextUrl: page < totalPages ? buildSectionUrl(filter, page + 1) : "",
       };
+
       template = renderHomeTemplate(template, view);
-    } catch (_) {
-      // Fall back to the static template and allow the client to hydrate.
+    } catch (error) {
+      console.log("SSR failed, sending static template", error);
     }
   }
 
@@ -64,6 +94,10 @@ module.exports = async (req, res) => {
   });
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+  res.setHeader(
+    "Cache-Control",
+    "public, s-maxage=60, stale-while-revalidate=120"
+  );
+
   res.status(200).send(minifyHtml(html));
 };

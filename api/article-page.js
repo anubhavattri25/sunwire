@@ -8,7 +8,10 @@ const {
   slugify,
 } = require("../lib/seo");
 const { findStoryByIdentity, findStoryBySlug } = require("../lib/server/backendCompat");
-const { getStoriesForSsr } = require("../lib/server/ssrStories");
+const {
+  getStoriesForSsr,
+  getArticlesFromPayload,
+} = require("../lib/server/ssrStories");
 const { buildArticleRelatedSets, renderArticleTemplate } = require("../lib/ssr");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
 
@@ -123,16 +126,15 @@ function sendNotFound(res) {
 }
 
 function isCanonicalRequest(story = {}, query = {}) {
-  const requestedCategory = String(query.category || query.c || "").trim().toLowerCase();
   const requestedSlug = String(query.slug || "").trim().toLowerCase();
-  if (!requestedCategory || !requestedSlug) return false;
+  if (!requestedSlug) return false;
   const expectedPath = buildArticlePath({
     id: story.id || "",
     slug: story.slug || "",
     title: story.title || "",
     category: story.category || "",
   });
-  return expectedPath === `/${requestedCategory}/${requestedSlug}`;
+  return expectedPath.toLowerCase() === `/article/${requestedSlug}`;
 }
 
 module.exports = async (req, res) => {
@@ -156,7 +158,7 @@ module.exports = async (req, res) => {
       }).catch(() => null);
 
       const payload = await getStoriesForSsr({ pageSize: 250, reason: "article_page_ssr" }).catch(() => null);
-      stories = Array.isArray(payload?.stories) ? payload.stories : [];
+      stories = getArticlesFromPayload(payload);
 
       if (story) {
         sourceMode = "database";
@@ -174,7 +176,7 @@ module.exports = async (req, res) => {
       }
     } else {
       const payload = await getStoriesForSsr({ pageSize: 250, reason: "article_page_ssr" }).catch(() => null);
-      stories = Array.isArray(payload?.stories) ? payload.stories : [];
+      stories = getArticlesFromPayload(payload);
       sourceMode = String(payload?.sourceMode || "snapshot");
       story = findStory(stories, query)
         || await findStoryByIdentity({

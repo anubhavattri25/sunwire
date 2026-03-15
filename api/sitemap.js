@@ -94,7 +94,7 @@ const payload = {
 
     stories.forEach((story) => {
       const url = canonicalArticleUrl(story);
-      if (!url || url.includes("/article") || url.includes("?")) return;
+      if (!url || url.includes("?")) return;
       pushEntry(url, storyTimestamp(story), "0.8", "hourly");
     });
 

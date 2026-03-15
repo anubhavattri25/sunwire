@@ -1,21 +1,82 @@
 const prisma = require('../config/database');
-const { isDuplicate } = require('../utils/deduplicator');
 const { logEvent } = require('../utils/logger');
 const { pipelineState } = require('./newsIngestor');
-const { invalidateCache } = require('../utils/cache');
 const { slugify } = require('../../lib/seo');
-const { normalizeHeadlineForComparison } = require('./contentQuality');
-const {
-  buildArticlesFromTopics,
-  classifyCategory,
-  normalizeTitle,
-} = require('./journalisticPipeline');
+const { normalizeTitle, classifyCategory } = require('../utils/articleUtils');
+
+function getDuplicateMatcher() {
+  return require('../utils/deduplicator').isDuplicate;
+}
+
+function getHeadlineNormalizer() {
+  return require('./contentQuality').normalizeHeadlineForComparison;
+}
 
 function rewriteHeadline(title = '') {
   return normalizeTitle(title);
 }
+async function buildArticlesFromTopics(rawArticles) {
+  const articles = [];
 
+  for (const item of rawArticles) {
+    const content =
+      item.content ||
+      item.summary ||
+      item.snippet ||
+      item.title ||
+      "";
+
+    if (!content || content.length < 100) continue;
+
+    articles.push({
+      title: item.title,
+      summary: item.summary || content.slice(0, 200),
+      content: content,
+      image_url: item.image_url || "",
+      category: item.category || "general",
+      source: item.source || "Unknown",
+      source_url: item.source_url || "",
+      published_at: item.published_at || new Date().toISOString(),
+      views: 0,
+      shares: 0,
+    });
+  }
+
+  return articles;
+}
+async function saveArticle(article) {
+  return prisma.article.upsert({
+    where: {
+      source_url: article.source_url
+    },
+    update: {
+      title: article.title,
+      summary: article.summary,
+      content: article.content,
+      image_url: article.image_url,
+      category: article.category,
+      source: article.source,
+      published_at: new Date(article.published_at || new Date()),
+      views: article.views || 0,
+      shares: article.shares || 0
+    },
+    create: {
+      title: article.title,
+      slug: slugify(article.title || "story"),
+      summary: article.summary,
+      content: article.content,
+      image_url: article.image_url,
+      category: article.category,
+      source: article.source,
+      source_url: article.source_url,
+      published_at: new Date(article.published_at || new Date()),
+      views: article.views || 0,
+      shares: article.shares || 0
+    }
+  });
+}
 function createHeadlineRegistry(existingArticles = []) {
+  const normalizeHeadlineForComparison = getHeadlineNormalizer();
   const knownHeadlines = new Set(
     existingArticles
       .map((entry) => normalizeHeadlineForComparison(entry.title || ''))
@@ -58,6 +119,7 @@ function createHeadlineRegistry(existingArticles = []) {
 }
 
 async function processRawArticle(article = {}, recentArticles = [], options = {}) {
+  const isDuplicate = getDuplicateMatcher();
   const [processed] = await buildArticlesFromTopics([{
     ...article,
     title: rewriteHeadline(article.title || 'Untitled'),
@@ -88,6 +150,7 @@ async function processRawArticle(article = {}, recentArticles = [], options = {}
 }
 
 async function processPendingArticles(rawArticles = pipelineState.pendingRawArticles) {
+  const isDuplicate = getDuplicateMatcher();
   logEvent('scheduler.process.start', { pending: rawArticles.length });
   if (!Array.isArray(rawArticles) || rawArticles.length === 0) {
     pipelineState.lastProcessAt = new Date().toISOString();
@@ -198,6 +261,7 @@ async function processPendingArticles(rawArticles = pipelineState.pendingRawArti
 
   pipelineState.lastProcessAt = new Date().toISOString();
   pipelineState.pendingRawArticles = [];
+  const { invalidateCache } = require('../utils/cache');
   await invalidateCache();
 
   logEvent('articles.processed', {
@@ -215,7 +279,8 @@ async function processPendingArticles(rawArticles = pipelineState.pendingRawArti
 }
 
 module.exports = {
-  classifyCategory,
+  saveArticle,
+  buildArticlesFromTopics,
   createHeadlineRegistry,
   rewriteHeadline,
   processRawArticle,

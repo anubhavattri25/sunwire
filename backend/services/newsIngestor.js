@@ -8,7 +8,7 @@ const {
 } = require('../utils/rssParser');
 const { logEvent } = require('../utils/logger');
 const { validateSourceArticle } = require('./contentQuality');
-const { classifyCategory, normalizeTitle } = require('./journalisticPipeline');
+const { classifyCategory, normalizeTitle } = require('../utils/articleUtils');
 const { cleanText, domainFromUrl } = require('../../lib/article/shared');
 
 const pipelineState = {
@@ -22,11 +22,42 @@ const pipelineState = {
 
 function getSourceConfig() {
   return [
-    { name: 'Google News Top', type: 'google-search', query: 'breaking news OR latest headlines', category: '' },
-    { name: 'Google News AI', type: 'google-search', query: 'AI OR artificial intelligence OR OpenAI OR Anthropic', category: 'AI' },
-    { name: 'Google News Tech', type: 'google-search', query: 'technology OR software OR startups OR chips', category: 'Tech' },
-    { name: 'Google News Entertainment', type: 'google-search', query: 'entertainment OR film OR OTT OR celebrity', category: 'Entertainment' },
-    { name: 'Google News Sports', type: 'google-search', query: 'sports OR cricket OR football OR tennis', category: 'Sports' },
+    {
+      name: "BBC",
+      type: "rss",
+      url: "https://feeds.bbci.co.uk/news/rss.xml",
+      category: "general"
+    },
+    {
+      name: "Reuters",
+      type: "rss",
+      url: "https://www.reuters.com/world/rss",
+      category: "general"
+    },
+    {
+      name: "TechCrunch",
+      type: "rss",
+      url: "https://techcrunch.com/feed/",
+      category: "tech"
+    },
+    {
+      name: "The Verge",
+      type: "rss",
+      url: "https://www.theverge.com/rss/index.xml",
+      category: "tech"
+    },
+    {
+      name: "ESPN",
+      type: "rss",
+      url: "https://www.espn.com/espn/rss/news",
+      category: "sports"
+    },
+    {
+      name: "Hollywood Reporter",
+      type: "rss",
+      url: "https://www.hollywoodreporter.com/feed/",
+      category: "entertainment"
+    }
   ];
 }
 

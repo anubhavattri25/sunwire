@@ -322,6 +322,24 @@ function readPreloadedHomeData() {
     : null;
 }
 
+function extractNewsStories(payload = {}) {
+  if (Array.isArray(payload?.pageStories)) return payload.pageStories;
+  if (Array.isArray(payload?.stories)) return payload.stories;
+  if (Array.isArray(payload?.articles)) return payload.articles;
+  if (Array.isArray(payload?.mainStories)) return payload.mainStories;
+  return [];
+}
+
+function normalizeNewsPayload(payload = {}) {
+  const stories = extractNewsStories(payload);
+  return {
+    ...payload,
+    stories,
+    articles: stories,
+    pageStories: stories,
+  };
+}
+
 function activeDeskLabel() {
   if (activeSearchQuery) return "Search";
   if (activeFilter === "all") return "All Desks";
@@ -470,9 +488,7 @@ function buildArticleHref(story = {}) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
-  const category = resolveFilter(story.category || "all");
-  const categoryPath = category === "all" ? "latest" : category;
-  return slug ? `/${categoryPath}/${slug}` : "/";
+  return slug ? `/article/${slug}` : "/";
 }
 
 function storyKey(story = {}) {
@@ -1249,6 +1265,16 @@ async function fetchSidebarData(forceRefresh = false) {
   return fetchJson("/api/sidebar", { forceFresh: forceRefresh });
 }
 
+function buildNewsApiUrl(params = new URLSearchParams()) {
+  const isLocalHost = window.location.hostname === "localhost"
+    || window.location.hostname === "127.0.0.1";
+  const baseUrl = isLocalHost
+    ? "http://127.0.0.1:4000/api/news"
+    : "/api/news";
+  const query = params.toString();
+  return query ? `${baseUrl}?${query}` : baseUrl;
+}
+
 async function fetchCentralNews(page = 1, filter = "all", pageSize = getPageSizeForFilter(filter), forceRefresh = false) {
   const params = new URLSearchParams({
     page: String(page),
@@ -1256,7 +1282,8 @@ async function fetchCentralNews(page = 1, filter = "all", pageSize = getPageSize
     filter: resolveFilter(filter),
   });
   if (forceRefresh) params.set("refresh", "1");
-  return fetchJson(`/api/news?${params.toString()}`, { forceFresh: forceRefresh });
+  const payload = await fetchJson(buildNewsApiUrl(params), { forceFresh: forceRefresh });
+  return normalizeNewsPayload(payload);
 }
 
 function createEmptyCategoryMap() {
@@ -1269,13 +1296,13 @@ function createEmptyCategoryMap() {
 async function fetchHomepageCategoryMap(forceRefresh = false) {
   const categoryResponses = await Promise.all(
     CATEGORY_KEYS.map((key) =>
-      fetchCentralNews(1, key, CATEGORY_PREVIEW_FETCH_SIZE, forceRefresh).catch(() => ({ stories: [] }))
+      fetchCentralNews(1, key, CATEGORY_PREVIEW_FETCH_SIZE, forceRefresh).catch(() => ({ stories: [], articles: [] }))
     )
   );
 
   const categoryMap = createEmptyCategoryMap();
   CATEGORY_KEYS.forEach((key, index) => {
-    categoryMap[key] = dedupeStories(categoryResponses[index]?.stories || []);
+    categoryMap[key] = dedupeStories(extractNewsStories(categoryResponses[index]));
   });
 
   return categoryMap;
@@ -1291,15 +1318,15 @@ async function fetchAllStoriesForSearch(forceRefresh = false) {
 
   const firstPage = await fetchCentralNews(1, "all", SEARCH_FETCH_PAGE_SIZE, forceRefresh);
   const totalPagesCount = Math.max(1, Number(firstPage?.totalPages) || 1);
-  const collectedStories = [...(Array.isArray(firstPage?.stories) ? firstPage.stories : [])];
+  const collectedStories = [...extractNewsStories(firstPage)];
 
   if (totalPagesCount > 1) {
     const remainingPages = await Promise.all(
       Array.from({ length: totalPagesCount - 1 }, (_, index) =>
-        fetchCentralNews(index + 2, "all", SEARCH_FETCH_PAGE_SIZE, forceRefresh).catch(() => ({ stories: [] }))
+        fetchCentralNews(index + 2, "all", SEARCH_FETCH_PAGE_SIZE, forceRefresh).catch(() => ({ stories: [], articles: [] }))
       )
     );
-    collectedStories.push(...remainingPages.flatMap((payload) => payload?.stories || []));
+    collectedStories.push(...remainingPages.flatMap((payload) => extractNewsStories(payload)));
   }
 
   const dedupedStories = dedupeStories(collectedStories);
@@ -1460,7 +1487,7 @@ async function loadStories(page = 1, forceRefresh = false) {
     const main = await fetchCentralNews(page, normalizedFilter, getPageSizeForFilter(normalizedFilter), forceRefresh);
     if (requestId !== activeLoadRequestId) return;
 
-    const mainStories = dedupeStories(Array.isArray(main?.stories) ? main.stories : []);
+    const mainStories = dedupeStories(extractNewsStories(main));
     const initialCategoryMap = createEmptyCategoryMap();
     if (CATEGORY_KEYS.includes(normalizedFilter)) {
       initialCategoryMap[normalizedFilter] = mainStories;
@@ -1711,7 +1738,7 @@ syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();
 const preloadedHomeData = readPreloadedHomeData();
 if (preloadedHomeData && !activeSearchQuery) {
-  currentStories = Array.isArray(preloadedHomeData.mainStories) ? preloadedHomeData.mainStories : [];
+  currentStories = extractNewsStories(preloadedHomeData);
   currentCategoryMap = preloadedHomeData.categoryMap || createEmptyCategoryMap();
   currentPage = Math.max(1, Number(preloadedHomeData.page) || currentPage);
   totalPages = Math.max(1, Number(preloadedHomeData.totalPages) || 1);

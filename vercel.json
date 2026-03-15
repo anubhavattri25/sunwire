@@ -118,6 +118,10 @@
       "destination": "/api/article-redirect"
     },
     {
+      "source": "/article/:slug",
+      "destination": "/api/article-page?slug=:slug"
+    },
+    {
       "source": "/",
       "destination": "/api/page"
     }

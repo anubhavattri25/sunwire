@@ -97,6 +97,16 @@ export async function loadRelatedStories(options = {}) {
     });
   };
 
+  const buildNewsApiUrl = (params = new URLSearchParams()) => {
+    const isLocalHost = window.location.hostname === "localhost"
+      || window.location.hostname === "127.0.0.1";
+    const baseUrl = isLocalHost
+      ? "http://127.0.0.1:4000/api/news"
+      : "/api/news";
+    const query = params.toString();
+    return query ? `${baseUrl}?${query}` : baseUrl;
+  };
+
   const fetchNews = async (filter = "all", pageSize = 10) => {
     const params = new URLSearchParams({
       filter: filter === "latest" || filter === "india-pulse" || filter === "war-conflict" || filter === "politics" || filter === "startups-funding"
@@ -105,8 +115,12 @@ export async function loadRelatedStories(options = {}) {
       page: "1",
       pageSize: String(pageSize),
     });
-    const data = await fetchJson(`/api/news?${params.toString()}`, { ttlMs: 2 * 60 * 1000 });
-    return Array.isArray(data?.stories) ? data.stories : [];
+    const data = await fetchJson(buildNewsApiUrl(params), { ttlMs: 2 * 60 * 1000 });
+    return Array.isArray(data?.stories)
+      ? data.stories
+      : Array.isArray(data?.articles)
+        ? data.articles
+        : [];
   };
 
   const [allStories, categoryStories] = await Promise.all([

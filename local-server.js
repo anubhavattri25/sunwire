@@ -80,6 +80,13 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
     return appendQuery("/api/article-redirect", Object.fromEntries(searchParams.entries()));
   }
 
+  const articlePageMatch = pathname.match(/^\/article\/([^/]+)$/);
+  if (articlePageMatch) {
+    const params = Object.fromEntries(searchParams.entries());
+    params.slug = params.slug || articlePageMatch[1];
+    return appendQuery("/api/article-page", params);
+  }
+
   const newsLegacyMatch = pathname.match(/^\/news\/([^/]+)(?:\/.*)?$/);
   if (newsLegacyMatch) {
     const params = Object.fromEntries(searchParams.entries());

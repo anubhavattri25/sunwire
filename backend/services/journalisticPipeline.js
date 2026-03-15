@@ -1,47 +1,51 @@
-const { ingestNewsSources } = require("./newsIngestor");
-const { saveArticle } = require("./articleProcessor");
-const { buildArticlesFromTopics } = require("./articleBuilder");
+const { ingestNewsSources, pipelineState } = require("./newsIngestor");
+const { saveArticle, buildArticlesFromTopics } = require("./articleProcessor");
 
 async function runPipeline() {
   try {
-    console.log("🚀 Sunwire pipeline started");
+    console.log("Sunwire pipeline started");
 
-    console.log("📰 Fetching raw news...");
+    console.log("Fetching raw news...");
     const rawArticles = await ingestNewsSources();
 
     if (!rawArticles || rawArticles.length === 0) {
-      console.log("⚠️ No raw news fetched");
+      console.log("No raw news fetched");
+      pipelineState.lastProcessAt = new Date().toISOString();
       return;
     }
 
     console.log("Raw articles fetched:", rawArticles.length);
 
-    console.log("🧠 Building journalistic articles...");
+    console.log("Building journalistic articles...");
     const articles = await buildArticlesFromTopics(rawArticles);
 
     console.log("Generated articles:", articles.length);
 
     for (const article of articles) {
-      console.log("💾 Saving:", article.title);
+      console.log("Saving:", article.title);
       await saveArticle(article);
     }
 
-    console.log("✅ Sunwire pipeline finished");
+    pipelineState.lastProcessAt = new Date().toISOString();
+    pipelineState.pendingRawArticles = [];
 
+    console.log("Sunwire pipeline finished");
   } catch (err) {
-    console.error("❌ Pipeline failed:", err);
+    console.error("Pipeline failed:", err);
     throw err;
   }
 }
 
-runPipeline()
-  .then(() => {
-    console.log("🏁 Pipeline completed");
-    process.exit(0);
-  })
-  .catch((err) => {
-    console.error("💥 Fatal error:", err);
-    process.exit(1);
-  });
+if (require.main === module) {
+  runPipeline()
+    .then(() => {
+      console.log("Pipeline completed");
+      process.exit(0);
+    })
+    .catch((err) => {
+      console.error("Fatal error:", err);
+      process.exit(1);
+    });
+}
 
 module.exports = { runPipeline };

@@ -1,5 +1,6 @@
 const articleSelect = {
   id: true,
+  slug: true,
   title: true,
   summary: true,
   content: true,
@@ -34,6 +35,7 @@ function toApiArticle(record) {
   const metadata = parseRawContentMetadata(record.raw_content);
   return {
     id: record.id,
+    slug: metadata.slug || record.slug || '',
     title: record.title,
     summary: record.summary || record.ai_summary || '',
     content: record.content || '',

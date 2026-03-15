@@ -1,4 +1,4 @@
-const newsHandler = require("./news");
+const newsHandler = require("../backend/services/news");
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {

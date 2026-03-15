@@ -94,3 +94,15 @@ process.on('SIGINT', () => shutdown('SIGINT'));
 process.on('SIGTERM', () => shutdown('SIGTERM'));
 
 module.exports = app;
+
+app.get("/", (req, res) => {
+  res.send("🚀 Sunwire backend is running. Use /api/news");
+});
+
+const PORT = process.env.PORT || 4000;
+const HOST = "127.0.0.1";
+
+
+app.listen(PORT, HOST, () => {
+  console.log(`🚀 Sunwire backend running at http://${HOST}:${PORT}`);
+});
