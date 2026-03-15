@@ -16,12 +16,12 @@ jobs:
         run: |
           echo "Calling Sunwire ingestion endpoint..."
 
-          URL=https://sunwire.in/api/ingest?key=$INGEST_SECRET
+          URL="https://sunwire.in/api/ingest?key=${INGEST_SECRET}"
 
           STATUS=$(curl -s -o response.txt -w "%{http_code}" \
-          -H "Cache-Control: no-cache" \
-          -H "User-Agent: SunwireBot/1.0" \
-          $URL)
+            -H "Cache-Control: no-cache" \
+            -H "User-Agent: SunwireBot/1.0" \
+            "$URL")
 
           echo "HTTP Status: $STATUS"
           echo "Response:"
