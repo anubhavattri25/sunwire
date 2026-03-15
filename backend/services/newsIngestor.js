@@ -19,6 +19,7 @@ const pipelineState = {
   sourcesFailed: [],
   pendingRawArticles: [],
 };
+const RSS_SOURCE_ITEM_LIMIT = Math.max(1, Number.parseInt(process.env.SUNWIRE_RSS_ITEM_LIMIT || '6', 10) || 6);
 
 function getSourceConfig() {
   return [
@@ -104,33 +105,32 @@ async function fetchFullArticle(url) {
 async function fetchRssSource(source) {
   const feed = await parseRssFeed(source.url);
   const items = Array.isArray(feed.items) ? feed.items : [];
-  const limitedItems = items.slice(0, 15);
- const articles = [];
+  const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
+  const articles = await Promise.all(limitedItems.map(async (item) => {
+    let content =
+      item["content:encoded"] ||
+      item.content ||
+      item.contentSnippet ||
+      item.summary ||
+      item.description ||
+      "";
 
-for (const item of items) {
+    if (content.length < 200 && item.link) {
+      const scrapedContent = await fetchFullArticle(item.link);
 
-  let content =
-    item["content:encoded"] ||
-    item.content ||
-    item.contentSnippet ||
-    item.summary ||
-    item.description ||
-    "";
-
-  if (content.length < 200 && item.link) {
-    const scrapedContent = await fetchFullArticle(item.link);
-
-    if (scrapedContent.length > content.length) {
-      content = scrapedContent;
+      if (scrapedContent.length > content.length) {
+        content = scrapedContent;
+      }
     }
-  }
 
-  if (content && content.length > 120) {
-  articles.push(
-    normalizeArticle({
+    if (!content || content.length <= 120) {
+      return null;
+    }
+
+    return normalizeArticle({
       title: item.title,
       summary: item.contentSnippet || item.summary || item.description,
-      content: content,
+      content,
       image_url:
         item.enclosure?.url ||
         item["media:content"]?.url ||
@@ -140,12 +140,10 @@ for (const item of items) {
       source_url: item.link,
       published_at: item.isoDate || item.pubDate || new Date().toISOString(),
       raw_source_payload: item,
-    })
-  );
-}
-}
+    });
+  }));
 
-return articles;
+  return articles.filter(Boolean);
 }
 
 async function fetchGoogleSearchSource(source) {

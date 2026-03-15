@@ -168,5 +168,9 @@ module.exports = async function handler(req, res) {
       error: "Pipeline failed",
       message: err.message,
     });
+  } finally {
+    if (process.env.VERCEL) {
+      await prisma.$disconnect().catch(() => null);
+    }
   }
 };

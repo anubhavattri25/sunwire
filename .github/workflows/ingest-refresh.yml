@@ -2,7 +2,7 @@ name: Sunwire News Ingestion
 
 on:
   schedule:
-    - cron: "*/15 * * * *"   # every 15 minutes
+    - cron: "*/15 * * * *"
   workflow_dispatch:
 
 jobs:
@@ -15,26 +15,26 @@ jobs:
         env:
           INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
         run: |
-          echo "🚀 Calling Sunwire ingestion endpoint..."
-
-          URL="https://sunwire.in/api/ingest?key=${INGEST_SECRET}"
+          echo "Calling Sunwire ingestion endpoint..."
 
           STATUS=$(curl -sS \
             --connect-timeout 10 \
             --max-time 60 \
             -o response.txt \
             -w "%{http_code}" \
+            -X POST \
             -H "Cache-Control: no-cache" \
+            -H "x-ingest-key: ${INGEST_SECRET}" \
             -H "User-Agent: SunwireBot/1.0" \
-            "$URL")
+            "https://sunwire.in/api/ingest")
 
           echo "HTTP Status: $STATUS"
           echo "Response:"
           cat response.txt || true
 
           if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
-            echo "❌ Ingestion failed"
+            echo "Ingestion failed"
             exit 1
           else
-            echo "✅ Sunwire pipeline triggered successfully"
+            echo "Sunwire pipeline triggered successfully"
           fi

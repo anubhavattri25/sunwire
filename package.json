@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "local": "node local-server.js",
-    "postinstall": "prisma generate"
+    "postinstall": "node node_modules/prisma/build/index.js generate"
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
