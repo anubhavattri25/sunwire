@@ -4,6 +4,7 @@ const cheerio = require("cheerio");
 const {
   cleanText,
   decodeXml,
+  fetchTextNoCache,
   summaryFromText,
   stripSourceBoilerplate,
 } = require("../../lib/article/shared");
@@ -409,7 +410,11 @@ async function fetchPublisherArticle(url = "", options = {}) {
 }
 
 async function parseRssFeed(url) {
-  return parser.parseURL(url);
+  const xml = await fetchTextNoCache(url, {
+    timeoutMs: 10000,
+    headers: REQUEST_HEADERS,
+  });
+  return parser.parseString(xml);
 }
 
 module.exports = {
