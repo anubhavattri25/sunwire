@@ -20,7 +20,9 @@ jobs:
           STATUS=$(curl -s -o response.txt -w "%{http_code}" \
             -H "Cache-Control: no-cache" \
             -H "User-Agent: SunwireBot/1.0" \
-            "https://sunwire.in/api/ingest?key=$INGEST_SECRET")
+            --get \
+            --data-urlencode "key=$INGEST_SECRET" \
+            https://sunwire.in/api/ingest)
 
           echo "HTTP Status: $STATUS"
           echo "Response:"
