@@ -7,6 +7,7 @@ const {
   readTemplate,
   slugify,
 } = require("../lib/seo");
+const articleHandler = require("./article");
 const { findStoryByIdentity, findStoryBySlug } = require("../lib/server/backendCompat");
 const {
   getStoriesForSsr,
@@ -206,30 +207,44 @@ module.exports = async (req, res) => {
       return;
     }
 
-    let article = {
+    let article = await articleHandler.buildArticlePayload(req, {
+      id: story?.id || "",
+      slug: story?.slug || requestedSlug,
+      url: story?.sourceUrl || story?.url || "",
       title: story?.title || "Story",
-      summary: safeArticleSummary(story?.subheadline || story?.summary || ""),
       source: story?.source || "SunWire Desk",
-      sourceUrl: story?.sourceUrl || story?.url || "",
+      publishedAt: story?.source_published_at || story?.published_at || story?.publishedAt || "",
+      summary: story?.summary || story?.subheadline || "",
       image: story?.image || "",
-      keyPoints: getVerifiedKeyPoints(story),
-      practicalTakeaways: [],
-      body: sanitizeArticleBody(story?.content || "") || safeArticleSummary(story?.summary || ""),
-      deepDive: Array.isArray(story?.deepDive) ? story.deepDive : [],
-      indiaPulse: story?.indiaPulse || "",
-      background: Array.isArray(story?.background) ? story.background : [],
-      factSheet: Array.isArray(story?.factSheet) ? story.factSheet : [],
-      tags: Array.isArray(story?.tags) ? story.tags : [],
-      wordCount: Number(story?.wordCount || 0),
-      estimatedReadingTime: Number(story?.estimatedReadingTime || 0),
-      primarySource: story?.primarySource || {
-        name: story?.source || "Original Source",
-        url: story?.sourceUrl || story?.url || "",
-      },
-      metaTitle: story?.metaTitle || "",
-      metaDescription: story?.metaDescription || "",
-      structuredData: story?.structuredData || null,
-    };
+      category: story?.category || requestedCategory || "",
+    }).catch(() => null);
+
+    if (!article) {
+      article = {
+        title: story?.title || "Story",
+        summary: safeArticleSummary(story?.subheadline || story?.summary || ""),
+        source: story?.source || "SunWire Desk",
+        sourceUrl: story?.sourceUrl || story?.url || "",
+        image: story?.image || "",
+        keyPoints: getVerifiedKeyPoints(story),
+        practicalTakeaways: Array.isArray(story?.practicalTakeaways) ? story.practicalTakeaways : [],
+        body: sanitizeArticleBody(story?.body || story?.content || "") || safeArticleSummary(story?.summary || ""),
+        deepDive: Array.isArray(story?.deepDive) ? story.deepDive : [],
+        indiaPulse: story?.indiaPulse || "",
+        background: Array.isArray(story?.background) ? story.background : [],
+        factSheet: Array.isArray(story?.factSheet) ? story.factSheet : [],
+        tags: Array.isArray(story?.tags) ? story.tags : [],
+        wordCount: Number(story?.wordCount || 0),
+        estimatedReadingTime: Number(story?.estimatedReadingTime || 0),
+        primarySource: story?.primarySource || {
+          name: story?.source || "Original Source",
+          url: story?.sourceUrl || story?.url || "",
+        },
+        metaTitle: story?.metaTitle || "",
+        metaDescription: story?.metaDescription || "",
+        structuredData: story?.structuredData || null,
+      };
+    }
 
     let cacheHeader = "public, s-maxage=300, stale-while-revalidate=600";
 

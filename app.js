@@ -63,6 +63,8 @@ const DEFAULT_HOME_PAGE_SIZE = 30;
 const DESK_PAGE_SIZE = 20;
 const CATEGORY_RAIL_COUNT = 15;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
+const CATEGORY_POOL_FETCH_SIZE = 250;
+const HOME_POOL_PAGE_COVERAGE = Math.ceil(CATEGORY_POOL_FETCH_SIZE / DEFAULT_HOME_PAGE_SIZE);
 const MORE_SECTION_COUNT = 4;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
@@ -72,7 +74,7 @@ const SIDEBAR_REFRESH_MS = 20 * 60 * 1000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 2 * 60 * 1000;
-const DEFERRED_ASSET_VERSION = "20260313-1";
+const DEFERRED_ASSET_VERSION = "20260315-5";
 const FILTER_ALIASES = {
   all: "all",
   latest: "all",
@@ -615,6 +617,43 @@ function dedupeStories(stories = []) {
   });
 }
 
+function normalizeComparableStoryText(value = "") {
+  return cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isRedditStory(story = {}) {
+  const haystack = normalizeComparableStoryText([
+    story.source,
+    story.sourceUrl,
+    story.url,
+  ].filter(Boolean).join(" "));
+  return haystack.includes("reddit") || haystack.includes("r sports") || haystack.includes("r technology");
+}
+
+function hasRenderableStoryCopy(story = {}) {
+  const headline = normalizeComparableStoryText(story.title || "");
+  const copy = normalizeComparableStoryText(
+    story.content || story.body || story.summary || story.subheadline || ""
+  );
+  if (!headline || !copy || copy.length < 40) return false;
+  if (copy === headline) return false;
+  return !copy.startsWith(`${headline} source`);
+}
+
+function isDisplayableStory(story = {}) {
+  return Boolean(cleanText(story.slug || story.title || story.id || ""))
+    && !isRedditStory(story)
+    && hasRenderableStoryCopy(story);
+}
+
+function filterDisplayableStories(stories = []) {
+  return dedupeStories(stories).filter(isDisplayableStory);
+}
+
 function sortStoriesForLatest(stories = []) {
   return [...stories].sort((a, b) => {
     const injectedDiff = new Date(getDisplayTimestamp(b)).getTime()
@@ -644,21 +683,22 @@ function sortStoriesForTrending(stories = [], mode = "trending") {
 }
 
 function selectHeadlineOfTheDay(articles = []) {
-  if (!Array.isArray(articles) || !articles.length) return null;
+  const eligibleArticles = filterDisplayableStories(articles);
+  if (!eligibleArticles.length) return null;
 
   const todayKey = toDateKeyInTimezone(new Date().toISOString(), DISPLAY_TIMEZONE);
-  const todaysArticles = articles.filter((article) =>
+  const todaysArticles = eligibleArticles.filter((article) =>
     toDateKeyInTimezone(getDisplayTimestamp(article), DISPLAY_TIMEZONE) === todayKey
   );
   const todaysPriorityStories = todaysArticles.filter(isIndiaPriorityStory);
-  const allPriorityStories = articles.filter(isIndiaPriorityStory);
+  const allPriorityStories = eligibleArticles.filter(isIndiaPriorityStory);
   const pool = todaysPriorityStories.length
     ? todaysPriorityStories
     : todaysArticles.length
       ? todaysArticles
       : allPriorityStories.length
         ? allPriorityStories
-        : articles;
+        : eligibleArticles;
   const ranked = [...pool].sort(compareHomepagePriority);
   const candidates = ranked.slice(0, Math.min(HERO_ROTATION_POOL_SIZE, ranked.length));
   if (candidates.length && candidates.some(isIndiaPriorityStory)) {
@@ -705,8 +745,9 @@ function takeUnique(stories = [], used = new Set(), count = 0, fallbackStories =
 
 function buildGlobalLayout(mainStories = [], categoryMap = {}) {
   const used = new Set();
-  const latestPool = dedupeStories(sortStoriesForLatest(mainStories));
-  const allStories = dedupeStories([
+  const filteredMainStories = filterDisplayableStories(mainStories);
+  const latestPool = dedupeStories(sortStoriesForLatest(filteredMainStories));
+  const allStories = filterDisplayableStories([
     ...mainStories,
     ...CATEGORY_KEYS.flatMap((key) => categoryMap[key] || []),
   ]);
@@ -716,78 +757,25 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
 
   const trendingSourcePool = dedupeStories([
     ...homepagePriorityPool,
-    ...sortStoriesForTrending(mainStories, activeTrendingMode),
+    ...sortStoriesForTrending(filteredMainStories, activeTrendingMode),
   ]);
   const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, latestPool);
-  const politicsTopStories = buildPoliticsStories(allStories, used, CATEGORY_RAIL_COUNT, "just-in");
-  const warTopStories = buildWarStories(allStories, used, CATEGORY_RAIL_COUNT, "just-in");
-  const businessFocusStories = buildBusinessFocusStories(allStories, used, CATEGORY_RAIL_COUNT, "just-in");
-  const topSections = [];
-
-  const indiaPulseStories = takeUnique(homepagePriorityPool, used, CATEGORY_RAIL_COUNT, latestPool);
-  if (indiaPulseStories.length) {
-    topSections.push({
-      key: "india-pulse",
-      title: "India Pulse",
-      eyebrow: "Most searched and high-impact",
-      filter: "india-pulse",
-      actionText: "Open India Pulse",
-      layout: "rail",
-      stories: indiaPulseStories,
-    });
-  }
-
-  CATEGORY_KEYS.forEach((key) => {
-    if (key === "business") return;
-    const categoryPool = dedupeStories([
-      ...(categoryMap[key] || []),
-      ...mainStories.filter((story) => story.category === key),
-    ]);
-    topSections.push({
-      key,
-      title: toTitleCase(key),
-      eyebrow: CATEGORY_EYEBROWS[key] || "Category desk",
-      filter: key,
-      layout: "rail",
-      stories: takeUnique(categoryPool, used, CATEGORY_RAIL_COUNT, latestPool),
-    });
-  });
-
-  if (politicsTopStories.length) {
-    topSections.push({
-      key: "politics-desk",
-      title: "Politics",
-      eyebrow: "Policy and power",
-      filter: "politics",
-      actionText: "Open Politics",
-      layout: "rail",
-      stories: politicsTopStories,
-    });
-  }
-
-  if (warTopStories.length) {
-    topSections.push({
-      key: "war-conflict-desk",
-      title: "War & Conflict",
-      eyebrow: "Defense and geopolitics",
-      filter: "war-conflict",
-      actionText: "Open War & Conflict",
-      layout: "rail",
-      stories: warTopStories,
-    });
-  }
-
-  if (businessFocusStories.length) {
-    topSections.push({
-      key: "startups-funding-desk",
-      title: "Startups & Funding",
-      eyebrow: "Capital, founders and deals",
-      filter: "startups-funding",
-      actionText: "Open Startups & Funding",
-      layout: "rail",
-      stories: businessFocusStories,
-    });
-  }
+  const topSections = ["ai", "tech"].map((key) => ({
+    key,
+    title: toTitleCase(key),
+    eyebrow: CATEGORY_EYEBROWS[key] || "Category desk",
+    filter: key,
+    layout: "rail",
+    stories: takeUnique(
+      filterDisplayableStories([
+        ...(categoryMap[key] || []),
+        ...filteredMainStories.filter((story) => story.category === key),
+      ]),
+      used,
+      CATEGORY_RAIL_COUNT,
+      latestPool
+    ),
+  })).filter((section) => section.stories.length);
 
   const moreSections = [
     {
@@ -795,51 +783,45 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
       title: "Latest News",
       eyebrow: "Rapid read",
       filter: "latest",
-      stories: takeUnique(sortStoriesForLatest(mainStories), used, MORE_SECTION_COUNT, latestPool),
-    },
-    {
-      key: "technology",
-      title: "Technology",
-      eyebrow: "Platforms and chips",
-      filter: "tech",
-      stories: takeUnique(categoryMap.tech || [], used, MORE_SECTION_COUNT, latestPool),
+      stories: takeUnique(sortStoriesForLatest(filteredMainStories), used, MORE_SECTION_COUNT, latestPool),
     },
     {
       key: "entertainment-wire",
       title: "Entertainment",
       eyebrow: "Culture and releases",
       filter: "entertainment",
-      stories: takeUnique(categoryMap.entertainment || [], used, MORE_SECTION_COUNT, latestPool),
+      stories: takeUnique(filterDisplayableStories(categoryMap.entertainment || []), used, MORE_SECTION_COUNT, latestPool),
     },
     {
       key: "sports-wire",
       title: "Sports",
       eyebrow: "Matches and momentum",
       filter: "sports",
-      stories: takeUnique(categoryMap.sports || [], used, MORE_SECTION_COUNT, latestPool),
+      stories: takeUnique(filterDisplayableStories(categoryMap.sports || []), used, MORE_SECTION_COUNT, latestPool),
     },
     {
       key: "business-wire",
       title: "Business",
       eyebrow: "Markets and money",
       filter: "business",
-      stories: takeUnique(categoryMap.business || [], used, MORE_SECTION_COUNT, latestPool),
+      stories: takeUnique(filterDisplayableStories(categoryMap.business || []), used, MORE_SECTION_COUNT, latestPool),
     },
-  ];
+  ].filter((section) => section.stories.length);
 
   return { hero, trending, topSections, moreSections };
 }
 
 function buildFocusedLayout(stories = [], filter = "all") {
-  const latestPool = dedupeStories(sortStoriesForLatest(stories));
+  const renderableStories = filterDisplayableStories(stories);
+  const latestPool = dedupeStories(sortStoriesForLatest(renderableStories));
   const focusedPool = filter === "india-pulse"
-    ? dedupeStories(sortStoriesForHomepageFocus(stories.filter(isIndiaPriorityStory)))
+    ? dedupeStories(sortStoriesForHomepageFocus(renderableStories.filter(isIndiaPriorityStory)))
     : filter === "war-conflict"
-      ? dedupeStories(sortStoriesForTrending(stories.filter(isWarRelatedStory), "just-in"))
+      ? dedupeStories(sortStoriesForTrending(renderableStories.filter(isWarRelatedStory), "just-in"))
       : filter === "politics"
-        ? dedupeStories(sortStoriesForTrending(stories.filter(isPoliticsRelatedStory), "just-in"))
+        ? dedupeStories(sortStoriesForTrending(renderableStories.filter(isPoliticsRelatedStory), "just-in"))
         : filter === "startups-funding"
-          ? dedupeStories(sortStoriesForTrending(stories.filter(isBusinessFocusStory), "just-in"))
+          ? dedupeStories(sortStoriesForTrending(renderableStories.filter(isBusinessFocusStory), "just-in"))
     : latestPool;
   const deskStories = focusedPool.length ? focusedPool : latestPool;
   const hero = selectHeadlineOfTheDay(deskStories) || deskStories[0] || null;
@@ -1293,19 +1275,47 @@ function createEmptyCategoryMap() {
   }, {});
 }
 
-async function fetchHomepageCategoryMap(forceRefresh = false) {
-  const categoryResponses = await Promise.all(
-    CATEGORY_KEYS.map((key) =>
-      fetchCentralNews(1, key, CATEGORY_PREVIEW_FETCH_SIZE, forceRefresh).catch(() => ({ stories: [], articles: [] }))
-    )
-  );
-
+function buildHomepageCategoryMapFromStories(stories = []) {
   const categoryMap = createEmptyCategoryMap();
-  CATEGORY_KEYS.forEach((key, index) => {
-    categoryMap[key] = dedupeStories(extractNewsStories(categoryResponses[index]));
+  const filteredStories = filterDisplayableStories(stories);
+
+  CATEGORY_KEYS.forEach((key) => {
+    categoryMap[key] = dedupeStories(
+      filteredStories.filter((story) => String(story.category || "").toLowerCase() === key)
+    );
   });
 
   return categoryMap;
+}
+
+async function fetchHomepageCategoryMap(forceRefresh = false) {
+  const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh);
+  return buildHomepageCategoryMapFromStories(extractNewsStories(poolPayload));
+}
+
+function buildHomepageDataFromPool(poolPayload = {}, page = 1) {
+  const safePage = Math.max(1, Number(page) || 1);
+  const pooledStories = dedupeStories(extractNewsStories(poolPayload));
+  const totalStories = Number(poolPayload?.totalStories) || Number(poolPayload?.total) || pooledStories.length;
+  const totalPages = Math.max(1, Math.ceil(Math.max(1, totalStories) / DEFAULT_HOME_PAGE_SIZE));
+  const clampedPage = Math.min(safePage, totalPages);
+  const startIndex = (clampedPage - 1) * DEFAULT_HOME_PAGE_SIZE;
+  const pageStories = pooledStories.slice(startIndex, startIndex + DEFAULT_HOME_PAGE_SIZE);
+
+  return {
+    main: {
+      ...poolPayload,
+      page: clampedPage,
+      pageSize: DEFAULT_HOME_PAGE_SIZE,
+      totalStories,
+      totalPages,
+      stories: pageStories,
+      articles: pageStories,
+      pageStories,
+    },
+    mainStories: pageStories,
+    categoryMap: buildHomepageCategoryMapFromStories(pooledStories),
+  };
 }
 
 async function fetchAllStoriesForSearch(forceRefresh = false) {
@@ -1340,23 +1350,24 @@ async function fetchAllStoriesForSearch(forceRefresh = false) {
 function applyHomepagePayload(main, mainStories, categoryMap) {
   const safeCategoryMap = createEmptyCategoryMap();
   CATEGORY_KEYS.forEach((key) => {
-    safeCategoryMap[key] = dedupeStories(categoryMap[key] || []);
+    safeCategoryMap[key] = filterDisplayableStories(categoryMap[key] || []);
   });
 
-  const combinedStories = dedupeStories([
-    ...mainStories,
+  const filteredMainStories = filterDisplayableStories(mainStories);
+  const combinedStories = filterDisplayableStories([
+    ...filteredMainStories,
     ...CATEGORY_KEYS.flatMap((key) => safeCategoryMap[key] || []),
   ]);
 
-  currentStories = mainStories;
+  currentStories = filteredMainStories;
   currentCategoryMap = safeCategoryMap;
   currentPage = Number(main?.page) || currentPage;
   totalPages = Math.max(1, Number(main?.totalPages) || 1);
-  totalStories = Math.max(mainStories.length, Number(main?.totalStories) || mainStories.length);
+  totalStories = Math.max(filteredMainStories.length, Number(main?.totalStories) || filteredMainStories.length);
 
   const layout = activeFilter === "all" || activeFilter === "latest"
-    ? buildGlobalLayout(mainStories, safeCategoryMap)
-    : buildFocusedLayout(mainStories, activeFilter);
+    ? buildGlobalLayout(filteredMainStories, safeCategoryMap)
+    : buildFocusedLayout(filteredMainStories, activeFilter);
 
   renderTicker(sortStoriesForTrending(combinedStories, activeTrendingMode));
   renderHomepageLayout(layout);
@@ -1393,11 +1404,11 @@ function countVisibleStories(layout = {}) {
 
 function renderHomepageLayout(layout) {
   const hasTopSections = Array.isArray(layout?.topSections) && layout.topSections.length > 0;
+  const hasMoreSections = Array.isArray(layout?.moreSections) && layout.moreSections.length > 0;
   const isFocusedDeskView = activeFilter !== "all" && activeFilter !== "latest";
 
   if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = !hasTopSections;
-  if (moreNewsGridEl) moreNewsGridEl.innerHTML = "";
-  if (moreNewsSectionEl) moreNewsSectionEl.hidden = true;
+  if (moreNewsSectionEl) moreNewsSectionEl.hidden = !hasMoreSections;
   if (paginationShellEl) paginationShellEl.hidden = true;
   categorySectionsGridEl.classList.toggle("desk-panels--focused", isFocusedDeskView);
   if (categoryNewsTitleEl) {
@@ -1409,6 +1420,7 @@ function renderHomepageLayout(layout) {
   renderHero(layout.hero);
   renderTrendingSection(layout.trending || []);
   scheduleTopSectionsRender(layout.topSections || [], "dense");
+  renderDeskPanels(moreNewsGridEl, layout.moreSections || [], "dense");
   renderStats(countVisibleStories(layout));
 }
 
@@ -1481,6 +1493,18 @@ async function loadStories(page = 1, forceRefresh = false) {
   renderLoadingState();
 
   try {
+    if ((normalizedFilter === "all" || normalizedFilter === "latest") && page <= HOME_POOL_PAGE_COVERAGE) {
+      const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh);
+      if (requestId !== activeLoadRequestId) return;
+      const derivedHomepageData = buildHomepageDataFromPool(poolPayload, page);
+      applyHomepagePayload(
+        derivedHomepageData.main,
+        derivedHomepageData.mainStories,
+        derivedHomepageData.categoryMap
+      );
+      return;
+    }
+
     const categoryMapPromise = normalizedFilter === "all" || normalizedFilter === "latest"
       ? fetchHomepageCategoryMap(forceRefresh).catch(() => null)
       : null;

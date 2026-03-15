@@ -48,7 +48,7 @@ const dom = {
 
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:";
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
-const DEFERRED_ASSET_VERSION = "20260313-2";
+const DEFERRED_ASSET_VERSION = "20260315-2";
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
 const SEO_SOCIAL_IMAGE = `${SEO_SITE_ORIGIN}/social-card.svg`;
@@ -460,10 +460,18 @@ function applyArticleData(article = {}, fallback = {}) {
 
   const deskFilter = normalizeDeskFilter(fallback.category || "latest");
   const headline = cleanText(article.title || fallback.title || "Story");
-  const summary = sanitizeArticleCopy(article.summary || fallback.summary || "", { maxSentences: 3 });
+  const summary = sanitizeArticleCopy(
+    article.summary || fallback.summary || fallback.subheadline || fallback.content || "",
+    { maxSentences: 3 }
+  );
+  const fallbackBody = cleanText(fallback.body || fallback.content || "");
+  const articleBody = cleanText(article.body || "");
+  const preferredBody = wordCount(articleBody) >= wordCount(fallbackBody)
+    ? (article.body || fallback.body || fallback.content || "")
+    : (fallback.body || fallback.content || article.body || "");
   const deepDive = Array.isArray(article.deepDive) && article.deepDive.length
     ? article.deepDive.map((entry) => cleanText(entry)).filter(Boolean)
-    : sanitizeArticleBody(article.body || summary).split(/\n{2,}/).map((entry) => cleanText(entry)).filter(Boolean);
+    : sanitizeArticleBody(preferredBody || summary).split(/\n{2,}/).map((entry) => cleanText(entry)).filter(Boolean);
   const publishedAt = article.published_at || article.publishedAt || fallback.publishedAt || "";
   const sourceName = article.source || fallback.source || "SunWire Desk";
   const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
@@ -674,7 +682,10 @@ function readStoryParams() {
       isDatabaseArticle: preloaded.story.isDatabaseArticle === true,
       publishedAt: preloaded.story.source_published_at || preloaded.story.published_at || preloaded.story.publishedAt || "",
       summary: preloaded.story.summary || "",
+      subheadline: preloaded.story.subheadline || "",
       image: preloaded.story.image || "",
+      content: preloaded.story.content || "",
+      body: preloaded.story.body || preloaded.story.content || "",
       canonicalUrl: buildCanonicalArticleUrl({
         id: preloaded.story.id || "",
         slug: preloaded.story.slug || "",
@@ -702,7 +713,10 @@ function readStoryParams() {
     isDatabaseArticle: false,
     publishedAt,
     summary,
+    subheadline: "",
     image,
+    content: "",
+    body: "",
     canonicalUrl: buildCanonicalArticleUrl({
       id: params.get("id") || "",
       slug: params.get("slug") || "",

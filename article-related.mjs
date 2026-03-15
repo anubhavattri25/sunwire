@@ -31,6 +31,35 @@ export async function loadRelatedStories(options = {}) {
     normalizeTag = (value = "") => cleanText(String(value || "").toLowerCase()),
   } = helpers;
 
+  const normalizeComparableStoryText = (value = "") => cleanText(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const isRedditStory = (story = {}) => {
+    const haystack = normalizeComparableStoryText([
+      story.source,
+      story.sourceUrl,
+      story.url,
+    ].filter(Boolean).join(" "));
+    return haystack.includes("reddit") || haystack.includes("r sports") || haystack.includes("r technology");
+  };
+
+  const hasRenderableStoryCopy = (story = {}) => {
+    const headline = normalizeComparableStoryText(story.title || "");
+    const copy = normalizeComparableStoryText(
+      story.content || story.body || story.summary || story.subheadline || ""
+    );
+    if (!headline || !copy || copy.length < 40) return false;
+    if (copy === headline) return false;
+    return !copy.startsWith(`${headline} source`);
+  };
+
+  const isDisplayableStory = (story = {}) => Boolean(cleanText(story.slug || story.title || story.id || ""))
+    && !isRedditStory(story)
+    && hasRenderableStoryCopy(story);
+
   const renderStoryLinks = (el, stories = [], emptyText = "No stories available.") => {
     if (!el) return;
     el.innerHTML = "";
@@ -129,6 +158,7 @@ export async function loadRelatedStories(options = {}) {
   ]);
 
   const filteredAllStories = dedupeStories(allStories)
+    .filter((story) => isDisplayableStory(story))
     .filter((story) => (story.sourceUrl || story.url || "") !== currentUrl)
     .filter((story) => cleanText(story.title || "").toLowerCase() !== cleanText(currentTitle || "").toLowerCase());
   const targetTags = (Array.isArray(currentTags) ? currentTags : [])
@@ -138,6 +168,7 @@ export async function loadRelatedStories(options = {}) {
   const filteredCategoryStories = dedupeStories(categoryStories.length ? categoryStories : filteredAllStories.filter((story) => (
     normalizeDeskFilter(story.category || "latest") === normalizeDeskFilter(category)
   )))
+    .filter((story) => isDisplayableStory(story))
     .filter((story) => (story.sourceUrl || story.url || "") !== currentUrl)
     .filter((story) => cleanText(story.title || "").toLowerCase() !== cleanText(currentTitle || "").toLowerCase());
   const latestStories = [...filteredAllStories].sort((a, b) =>
