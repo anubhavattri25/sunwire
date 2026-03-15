@@ -7,15 +7,18 @@ module.exports = async (req, res) => {
     }
 
     const key = req.query.key;
-    console.log("KEY FROM REQUEST:", key);
-    console.log("ENV SECRET:", process.env.INGEST_SECRET);
 
-    if (key !== process.env.INGEST_SECRET) {
-      return res.status(403).json({
-        ok: false,
-        message: "Unauthorized request"
-      });
-    }
+const envSecret = process.env.INGEST_SECRET || "";
+
+console.log("KEY FROM REQUEST:", key);
+console.log("ENV SECRET:", envSecret);
+
+if (key.trim() !== envSecret.trim()) {
+  return res.status(403).json({
+    ok: false,
+    message: "Unauthorized request"
+  });
+}
 
     console.log("GitHub triggered Sunwire ingestion");
 
