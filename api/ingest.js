@@ -6,25 +6,25 @@ module.exports = async (req, res) => {
     return res.status(405).json({ error: "Method not allowed" });
   }
 
-  // safer parsing for Vercel
-  const url = new URL(req.url, "http://localhost");
-  const key = (url.searchParams.get("key") || "").trim();
+  // safest way for Vercel
+  const key =
+    (req.query && req.query.key) ||
+    (req.body && req.body.key) ||
+    "";
 
-  const envSecret = (process.env.INGEST_SECRET || "").trim();
+  const envSecret = process.env.INGEST_SECRET || "";
 
-  console.log("Incoming key:", key);
-  console.log("Server secret length:", envSecret.length);
-
-  if (!key || key !== envSecret) {
+  if (key !== envSecret) {
     return res.status(403).json({
       ok:false,
       message:"Unauthorized request"
     });
   }
 
-  console.log("GitHub triggered Sunwire ingestion");
+  console.log("Sunwire ingestion authorized");
 
   try {
+
     await newsHandler.runPipeline();
 
     return res.status(200).json({
@@ -32,9 +32,9 @@ module.exports = async (req, res) => {
       message:"Pipeline executed successfully"
     });
 
-  } catch(err) {
+  } catch(err){
 
-    console.error("Pipeline error:", err);
+    console.error(err);
 
     return res.status(500).json({
       ok:false,
