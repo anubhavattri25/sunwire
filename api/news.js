@@ -88,6 +88,38 @@ function collectVisibleStories(view = {}) {
   return stories;
 }
 
+function collectHomepageCandidateStories({
+  pageStories = [],
+  allStories = [],
+  prioritizedStories = [],
+} = {}) {
+  const seen = new Set();
+  const stories = [];
+  const categoryCounts = new Map();
+  const categoryLimit = 4;
+
+  function addStory(story = null) {
+    const key = storyKey(story || {});
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    stories.push(story);
+  }
+
+  prioritizedStories.forEach(addStory);
+  pageStories.slice(0, 30).forEach(addStory);
+
+  (Array.isArray(allStories) ? allStories : []).forEach((story) => {
+    const category = String(story?.category || "").trim().toLowerCase();
+    if (!category || !["ai", "tech", "entertainment", "sports", "business"].includes(category)) return;
+    const count = categoryCounts.get(category) || 0;
+    if (count >= categoryLimit) return;
+    addStory(story);
+    categoryCounts.set(category, count + 1);
+  });
+
+  return stories;
+}
+
 function replaceStoriesWithMap(stories = [], replacements = new Map()) {
   return (Array.isArray(stories) ? stories : []).map((story) => {
     const key = storyKey(story);
@@ -109,11 +141,16 @@ async function hydrateHomepagePoolPayload(payload = {}) {
     allStories: stories,
   });
   const visibleStories = collectVisibleStories(view);
+  const candidateStories = collectHomepageCandidateStories({
+    pageStories,
+    allStories: stories,
+    prioritizedStories: visibleStories,
+  });
 
-  if (!visibleStories.length) return payload;
+  if (!candidateStories.length) return payload;
 
-  const enrichedStories = await enrichStoriesWithImages(visibleStories, {
-    remoteFetchLimit: visibleStories.length,
+  const enrichedStories = await enrichStoriesWithImages(candidateStories, {
+    remoteFetchLimit: candidateStories.length,
     concurrency: 4,
   });
   const replacementMap = new Map(
