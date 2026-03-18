@@ -34,7 +34,7 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/article.css?v=20260318-1" />
+  <link rel="stylesheet" href="/article.css?v=20260319-1" />
 </head>
 <body>
   <div class="noise"></div>
@@ -89,6 +89,16 @@
               <button class="action-button" id="copyLinkButton" type="button">Copy Link</button>
               <button class="action-button" id="nativeShareButton" type="button">Share</button>
             </div>
+
+            <section class="article-block article-block--story">
+              <div class="article-block__head">
+                <p class="article-block__eyebrow">Full Coverage</p>
+                <h2>Full Story</h2>
+              </div>
+              <div class="article-body" id="articleBody">
+                <p>Fetching full story...</p>
+              </div>
+            </section>
           </div>
 
           <figure class="article-media">
@@ -97,7 +107,7 @@
           </figure>
         </section>
 
-        <div class="article-content">
+        <div class="article-followup">
           <section class="article-block article-block--source" id="primarySourceBlock" hidden>
             <div class="article-block__head">
               <p class="article-block__eyebrow">Source Trail</p>
@@ -107,59 +117,6 @@
               <a class="primary-source__link" id="articleSource" href="/" target="_blank" rel="noopener noreferrer">Loading source...</a>
               <p>Opening the original reporting, filing, release, or statement behind this story.</p>
             </div>
-          </section>
-
-          <section class="article-block article-block--story">
-            <div class="article-block__head">
-              <p class="article-block__eyebrow">Full Coverage</p>
-              <h2>Full Story</h2>
-            </div>
-            <div class="article-body" id="articleBody">
-              <p>Fetching full story...</p>
-            </div>
-          </section>
-
-          <section class="article-block">
-            <div class="article-block__head">
-              <p class="article-block__eyebrow">Local Angle</p>
-              <h2>The India Pulse</h2>
-            </div>
-            <div class="article-body" id="indiaPulseBody">
-              <p>Checking India-specific details...</p>
-            </div>
-          </section>
-
-          <section class="article-block">
-            <div class="article-block__head">
-              <p class="article-block__eyebrow">Background</p>
-              <h2>The Flashback</h2>
-            </div>
-            <div class="background-list" id="backgroundList">
-              <div class="background-item">
-                <h3>Loading background...</h3>
-                <p>Collecting earlier related events for context.</p>
-              </div>
-            </div>
-          </section>
-
-          <section class="article-block" id="videoSection" hidden>
-            <div class="article-block__head">
-              <p class="article-block__eyebrow">Watch</p>
-              <h2>Video Brief</h2>
-            </div>
-            <div class="video-wrap">
-              <iframe id="articleVideo" src="" title="Article video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>
-            </div>
-          </section>
-
-          <section class="article-block" id="takeawaySection" hidden>
-            <div class="article-block__head">
-              <p class="article-block__eyebrow">Practical take</p>
-              <h2>Takeaways</h2>
-            </div>
-            <ul class="bullet-list" id="takeawayList">
-              <li>Loading takeaways...</li>
-            </ul>
           </section>
         </div>
       </article>
@@ -199,6 +156,6 @@
     </div>
   </footer>
 
-  <script type="module" src="/article.js?v=20260318-1"></script>
+  <script type="module" src="/article.js?v=20260319-1"></script>
 </body>
 </html>

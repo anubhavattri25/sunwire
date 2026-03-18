@@ -26,6 +26,7 @@ export async function loadRelatedStories(options = {}) {
     storyKey = (story = {}) => story.id || story.url || story.title,
     buildArticleHref = (story = {}) => story.url || "/",
     storyImage = (story = {}) => story.image || "",
+    storyCardImage = (story = {}) => storyImage(story),
     applyResponsiveImage = () => {},
     timeAgo = () => "just now",
     normalizeTag = (value = "") => cleanText(String(value || "").toLowerCase()),
@@ -92,18 +93,22 @@ export async function loadRelatedStories(options = {}) {
       const article = document.createElement("article");
       article.className = "related-card";
 
-      const mediaLink = document.createElement("a");
-      mediaLink.className = "related-card__media";
-      mediaLink.href = buildArticleHref(story);
+      const realImage = storyCardImage(story, normalizeDeskFilter(story.category || "latest"));
+      if (realImage) {
+        const mediaLink = document.createElement("a");
+        mediaLink.className = "related-card__media";
+        mediaLink.href = buildArticleHref(story);
 
-      const image = document.createElement("img");
-      applyResponsiveImage(image, storyImage(story, normalizeDeskFilter(story.category || "latest")), {
-        alt: cleanText(story.title || "Story image"),
-        width: 1600,
-        height: 1000,
-        sizes: "(max-width: 960px) 100vw, 25vw",
-      });
-      mediaLink.appendChild(image);
+        const image = document.createElement("img");
+        applyResponsiveImage(image, realImage, {
+          alt: cleanText(story.title || "Story image"),
+          width: 1600,
+          height: 1000,
+          sizes: "(max-width: 960px) 100vw, 25vw",
+        });
+        mediaLink.appendChild(image);
+        article.appendChild(mediaLink);
+      }
 
       const tag = document.createElement("span");
       tag.className = "related-card__tag";
@@ -118,7 +123,6 @@ export async function loadRelatedStories(options = {}) {
       meta.className = "related-card__meta";
       meta.textContent = timeAgo(story.injected_at || story.published_at || story.publishedAt || "");
 
-      article.appendChild(mediaLink);
       article.appendChild(tag);
       article.appendChild(headline);
       article.appendChild(meta);

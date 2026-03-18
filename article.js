@@ -18,9 +18,6 @@ const dom = {
   articleReadingTime: document.getElementById("articleReadingTime"),
   articleSummary: document.getElementById("articleSummary"),
   articleBody: document.getElementById("articleBody"),
-  indiaPulseBody: document.getElementById("indiaPulseBody"),
-  backgroundList: document.getElementById("backgroundList"),
-  factSheetTable: document.getElementById("factSheetTable"),
   articleTags: document.getElementById("articleTags"),
   primarySourceBlock: document.getElementById("primarySourceBlock"),
   primarySourceLink: document.getElementById("primarySourceLink"),
@@ -29,10 +26,6 @@ const dom = {
   articleImageCaption: document.getElementById("articleImageCaption"),
   ogImageMeta: document.getElementById("ogImageMeta"),
   twitterImageMeta: document.getElementById("twitterImageMeta"),
-  videoSection: document.getElementById("videoSection"),
-  articleVideo: document.getElementById("articleVideo"),
-  takeawaySection: document.getElementById("takeawaySection"),
-  takeawayList: document.getElementById("takeawayList"),
   breadcrumbDesk: document.getElementById("breadcrumbDesk"),
   breadcrumbCurrent: document.getElementById("breadcrumbCurrent"),
   copyLinkButton: document.getElementById("copyLinkButton"),
@@ -47,7 +40,7 @@ const dom = {
 
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:";
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
-const DEFERRED_ASSET_VERSION = "20260315-2";
+const DEFERRED_ASSET_VERSION = "20260319-1";
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
 const SEO_SOCIAL_IMAGE = `${SEO_SITE_ORIGIN}/social-card.svg`;
@@ -238,6 +231,14 @@ function storyImage(story = {}, category = "latest") {
   return buildFallbackImage(story, category);
 }
 
+function storyCardImage(story = {}) {
+  const imageUrl = decodeHtmlEntities(String(story.image || story.image_url || story.image_storage_url || "").trim());
+  if (!/^https?:\/\//i.test(imageUrl)) return "";
+  if (/\.svg(\?|$)/i.test(imageUrl)) return "";
+  if (/placehold\.co/i.test(imageUrl)) return "";
+  return imageUrl;
+}
+
 function slugify(value = "") {
   return cleanText(value)
     .toLowerCase()
@@ -382,70 +383,6 @@ function renderParagraphs(container, paragraphs = [], fallbackText = "") {
   });
 }
 
-function renderBackgroundItems(items = []) {
-  if (!dom.backgroundList) return;
-  dom.backgroundList.innerHTML = "";
-  const entries = Array.isArray(items) && items.length
-    ? items
-    : [{ title: "Context update", context: "Related past events are still being assembled for this story." }];
-
-  entries.forEach((item) => {
-    const card = document.createElement("div");
-    card.className = "background-item";
-
-    if (item.url) {
-      const link = document.createElement("a");
-      link.href = item.url;
-      link.target = "_blank";
-      link.rel = "noopener noreferrer";
-      const heading = document.createElement("h3");
-      heading.textContent = cleanText(item.title || "Background");
-      link.appendChild(heading);
-      card.appendChild(link);
-    } else {
-      const heading = document.createElement("h3");
-      heading.textContent = cleanText(item.title || "Background");
-      card.appendChild(heading);
-    }
-
-    const copy = document.createElement("p");
-    copy.textContent = cleanText(item.context || "");
-    card.appendChild(copy);
-
-    if (item.source) {
-      const source = document.createElement("div");
-      source.className = "background-item__source";
-      source.textContent = cleanText(item.source);
-      card.appendChild(source);
-    }
-
-    dom.backgroundList.appendChild(card);
-  });
-}
-
-function renderFactSheet(rows = []) {
-  if (!dom.factSheetTable) return;
-  dom.factSheetTable.innerHTML = "";
-  const body = document.createElement("tbody");
-  const items = Array.isArray(rows) && rows.length
-    ? rows
-    : [{ label: "Status", value: "Verified data points are still loading." }];
-
-  items.forEach((row) => {
-    const tr = document.createElement("tr");
-    const th = document.createElement("th");
-    th.scope = "row";
-    th.textContent = cleanText(row.label || "");
-    const td = document.createElement("td");
-    td.textContent = cleanText(row.value || "");
-    tr.appendChild(th);
-    tr.appendChild(td);
-    body.appendChild(tr);
-  });
-
-  dom.factSheetTable.appendChild(body);
-}
-
 function buildInitialBody(title = "", summary = "", source = "") {
   const cleanedSummary = sanitizeArticleCopy(summary, { maxSentences: 3 });
 
@@ -517,28 +454,12 @@ function applyArticleData(article = {}, fallback = {}) {
     alt: headline,
     width: 1600,
     height: 900,
-    sizes: "(max-width: 960px) 100vw, 66vw",
+    sizes: "(max-width: 960px) 100vw, 38vw",
     highPriority: true,
   });
 
   renderTagChips(tags);
   renderParagraphs(dom.articleBody, deepDive, "No additional verified details available.");
-  renderParagraphs(
-    dom.indiaPulseBody,
-    article.indiaPulse ? [article.indiaPulse] : [],
-    "India-specific pricing, availability, and impact updates are still being verified."
-  );
-  renderBackgroundItems(article.background || []);
-  renderFactSheet(article.factSheet || []);
-
-  const takeaways = Array.isArray(article.practicalTakeaways) ? article.practicalTakeaways : [];
-  dom.takeawaySection.hidden = !takeaways.length;
-  if (takeaways.length) {
-    renderBulletList(dom.takeawayList, takeaways);
-  }
-
-  dom.videoSection.hidden = !article.youtubeEmbedUrl;
-  dom.articleVideo.src = article.youtubeEmbedUrl || "";
 
   setSeo(
     article.seoTitle || `${headline} | SunWire`,
@@ -553,7 +474,7 @@ function applyArticleData(article = {}, fallback = {}) {
       sectionUrl: buildSectionUrl(deskFilter),
       tags,
       wordCount: Number(article.wordCount || 0),
-      articleBody: [summary, ...deepDive, article.indiaPulse || ""].join(" "),
+      articleBody: [summary, ...deepDive].join(" "),
     }
   );
 
@@ -612,6 +533,7 @@ async function hydrateRelatedContent() {
         storyKey,
         buildArticleHref,
         storyImage,
+        storyCardImage,
         applyResponsiveImage,
         timeAgo,
         normalizeTag: (value = "") => cleanText(String(value || "").toLowerCase()),
@@ -772,7 +694,7 @@ function renderInitialStoryState(story) {
     alt: cleanText(story.title || "Story image"),
     width: 1600,
     height: 900,
-    sizes: "(max-width: 960px) 100vw, 66vw",
+    sizes: "(max-width: 960px) 100vw, 38vw",
     highPriority: true,
   });
 
@@ -793,11 +715,6 @@ function renderInitialStoryState(story) {
 
   renderTagChips([]);
   renderParagraphs(dom.articleBody, [buildInitialBody(story.title, story.summary, story.source)], "Fetching full story...");
-  renderParagraphs(dom.indiaPulseBody, [], "Checking India-specific details...");
-  renderBackgroundItems([]);
-  renderFactSheet([]);
-  dom.takeawaySection.hidden = true;
-  dom.videoSection.hidden = true;
 
   attachNativeShare(
     cleanText(story.title),
@@ -831,9 +748,6 @@ async function loadStory() {
 
   if (!story.url && !story.slug) {
     renderParagraphs(dom.articleBody, [], "No additional verified details available.");
-    renderParagraphs(dom.indiaPulseBody, [], "India-specific pricing, availability, and impact updates are still being verified.");
-    renderBackgroundItems([]);
-    renderFactSheet([]);
     scheduleRelatedContentLoad({ category: deskFilter, currentUrl: "", currentTitle: story.title, currentTags: [] });
     return;
   }
