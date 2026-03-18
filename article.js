@@ -390,8 +390,8 @@ function renderBackgroundItems(items = []) {
     : [{ title: "Context update", context: "Related past events are still being assembled for this story." }];
 
   entries.forEach((item) => {
-    const article = document.createElement("article");
-    article.className = "background-item";
+    const card = document.createElement("div");
+    card.className = "background-item";
 
     if (item.url) {
       const link = document.createElement("a");
@@ -401,25 +401,25 @@ function renderBackgroundItems(items = []) {
       const heading = document.createElement("h3");
       heading.textContent = cleanText(item.title || "Background");
       link.appendChild(heading);
-      article.appendChild(link);
+      card.appendChild(link);
     } else {
       const heading = document.createElement("h3");
       heading.textContent = cleanText(item.title || "Background");
-      article.appendChild(heading);
+      card.appendChild(heading);
     }
 
     const copy = document.createElement("p");
     copy.textContent = cleanText(item.context || "");
-    article.appendChild(copy);
+    card.appendChild(copy);
 
     if (item.source) {
       const source = document.createElement("div");
       source.className = "background-item__source";
       source.textContent = cleanText(item.source);
-      article.appendChild(source);
+      card.appendChild(source);
     }
 
-    dom.backgroundList.appendChild(article);
+    dom.backgroundList.appendChild(card);
   });
 }
 
