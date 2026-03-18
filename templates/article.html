@@ -34,7 +34,7 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/article.css?v=20260311-10" />
+  <link rel="stylesheet" href="/article.css?v=20260318-1" />
 </head>
 <body>
   <div class="noise"></div>
@@ -70,125 +70,99 @@
 
     <div class="article-layout">
       <article class="article-main">
-        <header class="article-hero">
-          <span class="article-kicker" id="articleCategory">Latest</span>
-          <h1 id="articleTitle">Loading story...</h1>
-          <div class="article-meta">
-            <span id="articleAuthor">SunWire Desk</span>
-            <span id="articleMeta">Loading...</span>
-            <span class="article-reading-time" id="articleReadingTime">4 min read</span>
-          </div>
-          <div class="article-actions">
-            <button class="action-button" id="copyLinkButton" type="button">Copy Link</button>
-            <button class="action-button" id="nativeShareButton" type="button">Share</button>
-          </div>
-        </header>
+        <section class="article-lead">
+          <div class="article-lead__copy">
+            <header class="article-hero">
+              <span class="article-kicker" id="articleCategory">Latest</span>
+              <h1 id="articleTitle">Loading story...</h1>
+              <div class="article-meta">
+                <span id="articleAuthor">SunWire Desk</span>
+                <span id="articleMeta">Loading...</span>
+                <span class="article-reading-time" id="articleReadingTime">4 min read</span>
+              </div>
+            </header>
 
-        <figure class="article-media">
-          <img id="articleImage" alt="" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
-          <figcaption id="articleImageCaption">Image selected for this story.</figcaption>
-        </figure>
+            <p class="article-summary" id="articleSummary">Fetching deep summary...</p>
+            <div class="tag-row" id="articleTags"></div>
 
-        <p class="article-summary" id="articleSummary">Fetching deep summary...</p>
-        <div class="tag-row" id="articleTags"></div>
+            <div class="article-actions">
+              <button class="action-button" id="copyLinkButton" type="button">Copy Link</button>
+              <button class="action-button" id="nativeShareButton" type="button">Share</button>
+            </div>
+          </div>
 
-        <section class="article-block article-block--source" id="primarySourceBlock" hidden>
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Source Trail</p>
-            <h2>Primary Source</h2>
-          </div>
-          <div class="primary-source">
-            <a class="primary-source__link" id="articleSource" href="/" target="_blank" rel="noopener noreferrer">Loading source...</a>
-            <p>Opening the original reporting, filing, release, or statement behind this story.</p>
-          </div>
+          <figure class="article-media">
+            <img id="articleImage" alt="" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
+            <figcaption id="articleImageCaption">Image selected for this story.</figcaption>
+          </figure>
         </section>
 
-        <section class="article-block article-block--highlights">
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">TL;DR</p>
-            <h2>Key Highlights</h2>
-          </div>
-          <ul class="bullet-list" id="keyPoints">
-            <li>Loading key points...</li>
-          </ul>
-        </section>
+        <div class="article-content">
+          <section class="article-block article-block--source" id="primarySourceBlock" hidden>
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Source Trail</p>
+              <h2>Primary Source</h2>
+            </div>
+            <div class="primary-source">
+              <a class="primary-source__link" id="articleSource" href="/" target="_blank" rel="noopener noreferrer">Loading source...</a>
+              <p>Opening the original reporting, filing, release, or statement behind this story.</p>
+            </div>
+          </section>
 
-        <section class="article-block">
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Analysis</p>
-            <h2>The Deep Dive</h2>
-          </div>
-          <div class="article-body" id="articleBody">
-            <p>Fetching full story...</p>
-          </div>
-        </section>
+          <section class="article-block article-block--story">
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Full Coverage</p>
+              <h2>Full Story</h2>
+            </div>
+            <div class="article-body" id="articleBody">
+              <p>Fetching full story...</p>
+            </div>
+          </section>
 
-        <section class="article-block">
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Local Angle</p>
-            <h2>The India Pulse</h2>
-          </div>
-          <div class="article-body" id="indiaPulseBody">
-            <p>Checking India-specific details...</p>
-          </div>
-        </section>
+          <section class="article-block">
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Local Angle</p>
+              <h2>The India Pulse</h2>
+            </div>
+            <div class="article-body" id="indiaPulseBody">
+              <p>Checking India-specific details...</p>
+            </div>
+          </section>
 
-        <section class="article-block">
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Background</p>
-            <h2>The Flashback</h2>
-          </div>
-          <div class="background-list" id="backgroundList">
-            <article class="background-item">
-              <h3>Loading background...</h3>
-              <p>Collecting earlier related events for context.</p>
-            </article>
-          </div>
-        </section>
+          <section class="article-block">
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Background</p>
+              <h2>The Flashback</h2>
+            </div>
+            <div class="background-list" id="backgroundList">
+              <article class="background-item">
+                <h3>Loading background...</h3>
+                <p>Collecting earlier related events for context.</p>
+              </article>
+            </div>
+          </section>
 
-        <section class="article-block" id="videoSection" hidden>
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Watch</p>
-            <h2>Video Brief</h2>
-          </div>
-          <div class="video-wrap">
-            <iframe id="articleVideo" src="" title="Article video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>
-          </div>
-        </section>
+          <section class="article-block" id="videoSection" hidden>
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Watch</p>
+              <h2>Video Brief</h2>
+            </div>
+            <div class="video-wrap">
+              <iframe id="articleVideo" src="" title="Article video" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen loading="lazy"></iframe>
+            </div>
+          </section>
 
-        <section class="article-block" id="takeawaySection" hidden>
-          <div class="article-block__head">
-            <p class="article-block__eyebrow">Practical take</p>
-            <h2>Takeaways</h2>
-          </div>
-          <ul class="bullet-list" id="takeawayList">
-            <li>Loading takeaways...</li>
-          </ul>
-        </section>
+          <section class="article-block" id="takeawaySection" hidden>
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Practical take</p>
+              <h2>Takeaways</h2>
+            </div>
+            <ul class="bullet-list" id="takeawayList">
+              <li>Loading takeaways...</li>
+            </ul>
+          </section>
+        </div>
       </article>
-
-      <aside class="article-sidebar">
-        <section class="sidebar-card">
-          <p class="sidebar-card__eyebrow">Trending Now</p>
-          <ul class="story-list" id="sidebarTrendingList">
-            <li>Loading stories...</li>
-          </ul>
-        </section>
-
-        <section class="sidebar-card">
-          <p class="sidebar-card__eyebrow">Latest News</p>
-          <ul class="story-list" id="sidebarLatestList">
-            <li>Loading stories...</li>
-          </ul>
-        </section>
-
-        <section class="sidebar-card">
-          <p class="sidebar-card__eyebrow">Related News</p>
-          <ul class="story-list" id="sidebarRelatedList">
-            <li>Loading stories...</li>
-          </ul>
-        </section>
-      </aside>
     </div>
 
     <section class="related-section">
@@ -225,6 +199,6 @@
     </div>
   </footer>
 
-  <script type="module" src="/article.js?v=20260315-2"></script>
+  <script type="module" src="/article.js?v=20260318-1"></script>
 </body>
 </html>

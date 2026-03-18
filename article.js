@@ -27,7 +27,6 @@ const dom = {
   articleSource: document.getElementById("articleSource") || document.getElementById("primarySourceLink"),
   articleImage: document.getElementById("articleImage"),
   articleImageCaption: document.getElementById("articleImageCaption"),
-  keyPoints: document.getElementById("keyPoints"),
   ogImageMeta: document.getElementById("ogImageMeta"),
   twitterImageMeta: document.getElementById("twitterImageMeta"),
   videoSection: document.getElementById("videoSection"),
@@ -447,16 +446,6 @@ function renderFactSheet(rows = []) {
   dom.factSheetTable.appendChild(body);
 }
 
-function buildInitialKeyPoints(title = "", summary = "", source = "") {
-  if (isLowValueSummary(summary)) return [];
-
-  return cleanText(summary)
-    .split(/(?<=[.!?])\s+/)
-    .map((sentence) => cleanText(sentence))
-    .filter((sentence) => sentence.length > 30)
-    .slice(0, 5);
-}
-
 function buildInitialBody(title = "", summary = "", source = "") {
   const cleanedSummary = sanitizeArticleCopy(summary, { maxSentences: 3 });
 
@@ -532,13 +521,6 @@ function applyArticleData(article = {}, fallback = {}) {
     highPriority: true,
   });
 
-  renderBulletList(
-    dom.keyPoints,
-    Array.isArray(article.keyPoints)
-      ? article.keyPoints.map((item) => cleanText(item)).filter((item) => item && !isLowValueSummary(item))
-      : [],
-    "No verified key facts available."
-  );
   renderTagChips(tags);
   renderParagraphs(dom.articleBody, deepDive, "No additional verified details available.");
   renderParagraphs(
@@ -809,7 +791,6 @@ function renderInitialStoryState(story) {
     }
   );
 
-  renderBulletList(dom.keyPoints, buildInitialKeyPoints(story.title, story.summary, story.source), "No verified key facts available.");
   renderTagChips([]);
   renderParagraphs(dom.articleBody, [buildInitialBody(story.title, story.summary, story.source)], "Fetching full story...");
   renderParagraphs(dom.indiaPulseBody, [], "Checking India-specific details...");
@@ -849,7 +830,6 @@ async function loadStory() {
   }
 
   if (!story.url && !story.slug) {
-    renderBulletList(dom.keyPoints, [], "No verified key facts available.");
     renderParagraphs(dom.articleBody, [], "No additional verified details available.");
     renderParagraphs(dom.indiaPulseBody, [], "India-specific pricing, availability, and impact updates are still being verified.");
     renderBackgroundItems([]);
@@ -903,11 +883,6 @@ async function loadStory() {
     }
   } catch (_) {
     if (cachedArticle) return;
-    renderBulletList(
-      dom.keyPoints,
-      [],
-      "No verified key facts available."
-    );
     renderParagraphs(dom.articleBody, [], "No additional verified details available.");
   }
 }
