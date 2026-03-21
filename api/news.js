@@ -150,7 +150,7 @@ async function hydrateHomepagePoolPayload(payload = {}) {
   if (!candidateStories.length) return payload;
 
   const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    remoteFetchLimit: candidateStories.length,
+    allowRemoteFetch: false,
     concurrency: 4,
   });
   const replacementMap = new Map(
@@ -232,17 +232,11 @@ module.exports = async function handler(req, res) {
     // Run ingestion when refresh=1
     if (refresh) {
       const { ingestNewsSources } = require("../backend/services/newsIngestor");
+      const { processPendingArticles } = require("../backend/services/articleProcessor");
       const articles = await ingestNewsSources();
 
       if (Array.isArray(articles) && articles.length) {
-        await Promise.all(
-          articles.map((article) =>
-            prisma.article
-              .create({ data: article })
-              .catch(() => null)
-          )
-        );
-
+        await processPendingArticles(articles);
       }
     }
 

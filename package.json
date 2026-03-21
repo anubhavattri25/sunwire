@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "local": "node local-server.js",
+    "repair:verge": "node scripts/repair-verge-content.js",
     "postinstall": "node node_modules/prisma/build/index.js generate"
   },
   "dependencies": {

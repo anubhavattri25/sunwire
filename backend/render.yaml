@@ -21,7 +21,11 @@ services:
         sync: false
       - key: CLOUDINARY_API_SECRET
         sync: false
-      - key: OPENAI_API_KEY
-        sync: false
+      - key: AI_PROVIDER
+        value: ollama
+      - key: OLLAMA_BASE_URL
+        value: http://localhost:11434
+      - key: OLLAMA_MODEL
+        value: llama3.1:8b
       - key: UNSPLASH_ACCESS_KEY
         sync: false

@@ -1,5 +1,5 @@
 const { ingestNewsSources, pipelineState } = require("./newsIngestor");
-const { saveArticle, buildArticlesFromTopics } = require("./articleProcessor");
+const { processPendingArticles } = require("./articleProcessor");
 
 async function runPipeline() {
   try {
@@ -16,15 +16,12 @@ async function runPipeline() {
 
     console.log("Raw articles fetched:", rawArticles.length);
 
-    console.log("Building journalistic articles...");
-    const articles = await buildArticlesFromTopics(rawArticles);
+    console.log("Rewriting and saving articles...");
+    const result = await processPendingArticles(rawArticles);
 
-    console.log("Generated articles:", articles.length);
-
-    for (const article of articles) {
-      console.log("Saving:", article.title);
-      await saveArticle(article);
-    }
+    console.log("Processed articles:", result.processed);
+    console.log("Saved articles:", result.inserted);
+    console.log("Duplicates skipped:", result.duplicatesSkipped);
 
     pipelineState.lastProcessAt = new Date().toISOString();
     pipelineState.pendingRawArticles = [];

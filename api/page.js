@@ -17,7 +17,7 @@ const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
 const HOME_PAGE_SIZE = 30;
 const DESK_PAGE_SIZE = 20;
-const STORY_POOL_SIZE = 250;
+const STORY_POOL_SIZE = 120;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(STORY_POOL_SIZE / HOME_PAGE_SIZE);
 
@@ -115,7 +115,7 @@ async function buildHydratedHomeView({
   if (!candidateStories.length) return initialView;
 
   const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    remoteFetchLimit: candidateStories.length,
+    allowRemoteFetch: false,
     concurrency: 4,
   });
   const replacementMap = new Map(

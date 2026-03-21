@@ -22,7 +22,6 @@
     "helmet": "^8.1.0",
     "ioredis": "^5.4.2",
     "node-cron": "^3.0.3",
-    "openai": "^6.27.0",
     "rss-parser": "^3.13.0",
     "string-similarity-js": "^2.1.4"
   },

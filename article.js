@@ -38,7 +38,7 @@ const dom = {
   relatedSection: document.querySelector(".related-section"),
 };
 
-const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:";
+const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const DEFERRED_ASSET_VERSION = "20260319-1";
 const SEO_SITE_NAME = "Sunwire";
@@ -121,6 +121,20 @@ function sanitizeArticleBody(text = "") {
 
 function wordCount(text = "") {
   return cleanText(text).split(/\s+/).filter(Boolean).length;
+}
+
+function hasUsableArticlePayload(article = {}) {
+  if (!article || typeof article !== "object") return false;
+
+  const body = cleanText(article.body || "");
+  const summary = cleanText(article.summary || "");
+  const keyPoints = Array.isArray(article.keyPoints) ? article.keyPoints.filter(Boolean) : [];
+  const deepDive = Array.isArray(article.deepDive) ? article.deepDive.filter(Boolean) : [];
+
+  return wordCount(body) >= 120
+    || (wordCount(body) >= 70 && wordCount(summary) >= 18)
+    || deepDive.length >= 3
+    || keyPoints.length >= 3;
 }
 
 function normalizeComparableText(value = "") {
@@ -736,9 +750,7 @@ async function loadStory() {
     category: deskFilter,
   };
   const preloadedArticle = readPreloadedArticleData()?.article;
-  const hasPreloadedArticle = Boolean(
-    preloadedArticle?.summary || preloadedArticle?.body || preloadedArticle?.keyPoints?.length
-  );
+  const hasPreloadedArticle = hasUsableArticlePayload(preloadedArticle);
 
   if (hasPreloadedArticle) {
     applyArticleData(preloadedArticle, fallbackArticle);
@@ -753,7 +765,7 @@ async function loadStory() {
   }
 
   const cachedArticle = readCachedArticle(story.url, story.title);
-  if (cachedArticle?.summary || cachedArticle?.body || cachedArticle?.keyPoints?.length) {
+  if (hasUsableArticlePayload(cachedArticle)) {
     applyArticleData(cachedArticle, fallbackArticle);
   }
 
@@ -765,6 +777,15 @@ async function loadStory() {
       ? cachedArticle.tags
       : Array.isArray(preloadedArticle?.tags) ? preloadedArticle.tags : [],
   });
+
+  const bestLocalArticle = hasUsableArticlePayload(cachedArticle)
+    ? cachedArticle
+    : (hasPreloadedArticle ? preloadedArticle : null);
+
+  if (bestLocalArticle) {
+    writeCachedArticle(story.url, story.title, bestLocalArticle);
+    return;
+  }
 
   try {
     const articleSlug = slugify(story.slug || story.title || story.id || "");

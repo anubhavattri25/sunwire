@@ -15,6 +15,7 @@ const {
 } = require("../lib/server/ssrStories");
 const { buildArticleRelatedSets, renderArticleTemplate } = require("../lib/ssr");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
+const ARTICLE_SSR_POOL_SIZE = 80;
 
 function normalizeUrl(value = "") {
   return String(value || "").trim().replace(/\/+$/g, "");
@@ -158,7 +159,7 @@ module.exports = async (req, res) => {
         category: requestedCategory,
       }).catch(() => null);
 
-      const payload = await getStoriesForSsr({ pageSize: 250, reason: "article_page_ssr" }).catch(() => null);
+      const payload = await getStoriesForSsr({ pageSize: ARTICLE_SSR_POOL_SIZE, reason: "article_page_ssr" }).catch(() => null);
       stories = getArticlesFromPayload(payload);
 
       if (story) {
@@ -176,7 +177,7 @@ module.exports = async (req, res) => {
         return;
       }
     } else {
-      const payload = await getStoriesForSsr({ pageSize: 250, reason: "article_page_ssr" }).catch(() => null);
+      const payload = await getStoriesForSsr({ pageSize: ARTICLE_SSR_POOL_SIZE, reason: "article_page_ssr" }).catch(() => null);
       stories = getArticlesFromPayload(payload);
       sourceMode = String(payload?.sourceMode || "snapshot");
       story = findStory(stories, query)
@@ -207,7 +208,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    let article = await articleHandler.buildArticlePayload(req, {
+    const requestedArticle = {
       id: story?.id || "",
       slug: story?.slug || requestedSlug,
       url: story?.sourceUrl || story?.url || "",
@@ -217,7 +218,11 @@ module.exports = async (req, res) => {
       summary: story?.summary || story?.subheadline || "",
       image: story?.image || "",
       category: story?.category || requestedCategory || "",
-    }).catch(() => null);
+    };
+
+    let article = await articleHandler.enrichThinArticlePayload(
+      articleHandler.toArticlePayload(story || {}, requestedArticle)
+    ).catch(() => null);
 
     if (!article) {
       article = {

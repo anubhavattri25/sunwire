@@ -3,6 +3,7 @@ const prisma = require('../config/database');
 const { articleSelect, toApiArticle } = require('../models/Article');
 const { buildCacheKey, getCachedJson, setCachedJson, invalidateCache } = require('../utils/cache');
 const { getStatusCounts, pipelineState } = require('../services/newsIngestor');
+const { getLocalAiConfig, isLocalAiRewriteEnabled } = require('../services/localAiRewrite');
 const { safeConnectRedis } = require('../config/redis');
 const {
   ensureDatabaseConfigured,
@@ -91,6 +92,7 @@ router.post('/view', async (req, res, next) => {
 router.get('/system-status', async (req, res, next) => {
   try {
     const redis = await safeConnectRedis();
+    const aiConfig = getLocalAiConfig();
     const databaseConfigured = Boolean(process.env.DATABASE_URL);
     const databaseReachable = databaseConfigured ? await isDatabaseReachable() : false;
 
@@ -117,9 +119,15 @@ router.get('/system-status', async (req, res, next) => {
       last_trending_update_at: pipelineState.lastTrendingUpdateAt,
       pending_raw_articles: pipelineState.pendingRawArticles.length,
       api_keys: {
-        openai: Boolean(process.env.OPENAI_API_KEY),
+        ollama: isLocalAiRewriteEnabled(),
         cloudinary: Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
         unsplash: Boolean(process.env.UNSPLASH_ACCESS_KEY),
+      },
+      ai: {
+        provider: aiConfig.provider,
+        enabled: isLocalAiRewriteEnabled(),
+        ollama_base_url: aiConfig.baseUrl,
+        ollama_model: aiConfig.model,
       },
       cache: {
         connected: Boolean(redis),

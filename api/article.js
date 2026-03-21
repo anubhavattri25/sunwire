@@ -10,6 +10,7 @@ const {
   summaryFromText,
 } = require("../lib/article/shared");
 const { extractPrimaryArticleFromHtml } = require("../lib/article/sourceDiscovery");
+const { extractArticleFromHtml, isTheVergeUrl } = require("../backend/utils/articleScraper");
 const { findStoryByIdentity } = require("../lib/server/backendCompat");
 const {
   buildStoryPlaceholderImage,
@@ -19,6 +20,17 @@ const {
 
 const ARTICLE_CACHE_HEADER = "public, s-maxage=300, stale-while-revalidate=600";
 const MIN_RICH_BODY_WORDS = 120;
+const ENABLE_REQUEST_TIME_SOURCE_RECOVERY = process.env.ENABLE_REQUEST_TIME_SOURCE_RECOVERY === "1";
+const BODY_JUNK_PATTERNS = [
+  /posts from this author will be added to your daily email digest/i,
+  /posts from this topic will be added to your daily email digest/i,
+  /\bshare\b.*\bgift\b/i,
+  /\bclose\b\s+\b[a-z][a-z\s.'-]{1,60}\b/i,
+  /will be added to your daily email digest and your homepage feed/i,
+  /follow topics and authors from this story/i,
+  /most popular/i,
+  /top stories/i,
+];
 
 function parseRequestedArticle(query = {}) {
   return {
@@ -59,6 +71,28 @@ function isThinArticleBody(body = "", summary = "", title = "") {
   return normalizedBody === normalizedSummary
     || normalizedBody === normalizedTitle
     || normalizedBody.startsWith(`${normalizedTitle} `);
+}
+
+function hasHtmlMarkup(value = "") {
+  return /<[^>]+>/.test(String(value || ""));
+}
+
+function hasBodyJunk(value = "", sourceUrl = "") {
+  const text = cleanText(stripSourceBoilerplate(value || ""));
+  if (!text) return false;
+  if (BODY_JUNK_PATTERNS.some((pattern) => pattern.test(text))) return true;
+
+  if (isTheVergeUrl(sourceUrl)) {
+    return /^(tina nguyen|emma roth|close|share|gift)\b/i.test(text)
+      || /\bfrom this author will be added\b/i.test(text)
+      || /\bdaily email digest\b/i.test(text);
+  }
+
+  return false;
+}
+
+function isPollutedArticleBody(body = "", sourceUrl = "") {
+  return hasHtmlMarkup(body) || hasBodyJunk(body, sourceUrl);
 }
 
 function splitBodyParagraphs(text = "") {
@@ -162,14 +196,28 @@ function toArticlePayload(story = {}, requested = {}) {
 async function enrichThinArticlePayload(payload = {}) {
   if (!payload) return payload;
 
-  const needsBodyRecovery = isThinArticleBody(payload.body, payload.summary, payload.title);
+  const sourceUrl = cleanText(payload.primarySource?.url || payload.sourceUrl || "");
+  const storedBodyIsPolluted = isPollutedArticleBody(payload.body, sourceUrl);
+  const storedSummaryIsPolluted = hasBodyJunk(payload.summary, sourceUrl);
+  const needsBodyRecovery = storedBodyIsPolluted || isThinArticleBody(payload.body, payload.summary, payload.title);
   const needsImageRecovery = !hasRenderableStoryImage(payload.image);
 
   if (!needsBodyRecovery && !needsImageRecovery) {
     return payload;
   }
 
-  const sourceUrl = cleanText(payload.primarySource?.url || payload.sourceUrl || "");
+  if (!ENABLE_REQUEST_TIME_SOURCE_RECOVERY) {
+    return needsImageRecovery
+      ? { ...payload, image: buildStoryPlaceholderImage(payload) }
+      : payload;
+  }
+
+  if (!needsBodyRecovery) {
+    return needsImageRecovery
+      ? { ...payload, image: buildStoryPlaceholderImage(payload) }
+      : payload;
+  }
+
   if (!/^https?:\/\//i.test(sourceUrl)) {
     return needsImageRecovery
       ? { ...payload, image: buildStoryPlaceholderImage(payload) }
@@ -178,13 +226,19 @@ async function enrichThinArticlePayload(payload = {}) {
 
   try {
     const html = await fetchTextNoCache(sourceUrl, { timeoutMs: 6000 });
+    const targeted = extractArticleFromHtml(html, sourceUrl);
+    const targetedBody = cleanText(targeted.content || "");
     const extracted = extractPrimaryArticleFromHtml(html, payload.title || "");
     const fallbackBody = extractRelaxedHtmlBody(html, payload.title || "", payload.summary || "");
-    const nextBody = chooseBestBody(payload.title || "", payload.summary || "", [
+    const bodyCandidates = [
+      targetedBody,
       extracted.body,
       fallbackBody,
-      payload.body,
-    ]);
+      storedBodyIsPolluted ? "" : payload.body,
+    ].filter((candidate) => candidate && !isPollutedArticleBody(candidate, sourceUrl));
+    const nextBody = (isTheVergeUrl(sourceUrl) && targetedBody)
+      ? targetedBody
+      : chooseBestBody(payload.title || "", payload.summary || "", bodyCandidates);
 
     const recoveredImage = hasRenderableStoryImage(payload.image)
       ? payload.image
@@ -197,10 +251,12 @@ async function enrichThinArticlePayload(payload = {}) {
       };
     }
 
+    const extractedSummary = hasBodyJunk(extracted.summary, sourceUrl) ? "" : extracted.summary;
+    const safeStoredSummary = storedSummaryIsPolluted ? "" : payload.summary;
     const nextSummary = cleanText(
-      extracted.summary
-      || payload.summary
-      || summaryFromText(nextBody, payload.summary || "")
+      extractedSummary
+      || summaryFromText(nextBody, safeStoredSummary || "")
+      || safeStoredSummary
     );
     const nextWordCount = Math.max(Number(payload.wordCount || 0), countWords(nextBody));
 

@@ -1,5 +1,4 @@
 const axios = require('axios');
-const cheerio = require('cheerio');
 const prisma = require('../config/database');
 const {
   fetchPublisherArticle,
@@ -9,6 +8,7 @@ const {
 const { logEvent } = require('../utils/logger');
 const { validateSourceArticle } = require('./contentQuality');
 const { classifyCategory, normalizeTitle } = require('../utils/articleUtils');
+const { scrapeArticle } = require('../utils/articleScraper');
 const { cleanText, domainFromUrl } = require('../../lib/article/shared');
 
 const pipelineState = {
@@ -23,6 +23,7 @@ const RSS_SOURCE_ITEM_LIMIT = Math.max(1, Number.parseInt(process.env.SUNWIRE_RS
 
 function getSourceConfig() {
   return [
+    
     {
       name: "BBC",
       type: "rss",
@@ -45,7 +46,8 @@ function getSourceConfig() {
       name: "The Verge",
       type: "rss",
       url: "https://www.theverge.com/rss/index.xml",
-      category: "tech"
+      category: "tech",
+      preferPublisherScrape: true,
     },
     {
       name: "ESPN",
@@ -82,24 +84,16 @@ function normalizeArticle(article = {}) {
 
 async function fetchFullArticle(url) {
   try {
-    const response = await axios.get(url, {
-      timeout: 10000,
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36",
-      },
-    });
-
-    const $ = cheerio.load(response.data);
-
-    const text = $("article p, main p, .article p, .post p, .content p, .entry-content p, .story-body p, .node p")
-      .map((i, el) => $(el).text())
-      .get()
-      .join(" ");
-
-    return text.slice(0, 3000);
+    const article = await scrapeArticle(url);
+    return {
+      content: String(article.content || '').slice(0, 3000),
+      image_url: String(article.imageUrl || '').trim(),
+    };
   } catch (err) {
-    return "";
+    return {
+      content: '',
+      image_url: '',
+    };
   }
 }
 async function fetchRssSource(source) {
@@ -107,19 +101,38 @@ async function fetchRssSource(source) {
   const items = Array.isArray(feed.items) ? feed.items : [];
   const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
   const articles = await Promise.all(limitedItems.map(async (item) => {
-    let content =
+    const feedContent =
       item["content:encoded"] ||
       item.content ||
       item.contentSnippet ||
       item.summary ||
       item.description ||
       "";
+    let content = feedContent;
+    let imageUrl =
+      item.enclosure?.url ||
+      item["media:content"]?.url ||
+      item["media:thumbnail"]?.url ||
+      "";
 
-    if (content.length < 200 && item.link) {
-      const scrapedContent = await fetchFullArticle(item.link);
+    if (source.preferPublisherScrape && item.link) {
+      const scrapedArticle = await fetchFullArticle(item.link);
+      if (scrapedArticle.content) {
+        content = scrapedArticle.content;
+      }
+      if (scrapedArticle.image_url) {
+        imageUrl = scrapedArticle.image_url;
+      }
+    }
 
-      if (scrapedContent.length > content.length) {
-        content = scrapedContent;
+    if (!source.preferPublisherScrape && content.length < 800 && item.link) {
+      const scrapedArticle = await fetchFullArticle(item.link);
+
+      if (scrapedArticle.content.length > content.length) {
+        content = scrapedArticle.content;
+      }
+      if (!imageUrl && scrapedArticle.image_url) {
+        imageUrl = scrapedArticle.image_url;
       }
     }
 
@@ -131,11 +144,7 @@ async function fetchRssSource(source) {
       title: item.title,
       summary: item.contentSnippet || item.summary || item.description,
       content,
-      image_url:
-        item.enclosure?.url ||
-        item["media:content"]?.url ||
-        item["media:thumbnail"]?.url ||
-        "",
+      image_url: imageUrl,
       source: source.name,
       source_url: item.link,
       published_at: item.isoDate || item.pubDate || new Date().toISOString(),

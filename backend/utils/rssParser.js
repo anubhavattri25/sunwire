@@ -8,6 +8,7 @@ const {
   summaryFromText,
   stripSourceBoilerplate,
 } = require("../../lib/article/shared");
+const { extractArticleFromHtml, isTheVergeUrl } = require("./articleScraper");
 
 const parser = new Parser({
   timeout: 10000,
@@ -213,6 +214,7 @@ function extractArticleBodyWithCheerio(html = "", options = {}) {
   const $ = cheerio.load(pageHtml);
   $("script, style, noscript, iframe, svg, form, nav, header, footer, aside").remove();
 
+  const targetedExtraction = extractArticleFromHtml(pageHtml, options.url || "");
   const jsonLdArticles = extractJsonLdArticles($);
   const jsonLdBody = jsonLdArticles
     .map((entry) => cleanText(entry.articleBody || ""))
@@ -221,7 +223,8 @@ function extractArticleBodyWithCheerio(html = "", options = {}) {
   const bestRoot = chooseBestArticleRoot($);
   const paragraphBody = extractParagraphs($, bestRoot).join("\n\n");
   const fallbackBody = extractParagraphs($, $("main, body").first()).join("\n\n");
-  const body = cleanText(stripSourceBoilerplate(jsonLdBody || paragraphBody || fallbackBody))
+  const preferredBody = isTheVergeUrl(options.url || "") ? targetedExtraction.content : "";
+  const body = cleanText(stripSourceBoilerplate(preferredBody || jsonLdBody || paragraphBody || fallbackBody))
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
