@@ -57,6 +57,48 @@ function getConfiguredSecrets() {
     .filter(Boolean);
 }
 
+function readCsvValue(input) {
+  return String(input || "")
+    .split(",")
+    .map((value) => normalizeSecret(value).toLowerCase())
+    .filter(Boolean)
+    .join(",");
+}
+
+function readOptionalString(req, key) {
+  const queryValue = req.query?.[key];
+  if (Array.isArray(queryValue)) return normalizeSecret(queryValue[0]);
+  if (typeof queryValue === "string") return normalizeSecret(queryValue);
+
+  if (typeof req.body === "object" && req.body && typeof req.body[key] === "string") {
+    return normalizeSecret(req.body[key]);
+  }
+
+  return "";
+}
+
+function readOptionalNumber(req, key) {
+  const rawValue = readOptionalString(req, key);
+  if (!rawValue) return "";
+
+  const parsed = Number.parseInt(rawValue, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : "";
+}
+
+function buildRuntimeOverrides(req) {
+  const categories = readCsvValue(readOptionalString(req, "categories"));
+  const sourceNames = readCsvValue(readOptionalString(req, "sourceNames"));
+  const rssLimit = readOptionalNumber(req, "rssLimit");
+
+  return {
+    SUNWIRE_SOURCE_CATEGORIES: categories,
+    SUNWIRE_SOURCE_NAMES: sourceNames,
+    SUNWIRE_RSS_ITEM_LIMIT: rssLimit,
+    SUNWIRE_SKIP_SEARCH_INDEXING: categories || sourceNames ? "1" : "",
+    SUNWIRE_SKIP_AI_CATEGORY_CLASSIFICATION: categories ? "1" : "",
+  };
+}
+
 function secretsMatch(left, right) {
   const leftBuffer = Buffer.from(left);
   const rightBuffer = Buffer.from(right);
@@ -96,6 +138,19 @@ module.exports = async (req, res) => {
 
   console.log("Sunwire ingestion authorized");
 
+  const runtimeOverrides = buildRuntimeOverrides(req);
+  const previousEnv = new Map(
+    Object.keys(runtimeOverrides).map((key) => [key, process.env[key]])
+  );
+
+  Object.entries(runtimeOverrides).forEach(([key, value]) => {
+    if (value) {
+      process.env[key] = value;
+    } else {
+      delete process.env[key];
+    }
+  });
+
   try {
     await newsService.runPipeline();
 
@@ -103,6 +158,7 @@ module.exports = async (req, res) => {
       ok: true,
       generatedAt: new Date().toISOString(),
       message: "Pipeline executed successfully",
+      runtimeOverrides,
       pipeline: newsService.getPublicPipelineState(),
     });
   } catch (err) {
@@ -114,6 +170,13 @@ module.exports = async (req, res) => {
       error: err.message,
     });
   } finally {
+    previousEnv.forEach((value, key) => {
+      if (typeof value === "string") {
+        process.env[key] = value;
+      } else {
+        delete process.env[key];
+      }
+    });
     await prisma.$disconnect().catch(() => null);
   }
 };
