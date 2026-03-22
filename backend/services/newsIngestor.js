@@ -41,6 +41,9 @@ const POLITICS_KEYWORDS = [
 const JOBS_KEYWORDS = [
   /\b(job|jobs|recruitment|vacancy|vacancies|notification|apply online|walk-?in|admit card|exam date|result|sarkari|government jobs|govt jobs|freshers)\b/i,
 ];
+const IMAGE_PATH_HINT = /\.(avif|bmp|cms|gif|jpe?g|png|webp)(\?|$)|\/(wp-content|uploads|images?|img|photo|photos|media|static|assets|alternates)\//i;
+const IMAGE_HOST_HINT = /(blogger\.googleusercontent|cloudfront|cdn|gstatic|img|image|media|pinimg|static|th-i\.thgim|toiimg|twimg|wp\.com|wordpress)/i;
+const IMAGE_QUERY_HINT = /(^|[?&])(fm|format|h|height|img|image|q|w|width)=/i;
 
 function normalizeSourceCategory(value = 'general') {
   return String(value || 'general').trim().toLowerCase() || 'general';
@@ -204,6 +207,32 @@ function filterSourceEntries(entries = [], source = {}, mapper = (entry) => entr
   });
 }
 
+function normalizeImageUrl(value = '', pageUrl = '') {
+  const candidate = String(value || '').trim();
+  if (!candidate || /\$\{[^}]+\}/.test(candidate) || /%24%7B[^%]+%7D/i.test(candidate)) return '';
+
+  try {
+    const resolved = /^https?:\/\//i.test(candidate)
+      ? candidate
+      : new URL(candidate, pageUrl || undefined).toString();
+    const parsed = new URL(resolved);
+    const pathname = parsed.pathname.toLowerCase();
+    const host = parsed.hostname.toLowerCase();
+    const pageHref = String(pageUrl || '').trim();
+
+    if (!/^https?:$/i.test(parsed.protocol)) return '';
+    if (/\.svg(\?|$)/i.test(pathname)) return '';
+    if (pageHref && resolved === pageHref) return '';
+    if (IMAGE_PATH_HINT.test(pathname)) return resolved;
+    if (IMAGE_HOST_HINT.test(host)) return resolved;
+    if (IMAGE_QUERY_HINT.test(parsed.search.toLowerCase())) return resolved;
+    if (/\b(cover|hero|og-image|poster|thumb|thumbnail)\b/i.test(pathname)) return resolved;
+    return '';
+  } catch (_) {
+    return '';
+  }
+}
+
 const SOURCE_CATALOG = [
   { name: "Hindustan Times", type: "rss", url: "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml", homepageUrl: "https://www.hindustantimes.com/", category: "general", language: "en", country: "india" },
   { name: "Times of India", type: "rss", url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms", homepageUrl: "https://timesofindia.indiatimes.com/", category: "general", language: "en", country: "india" },
@@ -269,7 +298,7 @@ function normalizeArticle(article = {}) {
     title: normalizeTitle(article.title || 'Untitled'),
     content: article.content || article.summary || article.snippet || '',
     summary: article.summary || article.snippet || '',
-    image_url: article.image_url || '',
+    image_url: normalizeImageUrl(article.image_url || '', article.source_url || article.link || ''),
     category: normalizeSourceCategory(article.category || 'general'),
     source: article.source || 'Unknown',
     source_url: article.source_url || article.link || '',
@@ -289,14 +318,14 @@ async function fetchFullArticle(url) {
     const article = await scrapeArticle(url);
     return {
       content: String(article.content || '').slice(0, 20000),
-      image_url: String(article.imageUrl || '').trim(),
+      image_url: normalizeImageUrl(String(article.imageUrl || '').trim(), url),
     };
   } catch (err) {
     try {
       const article = await fetchPublisherArticle(url, {});
       return {
         content: String(article.body || article.summary || '').slice(0, 20000),
-        image_url: String(article.imageUrl || '').trim(),
+        image_url: normalizeImageUrl(String(article.imageUrl || '').trim(), url),
       };
     } catch (_) {
       return {
@@ -324,7 +353,7 @@ async function fetchScrapedSource(source) {
 
   const hydrated = await runWithConcurrency(homepageItems, async (item) => {
     let content = String(item.description || item.summary || item.title || '');
-    let imageUrl = String(item.imageUrl || '').trim();
+    let imageUrl = normalizeImageUrl(String(item.imageUrl || '').trim(), item.link || homepageUrl);
 
     if (item.link) {
       const scrapedArticle = await fetchFullArticle(item.link);
@@ -379,11 +408,13 @@ async function fetchRssSource(source) {
       item.description ||
       "";
     let content = String(feedContent || '');
-    let imageUrl =
+    let imageUrl = normalizeImageUrl(
       item.enclosure?.url ||
       item["media:content"]?.url ||
       item["media:thumbnail"]?.url ||
-      "";
+      "",
+      item.link || source.homepageUrl || source.url
+    );
 
     if (source.preferPublisherScrape && item.link) {
       const scrapedArticle = await fetchFullArticle(item.link);
