@@ -4,6 +4,7 @@ const {
   fetchPublisherArticle,
   parseRssFeed,
   resolveGoogleNewsUrl,
+  scrapeHomepageFeed,
 } = require('../utils/rssParser');
 const { logEvent } = require('../utils/logger');
 const { validateSourceArticle } = require('./contentQuality');
@@ -19,9 +20,24 @@ const pipelineState = {
   sourcesFailed: [],
   pendingRawArticles: [],
 };
-const RSS_SOURCE_ITEM_LIMIT = Math.max(1, Number.parseInt(process.env.SUNWIRE_RSS_ITEM_LIMIT || '6', 10) || 6);
-const MIN_VALID_ARTICLE_CONTENT_LENGTH = 1500;
+const DEFAULT_RSS_SOURCE_ITEM_LIMIT = 10;
+const RSS_SOURCE_ITEM_LIMIT = Math.max(5, Number.parseInt(process.env.SUNWIRE_RSS_ITEM_LIMIT || String(DEFAULT_RSS_SOURCE_ITEM_LIMIT), 10) || DEFAULT_RSS_SOURCE_ITEM_LIMIT);
+const MIN_VALID_ARTICLE_CONTENT_LENGTH = 900;
 const SHORT_RSS_CONTENT_THRESHOLD = 1500;
+const SOURCE_FETCH_RETRIES = Math.max(0, Number.parseInt(process.env.SUNWIRE_SOURCE_RETRIES || '2', 10) || 2);
+const SOURCE_FETCH_CONCURRENCY = Math.max(1, Number.parseInt(process.env.SUNWIRE_SOURCE_FETCH_CONCURRENCY || '6', 10) || 6);
+const ARTICLE_HYDRATION_CONCURRENCY = Math.max(1, Number.parseInt(process.env.SUNWIRE_ARTICLE_HYDRATION_CONCURRENCY || '3', 10) || 3);
+const SCRAPE_FALLBACK_MULTIPLIER = 3;
+const CATEGORY_FILTER_BYPASS = new Set(['all', 'latest', 'random']);
+const AI_KEYWORDS = [
+  /\b(ai|a\.i\.|artificial intelligence|machine learning|generative ai|genai|llm|chatgpt|openai|anthropic|copilot|gemini|deepfake)\b/i,
+];
+const POLITICS_KEYWORDS = [
+  /\b(election|elections|poll|polls|assembly|parliament|politics|political|government|cabinet|minister|bjp|congress|aap|lok sabha|rajya sabha|chief minister|prime minister|ordinance|bill)\b/i,
+];
+const JOBS_KEYWORDS = [
+  /\b(job|jobs|recruitment|vacancy|vacancies|notification|apply online|walk-?in|admit card|exam date|result|sarkari|government jobs|govt jobs|freshers)\b/i,
+];
 
 function normalizeSourceCategory(value = 'general') {
   return String(value || 'general').trim().toLowerCase() || 'general';
@@ -40,8 +56,42 @@ function parseCsvEnvSet(value = '') {
   );
 }
 
+function normalizeRequestedCategorySet(value = '') {
+  const parsed = parseCsvEnvSet(value);
+  if (!parsed.size) return parsed;
+  if ([...parsed].some((entry) => CATEGORY_FILTER_BYPASS.has(entry))) {
+    return new Set();
+  }
+  return parsed;
+}
+
+function delay(ms = 0) {
+  return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
+}
+
+async function runWithConcurrency(items = [], worker, concurrency = SOURCE_FETCH_CONCURRENCY) {
+  const input = Array.isArray(items) ? items : [];
+  const safeConcurrency = Math.max(1, Number(concurrency) || 1);
+  const results = new Array(input.length);
+  let nextIndex = 0;
+
+  async function consume() {
+    while (nextIndex < input.length) {
+      const currentIndex = nextIndex;
+      nextIndex += 1;
+      results[currentIndex] = await worker(input[currentIndex], currentIndex);
+    }
+  }
+
+  await Promise.all(
+    Array.from({ length: Math.min(safeConcurrency, Math.max(1, input.length)) }, () => consume())
+  );
+
+  return results;
+}
+
 function filterSourcesByRuntimeConfig(sources = []) {
-  const categoryFilter = parseCsvEnvSet(
+  const categoryFilter = normalizeRequestedCategorySet(
     process.env.SUNWIRE_SOURCE_CATEGORIES || process.env.SUNWIRE_INGEST_CATEGORIES || ''
   );
   const sourceNameFilter = parseCsvEnvSet(process.env.SUNWIRE_SOURCE_NAMES || '');
@@ -101,387 +151,114 @@ function prioritizeArticles(articles = []) {
   });
 }
 
+function dedupeRawArticles(articles = []) {
+  const seenSourceUrls = new Set();
+  const seenTitleKeys = new Set();
+
+  return (Array.isArray(articles) ? articles : []).filter((article) => {
+    const sourceUrlKey = String(article?.source_url || '').trim().toLowerCase();
+    const titleKey = [
+      normalizeTitle(article?.title || '').toLowerCase(),
+      normalizeSourceCategory(article?.category || ''),
+      String(article?.source || '').trim().toLowerCase(),
+    ].filter(Boolean).join('|');
+
+    if (sourceUrlKey && seenSourceUrls.has(sourceUrlKey)) return false;
+    if (titleKey && seenTitleKeys.has(titleKey)) return false;
+
+    if (sourceUrlKey) seenSourceUrls.add(sourceUrlKey);
+    if (titleKey) seenTitleKeys.add(titleKey);
+    return true;
+  });
+}
+
+function matchesSourcePattern(value = '', pattern) {
+  if (!pattern) return false;
+  if (pattern instanceof RegExp) return pattern.test(value);
+  return cleanText(value).toLowerCase().includes(cleanText(pattern).toLowerCase());
+}
+
+function matchesSourceFilters(value = '', source = {}) {
+  const haystack = cleanText(value);
+  const includePatterns = Array.isArray(source.includeKeywords) ? source.includeKeywords : [];
+  const excludePatterns = Array.isArray(source.excludeKeywords) ? source.excludeKeywords : [];
+
+  if (includePatterns.length > 0 && !includePatterns.some((pattern) => matchesSourcePattern(haystack, pattern))) {
+    return false;
+  }
+
+  if (excludePatterns.length > 0 && excludePatterns.some((pattern) => matchesSourcePattern(haystack, pattern))) {
+    return false;
+  }
+
+  return true;
+}
+
+function filterSourceEntries(entries = [], source = {}, mapper = (entry) => entry) {
+  return (Array.isArray(entries) ? entries : []).filter((entry) => {
+    const mapped = mapper(entry);
+    return matchesSourceFilters(mapped, source);
+  });
+}
+
+const SOURCE_CATALOG = [
+  { name: "Hindustan Times", type: "rss", url: "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml", homepageUrl: "https://www.hindustantimes.com/", category: "general", language: "en", country: "india" },
+  { name: "Times of India", type: "rss", url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms", homepageUrl: "https://timesofindia.indiatimes.com/", category: "general", language: "en", country: "india" },
+  { name: "India Today", type: "rss", url: "https://www.indiatoday.in/rss/home", homepageUrl: "https://www.indiatoday.in/", category: "general", language: "en", country: "india" },
+  { name: "The Hindu", type: "rss", url: "https://www.thehindu.com/news/national/feeder/default.rss", homepageUrl: "https://www.thehindu.com/news/national/", category: "general", language: "en", country: "india" },
+  { name: "Indian Express", type: "rss", url: "https://indianexpress.com/feed/", homepageUrl: "https://indianexpress.com/latest-news/", category: "general", language: "en", country: "india" },
+
+  { name: "YourStory AI", type: "rss", url: "https://yourstory.com/tag/artificial-intelligence/feed", homepageUrl: "https://yourstory.com/tag/artificial-intelligence", category: "ai", language: "en", country: "india" },
+  { name: "Inc42 AI", type: "rss", url: "https://inc42.com/tag/artificial-intelligence/feed/", homepageUrl: "https://inc42.com/tag/artificial-intelligence/", category: "ai", language: "en", country: "india" },
+  { name: "Indian Express AI", type: "rss", url: "https://indianexpress.com/section/technology/feed/", homepageUrl: "https://indianexpress.com/section/technology/", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
+  { name: "The Hindu AI", type: "rss", url: "https://www.thehindu.com/sci-tech/technology/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/technology/", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
+  { name: "LiveMint AI", type: "rss", url: "https://www.livemint.com/rss/technology", homepageUrl: "https://www.livemint.com/technology", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
+
+  { name: "LiveMint Tech", type: "rss", url: "https://www.livemint.com/rss/technology", homepageUrl: "https://www.livemint.com/technology", category: "tech", language: "en", country: "india" },
+  { name: "Indian Express Tech", type: "rss", url: "https://indianexpress.com/section/technology/feed/", homepageUrl: "https://indianexpress.com/section/technology/", category: "tech", language: "en", country: "india" },
+  { name: "TechPP", type: "rss", url: "https://techpp.com/feed/", homepageUrl: "https://techpp.com/", category: "tech", language: "en", country: "india" },
+  { name: "India Today Technology", type: "rss", url: "https://www.indiatoday.in/rss/1206577", homepageUrl: "https://www.indiatoday.in/technology", category: "tech", language: "en", country: "india" },
+  { name: "The Hindu Technology", type: "rss", url: "https://www.thehindu.com/sci-tech/technology/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/technology/", category: "tech", language: "en", country: "india" },
+
+  { name: "Bollywood Hungama", type: "rss", url: "https://www.bollywoodhungama.com/feed/", homepageUrl: "https://www.bollywoodhungama.com/news/", category: "entertainment", language: "en", country: "india" },
+  { name: "Filmfare", type: "rss", url: "https://www.filmfare.com/rss.xml", homepageUrl: "https://www.filmfare.com/news", category: "entertainment", language: "en", country: "india" },
+  { name: "Pinkvilla", type: "rss", url: "https://www.pinkvilla.com/feed", homepageUrl: "https://www.pinkvilla.com/entertainment", category: "entertainment", language: "en", country: "india" },
+  { name: "Koimoi", type: "rss", url: "https://www.koimoi.com/feed/", homepageUrl: "https://www.koimoi.com/", category: "entertainment", language: "en", country: "india" },
+  { name: "India Today Entertainment", type: "rss", url: "https://www.indiatoday.in/rss/1206578", homepageUrl: "https://www.indiatoday.in/movies", category: "entertainment", language: "en", country: "india" },
+
+  { name: "Hindustan Times Sports", type: "rss", url: "https://www.hindustantimes.com/feeds/rss/sports/rssfeed.xml", homepageUrl: "https://www.hindustantimes.com/sports", category: "sports", language: "en", country: "india" },
+  { name: "Times of India Sports", type: "rss", url: "https://timesofindia.indiatimes.com/rssfeeds/4719148.cms", homepageUrl: "https://timesofindia.indiatimes.com/sports", category: "sports", language: "en", country: "india" },
+  { name: "India Today Sports", type: "rss", url: "https://www.indiatoday.in/rss/1206550", homepageUrl: "https://www.indiatoday.in/sports", category: "sports", language: "en", country: "india" },
+  { name: "The Hindu Sports", type: "rss", url: "https://www.thehindu.com/sport/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sport/", category: "sports", language: "en", country: "india" },
+  { name: "Indian Express Sports", type: "rss", url: "https://indianexpress.com/section/sports/feed/", homepageUrl: "https://indianexpress.com/section/sports/", category: "sports", language: "en", country: "india" },
+
+  { name: "Moneycontrol", type: "rss", url: "https://www.moneycontrol.com/rss/business.xml", homepageUrl: "https://www.moneycontrol.com/news/business/", category: "business", language: "en", country: "india" },
+  { name: "Economic Times", type: "rss", url: "https://economictimes.indiatimes.com/rssfeedsdefault.cms", homepageUrl: "https://economictimes.indiatimes.com/news", category: "business", language: "en", country: "india" },
+  { name: "Hindustan Times Business", type: "rss", url: "https://www.hindustantimes.com/feeds/rss/business/rssfeed.xml", homepageUrl: "https://www.hindustantimes.com/business", category: "business", language: "en", country: "india" },
+  { name: "LiveMint", type: "rss", url: "https://www.livemint.com/rss/homepage", homepageUrl: "https://www.livemint.com/", category: "business", language: "en", country: "india" },
+  { name: "Financial Express", type: "rss", url: "https://www.financialexpress.com/feed/", homepageUrl: "https://www.financialexpress.com/", category: "business", language: "en", country: "india" },
+
+  { name: "Hindustan Times Politics", type: "rss", url: "https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml", homepageUrl: "https://www.hindustantimes.com/india-news", category: "politics", language: "en", country: "india", includeKeywords: POLITICS_KEYWORDS },
+  { name: "Times of India Politics", type: "rss", url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms", homepageUrl: "https://timesofindia.indiatimes.com/india", category: "politics", language: "en", country: "india", includeKeywords: POLITICS_KEYWORDS },
+  { name: "India Today Politics", type: "rss", url: "https://www.indiatoday.in/rss/1206514", homepageUrl: "https://www.indiatoday.in/india/politics", category: "politics", language: "en", country: "india" },
+  { name: "The Hindu Politics", type: "rss", url: "https://www.thehindu.com/news/national/feeder/default.rss", homepageUrl: "https://www.thehindu.com/news/national/", category: "politics", language: "en", country: "india", includeKeywords: POLITICS_KEYWORDS },
+  { name: "Indian Express Politics", type: "rss", url: "https://indianexpress.com/section/india/feed/", homepageUrl: "https://indianexpress.com/section/india/", category: "politics", language: "en", country: "india", includeKeywords: POLITICS_KEYWORDS },
+
+  { name: "Adda247 Jobs", type: "scrape", homepageUrl: "https://www.adda247.com/jobs/", category: "jobs", language: "en", country: "india", includeKeywords: JOBS_KEYWORDS },
+  { name: "CareerPower Jobs", type: "scrape", homepageUrl: "https://www.careerpower.in/blog/", category: "jobs", language: "en", country: "india", includeKeywords: JOBS_KEYWORDS },
+  { name: "Jagran Josh Jobs", type: "rss", url: "https://www.jagranjosh.com/rss/jobs.xml", homepageUrl: "https://www.jagranjosh.com/jobs", category: "jobs", language: "en", country: "india" },
+  { name: "Govt Jobs Updates", type: "rss", url: "https://www.indgovtjobs.in/feeds/posts/default", homepageUrl: "https://www.indgovtjobs.in/", category: "jobs", language: "en", country: "india" },
+  { name: "Testbook Jobs", type: "rss", url: "https://testbook.com/blog/feed/", homepageUrl: "https://testbook.com/blog/category/govt-jobs/", category: "jobs", language: "en", country: "india", includeKeywords: JOBS_KEYWORDS },
+
+  { name: "Hebbars Kitchen", type: "rss", url: "https://hebbarskitchen.com/feed/", homepageUrl: "https://hebbarskitchen.com/", category: "food", language: "en", country: "india" },
+  { name: "Spice Up The Curry", type: "rss", url: "https://www.spiceupthecurry.com/feed/", homepageUrl: "https://www.spiceupthecurry.com/", category: "food", language: "en", country: "india" },
+  { name: "Veg Recipes of India", type: "rss", url: "https://www.vegrecipesofindia.com/feed/", homepageUrl: "https://www.vegrecipesofindia.com/", category: "food", language: "en", country: "india" },
+  { name: "Yummy Tummy", type: "rss", url: "https://www.yummytummyaarthi.com/feed/", homepageUrl: "https://www.yummytummyaarthi.com/", category: "food", language: "en", country: "india" },
+  { name: "Indian Healthy Recipes", type: "scrape", homepageUrl: "https://www.indianhealthyrecipes.com/", category: "food", language: "en", country: "india" },
+];
+
 function getSourceConfig() {
-  return sortSourcesByPriority(filterSourcesByRuntimeConfig([
-    {
-      name: "BBC",
-      type: "rss",
-      url: "https://feeds.bbci.co.uk/news/rss.xml",
-      category: "general"
-    },
-    {
-      name: "Reuters",
-      type: "rss",
-      url: "https://www.reuters.com/world/rss",
-      category: "general"
-    },
-    {
-      name: "TechCrunch",
-      type: "rss",
-      url: "https://techcrunch.com/feed/",
-      category: "tech",
-      language: "en"
-    },
-    {
-      name: "The Verge",
-      type: "rss",
-      url: "https://www.theverge.com/rss/index.xml",
-      category: "tech",
-      language: "en",
-      preferPublisherScrape: true,
-    },
-    {
-      name: "ESPN",
-      type: "rss",
-      url: "https://www.espn.com/espn/rss/news",
-      category: "sports"
-    },
-    {
-      name: "Hollywood Reporter",
-      type: "rss",
-      url: "https://www.hollywoodreporter.com/feed/",
-      category: "entertainment"
-    },
-    {
-      name: "Hindustan Times",
-      type: "rss",
-      url: "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml",
-      category: "general",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Times of India",
-      type: "rss",
-      url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
-      category: "general",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "India Today",
-      type: "rss",
-      url: "https://www.indiatoday.in/rss/home",
-      category: "general",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "News18",
-      type: "rss",
-      url: "https://www.news18.com/rss/india.xml",
-      category: "general",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "The Print",
-      type: "rss",
-      url: "https://theprint.in/feed/",
-      category: "general",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Analytics India Magazine",
-      type: "rss",
-      url: "https://analyticsindiamag.com/feed/",
-      category: "ai",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "AI News",
-      type: "rss",
-      url: "https://artificialintelligence-news.com/feed/",
-      category: "ai",
-      language: "en"
-    },
-    {
-      name: "VentureBeat AI",
-      type: "rss",
-      url: "https://venturebeat.com/category/ai/feed/",
-      category: "ai",
-      language: "en"
-    },
-    {
-      name: "MIT Tech Review",
-      type: "rss",
-      url: "https://www.technologyreview.com/feed/",
-      category: "ai",
-      language: "en"
-    },
-    {
-      name: "Towards Data Science",
-      type: "rss",
-      url: "https://towardsdatascience.com/feed",
-      category: "ai",
-      language: "en"
-    },
-    {
-      name: "Wired",
-      type: "rss",
-      url: "https://www.wired.com/feed/rss",
-      category: "tech",
-      language: "en"
-    },
-    {
-      name: "Gadgets 360",
-      type: "rss",
-      url: "https://feeds.feedburner.com/gadgets360-latest",
-      category: "tech",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "YourStory",
-      type: "rss",
-      url: "https://yourstory.com/feed",
-      category: "tech",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Bollywood Hungama",
-      type: "rss",
-      url: "https://www.bollywoodhungama.com/feed/",
-      category: "entertainment",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Filmfare",
-      type: "rss",
-      url: "https://www.filmfare.com/rss.xml",
-      category: "entertainment",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Pinkvilla",
-      type: "rss",
-      url: "https://www.pinkvilla.com/feed",
-      category: "entertainment",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Koimoi",
-      type: "rss",
-      url: "https://www.koimoi.com/feed/",
-      category: "entertainment",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "India Today Entertainment",
-      type: "rss",
-      url: "https://www.indiatoday.in/rss/1206578",
-      category: "entertainment",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "ESPN Cricinfo",
-      type: "rss",
-      url: "https://www.espncricinfo.com/rss/content/story/feeds/0.xml",
-      category: "sports",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Sportskeeda",
-      type: "rss",
-      url: "https://www.sportskeeda.com/rss",
-      category: "sports",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Cricbuzz",
-      type: "rss",
-      url: "https://www.cricbuzz.com/rss-feeds/news",
-      category: "sports",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "The Hindu Sports",
-      type: "rss",
-      url: "https://www.thehindu.com/sport/?service=rss",
-      category: "sports",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Indian Express Sports",
-      type: "rss",
-      url: "https://indianexpress.com/section/sports/feed/",
-      category: "sports",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Moneycontrol",
-      type: "rss",
-      url: "https://www.moneycontrol.com/rss/business.xml",
-      category: "business",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Economic Times",
-      type: "rss",
-      url: "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
-      category: "business",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Business Standard",
-      type: "rss",
-      url: "https://www.business-standard.com/rss/home_page_top_stories.rss",
-      category: "business",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "LiveMint",
-      type: "rss",
-      url: "https://www.livemint.com/rss/homepage",
-      category: "business",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Financial Express",
-      type: "rss",
-      url: "https://www.financialexpress.com/feed/",
-      category: "business",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "The Wire",
-      type: "rss",
-      url: "https://thewire.in/rss",
-      category: "politics",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Scroll",
-      type: "rss",
-      url: "https://scroll.in/feeds/all.rss",
-      category: "politics",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "NDTV Politics",
-      type: "rss",
-      url: "https://feeds.feedburner.com/ndtvnews-politics",
-      category: "politics",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "India Today Politics",
-      type: "rss",
-      url: "https://www.indiatoday.in/rss/1206514",
-      category: "politics",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "The Hindu Politics",
-      type: "rss",
-      url: "https://www.thehindu.com/news/national/?service=rss",
-      category: "politics",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Sarkari Result",
-      type: "rss",
-      url: "https://www.sarkariresult.com/rss.xml",
-      category: "jobs",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "FreeJobAlert",
-      type: "rss",
-      url: "https://www.freejobalert.com/rss.xml",
-      category: "jobs",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Jagran Josh",
-      type: "rss",
-      url: "https://www.jagranjosh.com/rss/jobs.xml",
-      category: "jobs",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "FreshersLive",
-      type: "rss",
-      url: "https://www.fresherslive.com/rss",
-      category: "jobs",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Govt Jobs Updates",
-      type: "rss",
-      url: "https://www.indgovtjobs.in/feeds/posts/default",
-      category: "jobs",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Sanjeev Kapoor",
-      type: "rss",
-      url: "https://www.sanjeevkapoor.com/Recipe/rss",
-      category: "food",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Archana's Kitchen",
-      type: "rss",
-      url: "https://www.archanaskitchen.com/rss",
-      category: "food",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Veg Recipes of India",
-      type: "rss",
-      url: "https://www.vegrecipesofindia.com/feed/",
-      category: "food",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "NDTV Food",
-      type: "rss",
-      url: "https://feeds.feedburner.com/ndtvfood",
-      category: "food",
-      language: "en",
-      country: "india"
-    },
-    {
-      name: "Indian Healthy Recipes",
-      type: "rss",
-      url: "https://www.indianhealthyrecipes.com/feed/",
-      category: "food",
-      language: "en",
-      country: "india"
-    }
-  ]));
+  return sortSourcesByPriority(filterSourcesByRuntimeConfig(SOURCE_CATALOG));
 }
 
 function normalizeArticle(article = {}) {
@@ -512,17 +289,85 @@ async function fetchFullArticle(url) {
       image_url: String(article.imageUrl || '').trim(),
     };
   } catch (err) {
-    return {
-      content: '',
-      image_url: '',
-    };
+    try {
+      const article = await fetchPublisherArticle(url, {});
+      return {
+        content: String(article.body || article.summary || '').slice(0, 20000),
+        image_url: String(article.imageUrl || '').trim(),
+      };
+    } catch (_) {
+      return {
+        content: '',
+        image_url: '',
+      };
+    }
   }
 }
+
+async function fetchScrapedSource(source) {
+  const homepageUrl = source.homepageUrl || source.url;
+  const homepageItems = filterSourceEntries(
+    await scrapeHomepageFeed(homepageUrl, {
+      limit: RSS_SOURCE_ITEM_LIMIT * SCRAPE_FALLBACK_MULTIPLIER,
+    }),
+    source,
+    (item) => [
+      item.title,
+      item.description,
+      item.summary,
+      item.link,
+    ].filter(Boolean).join(' ')
+  );
+
+  const hydrated = await runWithConcurrency(homepageItems, async (item) => {
+    let content = String(item.description || item.summary || item.title || '');
+    let imageUrl = String(item.imageUrl || '').trim();
+
+    if (item.link) {
+      const scrapedArticle = await fetchFullArticle(item.link);
+      if (cleanText(scrapedArticle.content).length > cleanText(content).length) {
+        content = scrapedArticle.content;
+      }
+      if (!imageUrl && scrapedArticle.image_url) {
+        imageUrl = scrapedArticle.image_url;
+      }
+    }
+
+    const normalized = normalizeArticle({
+      title: item.title,
+      summary: item.description || item.summary || item.title,
+      content,
+      image_url: imageUrl,
+      source: source.name,
+      source_url: item.link,
+      published_at: item.published_at || new Date().toISOString(),
+      category: source.category,
+      language: source.language,
+      country: source.country,
+      raw_source_payload: item,
+    });
+
+    return isValidArticle(normalized) ? normalized : null;
+  }, ARTICLE_HYDRATION_CONCURRENCY);
+
+  return hydrated.filter(Boolean).slice(0, RSS_SOURCE_ITEM_LIMIT);
+}
+
 async function fetchRssSource(source) {
   const feed = await parseRssFeed(source.url);
-  const items = Array.isArray(feed.items) ? feed.items : [];
+  const items = filterSourceEntries(
+    Array.isArray(feed.items) ? feed.items : [],
+    source,
+    (item) => [
+      item.title,
+      item.contentSnippet,
+      item.summary,
+      item.description,
+      item.link,
+    ].filter(Boolean).join(' ')
+  );
   const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
-  const articles = await Promise.all(limitedItems.map(async (item) => {
+  const articles = await runWithConcurrency(limitedItems, async (item) => {
     const feedContent =
       item["content:encoded"] ||
       item.content ||
@@ -582,7 +427,7 @@ async function fetchRssSource(source) {
     }
 
     return normalized;
-  }));
+  }, ARTICLE_HYDRATION_CONCURRENCY);
 
   return articles.filter(Boolean);
 }
@@ -590,8 +435,19 @@ async function fetchRssSource(source) {
 async function fetchGoogleSearchSource(source) {
   const url = `${process.env.GOOGLE_NEWS_RSS_BASE || 'https://news.google.com/rss'}/search?q=${encodeURIComponent(source.query)}&hl=en-IN&gl=IN&ceid=IN:en`;
   const feed = await parseRssFeed(url);
-  const items = Array.isArray(feed.items) ? feed.items : [];
-  const articles = await Promise.all(items.map(async (item) => {
+  const items = filterSourceEntries(
+    Array.isArray(feed.items) ? feed.items : [],
+    source,
+    (item) => [
+      item.title,
+      item.contentSnippet,
+      item.summary,
+      item.description,
+      item.link,
+    ].filter(Boolean).join(' ')
+  );
+  const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
+  const articles = await runWithConcurrency(limitedItems, async (item) => {
     const snippet = cleanText(item.contentSnippet || item.summary || item.description || '');
     const googleNewsUrl = cleanText(item.link || '');
 
@@ -665,7 +521,7 @@ async function fetchGoogleSearchSource(source) {
       });
       return null;
     }
-  }));
+  }, ARTICLE_HYDRATION_CONCURRENCY);
 
   return articles.filter(Boolean);
 }
@@ -674,11 +530,11 @@ async function fetchHackerNewsSource() {
   const topUrl = process.env.HACKER_NEWS_TOP_URL || 'https://hacker-news.firebaseio.com/v0/topstories.json';
   const itemBase = process.env.HACKER_NEWS_ITEM_URL || 'https://hacker-news.firebaseio.com/v0/item';
   const topIdsResponse = await axios.get(topUrl, { timeout: 10000 });
-  const ids = Array.isArray(topIdsResponse.data) ? topIdsResponse.data.slice(0, 20) : [];
-  const items = await Promise.all(ids.map(async (id) => {
+  const ids = Array.isArray(topIdsResponse.data) ? topIdsResponse.data.slice(0, RSS_SOURCE_ITEM_LIMIT) : [];
+  const items = await runWithConcurrency(ids, async (id) => {
     const response = await axios.get(`${itemBase}/${id}.json`, { timeout: 10000 });
     return response.data;
-  }));
+  }, ARTICLE_HYDRATION_CONCURRENCY);
 
   return items
     .filter(Boolean)
@@ -715,33 +571,123 @@ async function fetchRedditSource(source) {
   }));
 }
 
-async function fetchSource(source) {
-  logEvent('source.fetch.start', { source: source.name });
-  try {
-    let articles = [];
-    if (source.type === 'rss') articles = await fetchRssSource(source);
-    if (source.type === 'google-search') articles = await fetchGoogleSearchSource(source);
-    if (source.type === 'hackernews') articles = await fetchHackerNewsSource();
-    if (source.type === 'reddit') articles = await fetchRedditSource(source);
+async function fetchSourceByType(source) {
+  if (source.type === 'rss') return { articles: await fetchRssSource(source), method: 'rss' };
+  if (source.type === 'scrape') return { articles: await fetchScrapedSource(source), method: 'scrape' };
+  if (source.type === 'google-search') return { articles: await fetchGoogleSearchSource(source), method: 'rss' };
+  if (source.type === 'hackernews') return { articles: await fetchHackerNewsSource(), method: 'rss' };
+  if (source.type === 'reddit') return { articles: await fetchRedditSource(source), method: 'scrape' };
+  return { articles: [], method: source.type || 'unknown' };
+}
 
-    logEvent('source.fetch.end', { source: source.name, fetched: articles.length });
-    return { source: source.name, articles, ok: true };
-  } catch (error) {
-    logEvent('source.fetch.error', {
-      source: source.name,
-      message: error.message,
-      status: error.response?.status || null,
-    });
-    return { source: source.name, articles: [], ok: false, error: error.message };
+async function fetchSource(source) {
+  logEvent('source.fetch.start', {
+    source: source.name,
+    category: source.category,
+    type: source.type,
+  });
+
+  let lastError = null;
+
+  for (let attempt = 1; attempt <= SOURCE_FETCH_RETRIES + 1; attempt += 1) {
+    try {
+      const { articles, method } = await fetchSourceByType(source);
+      if (articles.length > 0) {
+        logEvent('source.fetch.end', {
+          source: source.name,
+          category: source.category,
+          method,
+          fetched: articles.length,
+          ok: true,
+          attempt,
+        });
+        return { source: source.name, category: source.category, articles, ok: true, method, attempt };
+      }
+
+      if (source.type === 'rss' && source.homepageUrl) {
+        const scrapedArticles = await fetchScrapedSource(source);
+        if (scrapedArticles.length > 0) {
+          logEvent('source.fetch.end', {
+            source: source.name,
+            category: source.category,
+            method: 'scrape',
+            fetched: scrapedArticles.length,
+            ok: true,
+            attempt,
+          });
+          return {
+            source: source.name,
+            category: source.category,
+            articles: scrapedArticles,
+            ok: true,
+            method: 'scrape',
+            attempt,
+          };
+        }
+      }
+
+      throw new Error(`No articles fetched via ${source.type}`);
+    } catch (error) {
+      lastError = error;
+      logEvent('source.fetch.retry', {
+        source: source.name,
+        category: source.category,
+        method: source.type,
+        attempt,
+        ok: false,
+        message: error.message,
+        status: error.response?.status || null,
+      });
+
+      if (attempt > SOURCE_FETCH_RETRIES) break;
+      await delay(400 * attempt);
+    }
   }
+
+  if (source.type === 'rss' && source.homepageUrl) {
+    try {
+      const scrapedArticles = await fetchScrapedSource(source);
+      if (!scrapedArticles.length) {
+        throw new Error('No articles fetched via scrape fallback');
+      }
+      logEvent('source.fetch.end', {
+        source: source.name,
+        category: source.category,
+        method: 'scrape',
+        fetched: scrapedArticles.length,
+        ok: true,
+        attempt: SOURCE_FETCH_RETRIES + 1,
+      });
+      return { source: source.name, category: source.category, articles: scrapedArticles, ok: true, method: 'scrape' };
+    } catch (scrapeError) {
+      lastError = scrapeError;
+    }
+  }
+
+  logEvent('source.fetch.error', {
+    source: source.name,
+    category: source.category,
+    method: source.type,
+    ok: false,
+    message: lastError?.message || 'unknown_source_error',
+    status: lastError?.response?.status || null,
+  });
+  return {
+    source: source.name,
+    category: source.category,
+    articles: [],
+    ok: false,
+    error: lastError?.message || 'unknown_source_error',
+    method: source.type,
+  };
 }
 
 async function ingestNewsSources() {
   logEvent('scheduler.fetch.start');
-  const results = await Promise.all(getSourceConfig().map(fetchSource));
+  const results = await runWithConcurrency(getSourceConfig(), fetchSource, SOURCE_FETCH_CONCURRENCY);
   const online = results.filter((result) => result.ok).map((result) => result.source);
   const failed = results.filter((result) => !result.ok).map((result) => ({ source: result.source, error: result.error }));
-  const rawArticles = prioritizeArticles(results.flatMap((result) => result.articles));
+  const rawArticles = prioritizeArticles(dedupeRawArticles(results.flatMap((result) => result.articles)));
 
   pipelineState.lastFetchAt = new Date().toISOString();
   pipelineState.sourcesOnline = online;
@@ -752,6 +698,11 @@ async function ingestNewsSources() {
     totalFetched: rawArticles.length,
     sourcesOnline: online.length,
     sourcesFailed: failed.length,
+    methods: results.reduce((acc, result) => {
+      const key = result.method || 'unknown';
+      acc[key] = Number(acc[key] || 0) + 1;
+      return acc;
+    }, {}),
   });
 
   return rawArticles;

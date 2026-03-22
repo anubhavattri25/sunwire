@@ -10,6 +10,7 @@
     "@prisma/client": "^6.19.2",
     "axios": "^1.13.6",
     "cheerio": "^1.2.0",
+    "fast-xml-parser": "^5.5.8",
     "ioredis": "^5.10.1",
     "prisma": "^6.19.2",
     "rss-parser": "^3.13.0",

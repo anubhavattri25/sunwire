@@ -1,6 +1,7 @@
 const Parser = require("rss-parser");
 const axios = require("axios");
 const cheerio = require("cheerio");
+const { XMLParser, XMLValidator } = require("fast-xml-parser");
 const {
   cleanText,
   decodeXml,
@@ -16,6 +17,16 @@ const parser = new Parser({
     item: ["media:content", "media:thumbnail", "content:encoded", "description"],
   },
 });
+const tolerantXmlParser = new XMLParser({
+  ignoreAttributes: false,
+  attributeNamePrefix: "",
+  allowBooleanAttributes: true,
+  parseTagValue: false,
+  trimValues: false,
+});
+const xmlValidationOptions = {
+  allowBooleanAttributes: true,
+};
 
 const REQUEST_HEADERS = {
   "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/134.0.0.0 Safari/537.36",
@@ -85,6 +96,214 @@ function normalizeAbsoluteUrl(url = "", base = "") {
   } catch (_) {
     return cleanText(url);
   }
+}
+
+function sanitizeXmlFeed(xml = "") {
+  const trimmed = String(xml || "")
+    .replace(/^\uFEFF/, "")
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]+/g, "")
+    .trim();
+  const firstMarkupIndex = trimmed.indexOf("<");
+  const markupOnly = firstMarkupIndex >= 0 ? trimmed.slice(firstMarkupIndex) : trimmed;
+  return markupOnly.replace(
+    /&(?!#\d+;|#x[\da-fA-F]+;|[a-zA-Z][a-zA-Z0-9]+;)/g,
+    "&amp;"
+  );
+}
+
+function toArray(value) {
+  if (!value) return [];
+  return Array.isArray(value) ? value : [value];
+}
+
+function readNodeText(value = "") {
+  if (typeof value === "string" || typeof value === "number") {
+    return cleanText(String(value));
+  }
+
+  if (!value || typeof value !== "object") {
+    return "";
+  }
+
+  return cleanText(
+    value["#text"]
+    || value.text
+    || value.title
+    || value.content
+    || value.value
+    || ""
+  );
+}
+
+function firstNonEmptyValue(values = []) {
+  for (const value of values) {
+    const normalized = readNodeText(value);
+    if (normalized) return normalized;
+  }
+  return "";
+}
+
+function normalizeXmlLink(linkValue = "", baseUrl = "") {
+  for (const candidate of toArray(linkValue)) {
+    if (typeof candidate === "string") {
+      const normalized = normalizeAbsoluteUrl(candidate, baseUrl);
+      if (isHttpUrl(normalized)) return normalized;
+      continue;
+    }
+
+    if (candidate && typeof candidate === "object") {
+      const normalized = normalizeAbsoluteUrl(
+        candidate.href || candidate.url || candidate.src || candidate["#text"] || "",
+        baseUrl
+      );
+      if (isHttpUrl(normalized)) return normalized;
+    }
+  }
+
+  return "";
+}
+
+function normalizeXmlMediaNode(value = "", baseUrl = "") {
+  for (const candidate of toArray(value)) {
+    if (typeof candidate === "string") {
+      const normalized = normalizeAbsoluteUrl(candidate, baseUrl);
+      if (isHttpUrl(normalized)) return normalized;
+      continue;
+    }
+
+    if (candidate && typeof candidate === "object") {
+      const normalized = normalizeAbsoluteUrl(
+        candidate.url
+        || candidate.href
+        || candidate.src
+        || candidate.content
+        || candidate["#text"]
+        || "",
+        baseUrl
+      );
+      if (isHttpUrl(normalized)) return normalized;
+    }
+  }
+
+  return "";
+}
+
+function normalizeParsedFeedItem(item = {}, baseUrl = "") {
+  const link = normalizeXmlLink(item.link || item.guid || "", baseUrl);
+  const enclosureUrl = normalizeXmlMediaNode(item.enclosure || "", baseUrl);
+  const mediaContentUrl = normalizeXmlMediaNode(item["media:content"] || item.mediaContent || "", baseUrl);
+  const mediaThumbUrl = normalizeXmlMediaNode(item["media:thumbnail"] || item.mediaThumbnail || "", baseUrl);
+  const isoDate = firstNonEmptyValue([item.isoDate, item.published, item.updated, item.pubDate, item.date]);
+
+  return {
+    title: firstNonEmptyValue([item.title]),
+    link,
+    guid: firstNonEmptyValue([item.guid, link]),
+    content: firstNonEmptyValue([item["content:encoded"], item.content, item["content:encodedSnippet"]]),
+    contentSnippet: firstNonEmptyValue([item.contentSnippet, item.summary, item.description, item.subtitle]),
+    summary: firstNonEmptyValue([item.summary, item.description, item.subtitle]),
+    description: firstNonEmptyValue([item.description, item.summary, item.contentSnippet]),
+    isoDate,
+    pubDate: firstNonEmptyValue([item.pubDate, item.published, item.updated, isoDate]),
+    enclosure: enclosureUrl ? { url: enclosureUrl } : undefined,
+    "media:content": mediaContentUrl ? { url: mediaContentUrl } : undefined,
+    "media:thumbnail": mediaThumbUrl ? { url: mediaThumbUrl } : undefined,
+    creator: firstNonEmptyValue([item.creator, item.author?.name, item.author]),
+    source: firstNonEmptyValue([item.source?.title, item.source]),
+  };
+}
+
+function normalizeParsedFeed(parsed = {}, baseUrl = "") {
+  const rssRoot = parsed.rss || parsed["rdf:RDF"] || null;
+  if (rssRoot) {
+    const channel = toArray(rssRoot.channel)[0] || rssRoot.channel || {};
+    return {
+      title: firstNonEmptyValue([channel.title]),
+      items: toArray(channel.item).map((item) => normalizeParsedFeedItem(item, baseUrl)),
+    };
+  }
+
+  const atomFeed = parsed.feed || {};
+  return {
+    title: firstNonEmptyValue([atomFeed.title]),
+    items: toArray(atomFeed.entry).map((entry) => normalizeParsedFeedItem({
+      title: entry.title,
+      link: entry.link,
+      guid: entry.id,
+      content: entry.content,
+      contentSnippet: entry.summary,
+      summary: entry.summary,
+      description: entry.summary,
+      isoDate: entry.updated || entry.published,
+      pubDate: entry.published || entry.updated,
+      enclosure: entry.enclosure,
+      "media:content": entry["media:content"],
+      "media:thumbnail": entry["media:thumbnail"],
+      author: entry.author,
+      source: atomFeed.title,
+    }, baseUrl)),
+  };
+}
+
+function extractImageFromElement($, element, baseUrl = "") {
+  const candidate = [
+    $(element).attr("data-src"),
+    $(element).attr("data-lazy-src"),
+    $(element).attr("data-original"),
+    $(element).attr("src"),
+    $(element).find("img").first().attr("src"),
+    $(element).find("img").first().attr("data-src"),
+    $(element).find("img").first().attr("data-lazy-src"),
+    $(element).find("img").first().attr("data-original"),
+    $(element).find("img").first().attr("srcset"),
+    $(element).find("img").first().attr("data-srcset"),
+  ]
+    .map((value) => String(value || "").split(",")[0].trim().split(/\s+/)[0])
+    .find(Boolean);
+
+  return normalizeAbsoluteUrl(candidate, baseUrl);
+}
+
+function extractDescriptionFromElement($, element) {
+  return cleanText(
+    $(element).find("p").first().text()
+    || $(element).attr("title")
+    || $(element).find("[itemprop='description']").first().text()
+    || $(element).attr("aria-label")
+    || ""
+  );
+}
+
+function extractTitleAndLink($, element, baseUrl = "") {
+  const anchorRoot = $(element).is("a[href]") ? $(element) : null;
+  const heading = $(element).find("h1, h2, h3, h4").first();
+  const headingAnchor = heading.find("a[href]").first();
+  const firstAnchor = anchorRoot && anchorRoot.length ? anchorRoot : $(element).find("a[href]").first();
+  const anchor = headingAnchor.length ? headingAnchor : firstAnchor;
+  const href = normalizeAbsoluteUrl(anchor.attr("href") || "", baseUrl);
+  const title = cleanText(
+    heading.text()
+    || anchor.attr("title")
+    || anchor.attr("aria-label")
+    || anchor.find("img").first().attr("alt")
+    || anchor.text()
+    || $(element).attr("title")
+    || $(element).attr("aria-label")
+    || $(element).find("img").first().attr("alt")
+    || ""
+  );
+
+  return {
+    title,
+    link: isHttpUrl(href) ? href : "",
+  };
+}
+
+function isLikelyArticleLink(url = "", baseUrl = "") {
+  const normalized = normalizeAbsoluteUrl(url, baseUrl);
+  if (!isHttpUrl(normalized)) return false;
+  if (/\.(xml|rss|jpg|jpeg|png|webp|gif|svg)(\?|$)/i.test(normalized)) return false;
+  return !/(\/tag\/|\/topic\/|\/author\/|\/category\/|\/privacy|\/terms|\/about|\/contact|\/feed\/?|\#)/i.test(normalized);
 }
 
 function cleanParagraphText(value = "") {
@@ -412,12 +631,134 @@ async function fetchPublisherArticle(url = "", options = {}) {
   };
 }
 
+function validateXmlFeed(xml = "", url = "") {
+  const result = XMLValidator.validate(String(xml || ""), xmlValidationOptions);
+  if (result === true) return;
+
+  const detail = typeof result === "object"
+    ? `${result.err?.msg || "invalid xml"} at line ${result.err?.line || "?"}, col ${result.err?.col || "?"}`
+    : "invalid xml";
+  throw new Error(`RSS XML validation failed for ${url}: ${detail}`);
+}
+
 async function parseRssFeed(url) {
-  const xml = await fetchTextNoCache(url, {
+  const rawXml = await fetchTextNoCache(url, {
     timeoutMs: 10000,
     headers: REQUEST_HEADERS,
   });
-  return parser.parseString(xml);
+  const xml = sanitizeXmlFeed(rawXml);
+  validateXmlFeed(xml, url);
+
+  try {
+    return await parser.parseString(xml);
+  } catch (error) {
+    const parsed = tolerantXmlParser.parse(xml);
+    const normalized = normalizeParsedFeed(parsed, url);
+    if (Array.isArray(normalized.items) && normalized.items.length) {
+      return normalized;
+    }
+    throw error;
+  }
+}
+
+async function scrapeHomepageFeed(url = "", options = {}) {
+  const limit = Math.max(1, Number.parseInt(options.limit || "10", 10) || 10);
+  const response = await axios.get(url, {
+    timeout: Number(options.timeoutMs || 12000),
+    headers: REQUEST_HEADERS,
+    maxRedirects: 5,
+    validateStatus: (status) => status >= 200 && status < 400,
+  });
+
+  const finalUrl = response.request?.res?.responseUrl || url;
+  const $ = cheerio.load(String(response.data || ""));
+  $("script, style, noscript, iframe, svg, form").remove();
+
+  const candidates = [];
+  const seenLinks = new Set();
+  const selectors = [
+    "article",
+    "main article",
+    "[itemprop='itemListElement']",
+    ".post",
+    ".story",
+    ".entry",
+    ".jeg_post",
+    "main li",
+    "main > div",
+  ];
+
+  for (const selector of selectors) {
+    $(selector).each((_, element) => {
+      if (candidates.length >= limit * 4) return false;
+
+      const { title, link } = extractTitleAndLink($, element, finalUrl);
+      const normalizedLink = normalizeAbsoluteUrl(link, finalUrl);
+      if (!title || title.length < 16) return;
+      if (!isLikelyArticleLink(normalizedLink, finalUrl)) return;
+      if (seenLinks.has(normalizedLink)) return;
+
+      seenLinks.add(normalizedLink);
+      candidates.push({
+        title,
+        link: normalizedLink,
+        description: extractDescriptionFromElement($, element),
+        imageUrl: extractImageFromElement($, element, finalUrl),
+      });
+    });
+
+    if (candidates.length >= limit) break;
+  }
+
+  if (candidates.length < limit) {
+    const anchorSelectors = [
+      "h1 a[href]",
+      "h2 a[href]",
+      "h3 a[href]",
+      "h4 a[href]",
+      "a[href][title]",
+      "a[href][aria-label]",
+      "a[href] img[alt]",
+      "a[href*='/news/']",
+      "a[href*='/story']",
+      "a[href*='/article']",
+      "a[href*='/politics']",
+      "a[href*='/sport']",
+      "a[href*='/technology']",
+      "a[href*='/recipe']",
+      "a[href*='/job']",
+      "a[href*='/career']",
+    ];
+
+    for (const selector of anchorSelectors) {
+      $(selector).each((_, element) => {
+        if (candidates.length >= limit * 5) return false;
+
+        const anchor = $(element).is("a[href]") ? $(element) : $(element).closest("a[href]");
+        if (!anchor.length) return;
+
+        const parent = anchor.closest("article, li, div, section");
+        const context = parent.length ? parent : anchor;
+        const { title, link } = extractTitleAndLink($, anchor, finalUrl);
+        const normalizedLink = normalizeAbsoluteUrl(link, finalUrl);
+        if (!title || title.length < 16) return;
+        if (!isLikelyArticleLink(normalizedLink, finalUrl)) return;
+        if (seenLinks.has(normalizedLink)) return;
+
+        seenLinks.add(normalizedLink);
+        candidates.push({
+          title,
+          link: normalizedLink,
+          description: extractDescriptionFromElement($, context),
+          imageUrl: extractImageFromElement($, context, finalUrl),
+        });
+      });
+
+      if (candidates.length >= limit) break;
+    }
+  }
+
+  return candidates.slice(0, limit);
 }
 
 module.exports = {
@@ -425,5 +766,6 @@ module.exports = {
   fetchPublisherArticle,
   isGoogleNewsUrl,
   parseRssFeed,
+  scrapeHomepageFeed,
   resolveGoogleNewsUrl,
 };
