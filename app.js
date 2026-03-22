@@ -750,6 +750,25 @@ function isFoodStory(story = {}) {
   return FOOD_KEYWORDS.some((keyword) => haystack.includes(keyword));
 }
 
+function isAudienceGatheringStory(story = {}) {
+  return Number(story.searchTrendScore || 0) >= 35
+    || Number(story.indiaAudienceRelevance || 0) >= 15
+    || Number(story.trendingScore || 0) >= 12
+    || Number(story.priority || 0) >= 1;
+}
+
+function isHomepageGeneralStory(story = {}) {
+  return String(story.category || "").toLowerCase() !== "food" && !isFoodStory(story);
+}
+
+function isHomepageFeaturedStory(story = {}) {
+  const category = String(story.category || "").toLowerCase();
+  if (!isHomepageGeneralStory(story)) return false;
+  if (category === "ai" || category === "tech") return true;
+  if (isWarRelatedStory(story)) return true;
+  return isAudienceGatheringStory(story);
+}
+
 function isIndiaPriorityStory(story = {}) {
   const haystack = cleanText([
     story.title,
@@ -1226,25 +1245,37 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
   }
 
   const used = new Set();
-  const homepagePriorityPool = dedupeStories(sortStoriesForHomepageFocus(allStories));
-  const hero = selectHeadlineOfTheDay(homepagePriorityPool.length ? homepagePriorityPool : latestPool) || latestPool[0] || null;
+  const homepageGeneralPool = dedupeStories(allStoriesPool.filter(isHomepageGeneralStory));
+  const homepagePriorityPool = dedupeStories(
+    sortStoriesForHomepageFocus(homepageGeneralPool.filter(isHomepageFeaturedStory))
+  );
+  const homepageFallbackPool = homepageGeneralPool.length ? homepageGeneralPool : allStoriesPool;
+  const latestGeneralPool = dedupeStories(sortStoriesForLatest(filteredMainStories.filter(isHomepageGeneralStory)));
+  const hero = selectHeadlineOfTheDay(homepagePriorityPool.length ? homepagePriorityPool : homepageFallbackPool)
+    || latestGeneralPool[0]
+    || homepageFallbackPool[0]
+    || latestPool[0]
+    || null;
   if (hero) used.add(storyKey(hero));
 
   const trendingSourcePool = dedupeStories([
     ...homepagePriorityPool,
-    ...sortStoriesForTrending(filteredMainStories, activeTrendingMode),
+    ...sortStoriesForTrending(homepageFallbackPool, activeTrendingMode),
   ]);
-  const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, latestPool);
+  const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, homepageFallbackPool);
   const topSections = buildHomepageDeskSections(allStoriesPool, categoryMap, latestPool);
 
   const randomMixStories = takeUnique(
     deterministicShuffle(
-      allStoriesPool.filter((story) => !used.has(storyKey(story))),
+      homepagePriorityPool.filter((story) => !used.has(storyKey(story))),
       currentPage
     ),
     new Set(),
     RANDOM_NEWS_COUNT,
-    deterministicShuffle(allStoriesPool, currentPage + 11)
+    deterministicShuffle(
+      homepageFallbackPool.filter((story) => !used.has(storyKey(story))),
+      currentPage + 11
+    )
   );
   const moreSections = [
     {
@@ -1258,7 +1289,13 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     },
   ].filter((section) => section.stories.length);
 
-  return { hero, trending, topSections, moreSections };
+  const tickerStories = dedupeStories([
+    hero,
+    ...trending,
+    ...randomMixStories,
+  ].filter(Boolean));
+
+  return { hero, trending, topSections, moreSections, tickerStories };
 }
 
 function buildFocusedLayout(stories = [], filter = "all") {
@@ -1878,7 +1915,11 @@ function applyHomepagePayload(main, mainStories, categoryMap) {
     ? buildGlobalLayout(filteredMainStories, safeCategoryMap)
     : buildFocusedLayout(filteredMainStories, activeFilter);
 
-  renderTicker(sortStoriesForTrending(combinedStories, activeTrendingMode));
+  renderTicker(
+    activeFilter === "all" || activeFilter === "latest"
+      ? (layout.tickerStories || [])
+      : sortStoriesForTrending(combinedStories, activeTrendingMode)
+  );
   renderHomepageLayout(layout);
   scheduleHomepageArticlePrefetch();
   scheduleSidebarHydration();
