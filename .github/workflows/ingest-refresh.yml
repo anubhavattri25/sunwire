@@ -8,33 +8,51 @@ on:
 jobs:
   ingest:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 12
 
     steps:
       - name: Trigger Sunwire ingestion
         env:
           INGEST_SECRET: ${{ secrets.INGEST_SECRET }}
         run: |
-          echo "Calling Sunwire ingestion endpoint..."
+          CATEGORIES=(
+            general
+            ai
+            tech
+            entertainment
+            sports
+            business
+            politics
+            jobs
+            food
+          )
 
-          STATUS=$(curl -sS \
-            --connect-timeout 10 \
-            --max-time 60 \
-            -o response.txt \
-            -w "%{http_code}" \
-            -X POST \
-            -H "Cache-Control: no-cache" \
-            -H "x-ingest-key: ${INGEST_SECRET}" \
-            -H "User-Agent: SunwireBot/1.0" \
-            "https://sunwire.in/api/ingest")
+          for CATEGORY in "${CATEGORIES[@]}"; do
+            echo "Calling Sunwire ingestion endpoint for category: ${CATEGORY}"
+            RESPONSE_FILE="response-${CATEGORY}.txt"
 
-          echo "HTTP Status: $STATUS"
-          echo "Response:"
-          cat response.txt || true
+            STATUS=$(curl -sS \
+              --connect-timeout 10 \
+              --max-time 90 \
+              --retry 2 \
+              --retry-delay 3 \
+              -o "${RESPONSE_FILE}" \
+              -w "%{http_code}" \
+              -X POST \
+              -H "Cache-Control: no-cache" \
+              -H "x-ingest-key: ${INGEST_SECRET}" \
+              -H "User-Agent: SunwireBot/1.0" \
+              "https://sunwire.in/api/ingest?categories=${CATEGORY}&rssLimit=1")
 
-          if [ "$STATUS" != "200" ] && [ "$STATUS" != "202" ]; then
-            echo "Ingestion failed"
-            exit 1
-          else
-            echo "Sunwire pipeline triggered successfully"
-          fi
+            echo "Category: ${CATEGORY}"
+            echo "HTTP Status: ${STATUS}"
+            echo "Response:"
+            cat "${RESPONSE_FILE}" || true
+
+            if [ "${STATUS}" != "200" ] && [ "${STATUS}" != "202" ]; then
+              echo "Ingestion failed for category: ${CATEGORY}"
+              exit 1
+            fi
+          done
+
+          echo "Sunwire pipeline triggered successfully for all categories"
