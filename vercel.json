@@ -21,6 +21,13 @@
     },
     "api/sitemap.js": {
       "maxDuration": 60
+    },
+    "api/news-sitemap.js": {
+      "maxDuration": 60
+    },
+    "api/info-page.js": {
+      "maxDuration": 10,
+      "includeFiles": "{about-us.html,contact-us.html,privacy-policy.html,terms-and-conditions.html}"
     }
   },
   "redirects": [
@@ -40,6 +47,26 @@
     {
       "source": "/sitemap.xml",
       "destination": "/api/sitemap"
+    },
+    {
+      "source": "/news-sitemap.xml",
+      "destination": "/api/news-sitemap"
+    },
+    {
+      "source": "/about-us",
+      "destination": "/api/info-page?page=about-us"
+    },
+    {
+      "source": "/contact-us",
+      "destination": "/api/info-page?page=contact-us"
+    },
+    {
+      "source": "/privacy-policy",
+      "destination": "/api/info-page?page=privacy-policy"
+    },
+    {
+      "source": "/terms-and-conditions",
+      "destination": "/api/info-page?page=terms-and-conditions"
     },
     {
       "source": "/page/:page",
@@ -227,6 +254,15 @@
       ]
     },
     {
+      "source": "/logo.png",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=31536000, immutable"
+        }
+      ]
+    },
+    {
       "source": "/404.html",
       "headers": [
         {
@@ -268,6 +304,33 @@
         {
           "key": "Cache-Control",
           "value": "public, s-maxage=60, stale-while-revalidate=30"
+        }
+      ]
+    },
+    {
+      "source": "/api/news-sitemap",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=900, stale-while-revalidate=1800"
+        }
+      ]
+    },
+    {
+      "source": "/sitemap.xml",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=900, stale-while-revalidate=1800"
+        }
+      ]
+    },
+    {
+      "source": "/news-sitemap.xml",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, s-maxage=900, stale-while-revalidate=1800"
         }
       ]
     },

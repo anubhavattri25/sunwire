@@ -1,20 +1,11 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GK3J8G4KTV"></script>
-  <script>
-    window.__SUNWIRE_GA_ID = "G-GK3J8G4KTV";
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    window.gtag = window.gtag || gtag;
-    gtag("js", new Date());
-    gtag("config", "G-GK3J8G4KTV", { send_page_view: false, anonymize_ip: true });
-  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Story | Sunwire</title>
   <meta name="description" content="Read full AI, tech, entertainment, sports, and business coverage on Sunwire." />
-  <meta name="robots" content="noindex, follow" />
+  <meta name="robots" content="index, follow, max-image-preview:large" />
   <link rel="canonical" href="https://sunwire.in/" />
   <meta property="og:type" content="article" />
   <meta property="og:title" content="Story | Sunwire" />
@@ -26,7 +17,6 @@
   <meta name="twitter:title" content="Story | Sunwire" />
   <meta name="twitter:description" content="Read full AI, tech, entertainment, sports, and business coverage on Sunwire." />
   <meta name="twitter:image" content="https://sunwire.in/social-card.svg" id="twitterImageMeta" />
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105" crossorigin="anonymous"></script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -34,7 +24,7 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/article.css?v=20260319-1" />
+  <link rel="stylesheet" href="/article.css?v=20260321-1" />
 </head>
 <body>
   <div class="noise"></div>
@@ -124,8 +114,8 @@
 
     <section class="related-section">
       <div class="related-section__head">
-        <p class="article-block__eyebrow">Suggested by Tags</p>
-        <h2>Related News</h2>
+        <p class="article-block__eyebrow">Internal Links</p>
+        <h2>Related Articles</h2>
       </div>
       <div class="related-grid" id="relatedGrid"></div>
     </section>
@@ -140,9 +130,6 @@
            data-ad-slot="9518443817"
            data-ad-format="auto"
            data-full-width-responsive="true"></ins>
-      <script>
-        (adsbygoogle = window.adsbygoogle || []).push({});
-      </script>
     </div>
   </section>
 
@@ -152,10 +139,57 @@
         <div class="article-footer__brand">SUNWIRE</div>
         <p>Fast reads across AI, tech, entertainment, sports, and business.</p>
       </div>
-      <a href="/">Return to the homepage</a>
+      <div class="article-footer__actions">
+        <a href="/">Return to the homepage</a>
+        <div class="article-footer__links" aria-label="Site information">
+          <a class="article-footer__link" href="/about-us">About Us</a>
+          <a class="article-footer__link" href="/contact-us">Contact Us</a>
+          <a class="article-footer__link" href="/privacy-policy">Privacy Policy</a>
+          <a class="article-footer__link" href="/terms-and-conditions">Terms &amp; Conditions</a>
+        </div>
+      </div>
     </div>
   </footer>
 
-  <script type="module" src="/article.js?v=20260319-1"></script>
+  <script>
+    (function () {
+      const adSlot = document.querySelector(".ad-slot");
+      if (!adSlot) return;
+
+      function bootAds() {
+        if (window.__SUNWIRE_ADS_BOOTED) return;
+        window.__SUNWIRE_ADS_BOOTED = true;
+
+        const script = document.createElement("script");
+        script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105";
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        script.onload = () => {
+          document.querySelectorAll(".adsbygoogle").forEach(() => {
+            try {
+              (window.adsbygoogle = window.adsbygoogle || []).push({});
+            } catch (_) {
+              // Ignore ad bootstrap errors.
+            }
+          });
+        };
+        document.head.appendChild(script);
+      }
+
+      if (!("IntersectionObserver" in window)) {
+        window.addEventListener("load", bootAds, { once: true });
+        return;
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        bootAds();
+      }, { rootMargin: "420px 0px" });
+
+      observer.observe(adSlot);
+    })();
+  </script>
+  <script type="module" src="/article.js?v=20260321-1"></script>
 </body>
 </html>

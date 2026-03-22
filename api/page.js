@@ -15,11 +15,12 @@ const {
 const { buildHomeView, renderHomeTemplate } = require("../lib/ssr");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
-const HOME_PAGE_SIZE = 30;
+const HOME_PAGE_SIZE = 32;
 const DESK_PAGE_SIZE = 20;
 const STORY_POOL_SIZE = 120;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(STORY_POOL_SIZE / HOME_PAGE_SIZE);
+const HOMEPAGE_CATEGORY_POOL_FILTERS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
 
 function storyKey(story = {}) {
   return String(story.id || story.sourceUrl || story.url || story.title || "").trim();
@@ -72,7 +73,7 @@ function collectHomepageCandidateStories({
 
   (Array.isArray(allStories) ? allStories : []).forEach((story) => {
     const category = String(story?.category || "").trim().toLowerCase();
-    if (!category || !["ai", "tech", "entertainment", "sports", "business"].includes(category)) return;
+    if (!category || !["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"].includes(category)) return;
     const count = categoryCounts.get(category) || 0;
     if (count >= categoryLimit) return;
     addStory(story);
@@ -87,6 +88,20 @@ function replaceStoriesWithMap(stories = [], replacements = new Map()) {
     const key = storyKey(story);
     return replacements.get(key) || story;
   });
+}
+
+function mergeUniqueStories(...groups) {
+  const seen = new Set();
+  const output = [];
+
+  groups.flat().forEach((story) => {
+    const key = storyKey(story || {});
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    output.push(story);
+  });
+
+  return output;
 }
 
 async function buildHydratedHomeView({
@@ -143,6 +158,7 @@ module.exports = async (req, res) => {
   const query = req.query || {};
   let state = buildHomeState(query);
   let template = readTemplate("index.html");
+  let view = null;
 
   if (!state.searchQuery) {
     try {
@@ -166,6 +182,18 @@ module.exports = async (req, res) => {
         });
 
         allStories = getArticlesFromPayload(poolPayload);
+        const categoryPoolPayloads = await Promise.all(
+          HOMEPAGE_CATEGORY_POOL_FILTERS.map((categoryFilter) =>
+            getStoriesForSsr({
+              page: 1,
+              pageSize: 8,
+              filter: categoryFilter,
+              reason: `page_ssr_pool_${categoryFilter}`,
+            }).catch(() => null)
+          )
+        );
+        const categoryStories = categoryPoolPayloads.flatMap((payload) => getArticlesFromPayload(payload || {}));
+        allStories = mergeUniqueStories(allStories, categoryStories);
         totalStories = Number(poolPayload?.totalStories) || Number(poolPayload?.total) || allStories.length;
         totalPages = Math.max(1, Math.ceil(Math.max(1, totalStories) / HOME_PAGE_SIZE));
         page = Math.min(requestedPage, totalPages);
@@ -221,6 +249,18 @@ module.exports = async (req, res) => {
             return pagePayload;
           });
           allStories = getArticlesFromPayload(poolPayload);
+          const categoryPoolPayloads = await Promise.all(
+            HOMEPAGE_CATEGORY_POOL_FILTERS.map((categoryFilter) =>
+              getStoriesForSsr({
+                page: 1,
+                pageSize: 8,
+                filter: categoryFilter,
+                reason: `page_ssr_pool_${categoryFilter}`,
+              }).catch(() => null)
+            )
+          );
+          const categoryStories = categoryPoolPayloads.flatMap((payload) => getArticlesFromPayload(payload || {}));
+          allStories = mergeUniqueStories(allStories, categoryStories);
         } else {
           allStories = pageStories;
         }
@@ -229,7 +269,7 @@ module.exports = async (req, res) => {
         totalPages = Math.max(1, Number(pagePayload?.totalPages) || totalPages);
       }
 
-      const view = await buildHydratedHomeView({
+      view = await buildHydratedHomeView({
         filter,
         page,
         totalPages,
@@ -251,6 +291,10 @@ module.exports = async (req, res) => {
 
   const html = injectHead(template, {
     ...state,
+    preloadImage: view?.hero?.image || view?.hero?.image_url || "",
+    preloadImageWidth: 1600,
+    preloadImageHeight: 900,
+    preloadImageSizes: "(max-width: 1200px) 100vw, 80vw",
     type: "website",
   });
   const finalHtml = minifyHtml(html);
@@ -258,7 +302,7 @@ module.exports = async (req, res) => {
   const ifNoneMatch = String(req.headers["if-none-match"] || "");
 
   res.setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   res.setHeader("CDN-Cache-Control", HOME_CDN_CACHE_CONTROL);
   res.setHeader("Vercel-CDN-Cache-Control", HOME_CDN_CACHE_CONTROL);
   res.setHeader("ETag", etag);

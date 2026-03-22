@@ -17,7 +17,7 @@ function normalizeCacheValue(value = "", fallback = "") {
 function buildFrontendNewsCacheKey(query = {}) {
   const page = Math.max(1, Number.parseInt(query.page || "1", 10) || 1);
   const pageSize = Math.max(1, Number.parseInt(query.pageSize || "30", 10) || 30);
-  const filter = normalizeCacheValue(query.filter || "all", "all");
+  const filter = normalizeNewsFilter(query.filter || query.category || "all");
 
   return ["sunwire-frontend-news", filter, `page-${page}`, `size-${pageSize}`].join(":");
 }
@@ -37,14 +37,14 @@ function setNewsResponseHeaders(res, refresh = false) {
     return;
   }
 
-  res.setHeader("Cache-Control", "public, max-age=0, must-revalidate");
+  res.setHeader("Cache-Control", "public, max-age=60, stale-while-revalidate=120");
   res.setHeader("CDN-Cache-Control", NEWS_CDN_CACHE_CONTROL);
   res.setHeader("Vercel-CDN-Cache-Control", NEWS_CDN_CACHE_CONTROL);
 }
 
 function normalizeNewsFilter(input = "all") {
   const normalized = normalizeCacheValue(input || "all", "all");
-  return normalized === "latest" ? "all" : normalized;
+  return normalized === "latest" || normalized === "random" ? "all" : normalized;
 }
 
 function buildNewsWhere(filter = "all") {
@@ -211,7 +211,8 @@ module.exports = async function handler(req, res) {
   const refresh = req.query.refresh === "1";
   const cacheKey = buildFrontendNewsCacheKey(req.query || {});
   const requestedPage = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
-  const normalizedFilter = normalizeNewsFilter(req.query.filter || "all");
+  const requestedFilter = req.query.filter || req.query.category || "all";
+  const normalizedFilter = normalizeNewsFilter(requestedFilter);
 
   try {
     if (!process.env.DATABASE_URL) {
@@ -245,13 +246,13 @@ module.exports = async function handler(req, res) {
       payload = await queryStories({
         page: req.query.page,
         pageSize: req.query.pageSize,
-        filter: req.query.filter || "all",
+        filter: requestedFilter,
       });
     } catch (_) {
       payload = await queryStoriesWithoutCount({
         page: req.query.page,
         pageSize: req.query.pageSize,
-        filter: req.query.filter || "all",
+        filter: requestedFilter,
       });
     }
 

@@ -40,7 +40,7 @@ const dom = {
 
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
-const DEFERRED_ASSET_VERSION = "20260319-1";
+const DEFERRED_ASSET_VERSION = "20260321-1";
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
 const SEO_SOCIAL_IMAGE = `${SEO_SITE_ORIGIN}/social-card.svg`;
@@ -65,11 +65,13 @@ const PLACEHOLDER_PALETTES = [
 ];
 
 const apiResponseCache = new Map();
+const articlePrefetchPromises = new Map();
 let relatedModulePromise = null;
 let relatedObserver = null;
 let relatedHydrationPromise = null;
 let pendingRelatedOptions = null;
 let appliedArticleScore = -1;
+const routePrefetchSet = new Set();
 
 function loadRelatedModule() {
   relatedModulePromise ||= import(`./article-related.mjs?v=${DEFERRED_ASSET_VERSION}`);
@@ -279,6 +281,32 @@ function buildArticleHref(story = {}) {
   return storySlug ? `/article/${encodeURIComponent(storySlug)}` : "/";
 }
 
+function warmArticleRoute(href = "") {
+  if (!href || routePrefetchSet.has(href)) return;
+  routePrefetchSet.add(href);
+
+  const preload = document.createElement("link");
+  preload.rel = "prefetch";
+  preload.as = "document";
+  preload.href = href;
+  preload.dataset.sunwirePrefetch = href;
+  document.head.appendChild(preload);
+}
+
+function renderArticleBodySkeleton() {
+  if (!dom.articleBody) return;
+
+  dom.articleBody.className = "article-body article-body--skeleton";
+  dom.articleBody.innerHTML = [
+    '<div class="skeleton-line skeleton-line--lg" style="width:92%"></div>',
+    '<div class="skeleton-line" style="width:100%"></div>',
+    '<div class="skeleton-line" style="width:98%"></div>',
+    '<div class="skeleton-line" style="width:95%"></div>',
+    '<div class="skeleton-line" style="width:88%"></div>',
+    '<div class="skeleton-line skeleton-line--lg" style="width:84%"></div>',
+  ].join("");
+}
+
 function upsertJsonLdScript(id, payload) {
   if (!payload) return;
 
@@ -301,20 +329,21 @@ function buildSectionUrl(deskFilter = "latest") {
 }
 
 function setSeo(title, description, image = "", canonicalUrl = window.location.href, articleData = {}) {
-  const metaDescription = cleanText(description).slice(0, 150);
+  const metaDescription = cleanText(description).slice(0, 160);
   const resolvedCanonicalUrl = canonicalUrl || window.location.href;
   const pageTitle = title || `Story | ${SEO_SITE_NAME}`;
   const ogTitle = articleData.headline || cleanText(pageTitle.replace(/\s+\|\s+Sunwire$/i, ""));
 
   document.title = pageTitle;
   document.querySelector('meta[name="description"]')?.setAttribute("content", metaDescription);
-  document.querySelector('meta[name="robots"]')?.setAttribute("content", "index, follow");
+  document.querySelector('meta[name="robots"]')?.setAttribute("content", "index, follow, max-image-preview:large");
   document.querySelector('link[rel="canonical"]')?.setAttribute("href", resolvedCanonicalUrl);
 
   setMetaContent('meta[property="og:title"]', ogTitle || "Story");
   setMetaContent('meta[property="og:description"]', metaDescription);
   setMetaContent('meta[property="og:url"]', resolvedCanonicalUrl);
   setMetaContent('meta[property="og:site_name"]', SEO_SITE_NAME);
+  setMetaContent('meta[name="author"]', cleanText(articleData.author || "Sunwire News Desk"));
   setMetaContent('meta[name="twitter:title"]', pageTitle);
   setMetaContent('meta[name="twitter:description"]', metaDescription);
 
@@ -344,13 +373,13 @@ function setSeo(title, description, image = "", canonicalUrl = window.location.h
     description: metaDescription,
     image: image ? [image] : undefined,
     datePublished: articleData.publishedAt || undefined,
-    dateModified: articleData.publishedAt || undefined,
+    dateModified: articleData.modifiedAt || articleData.publishedAt || undefined,
     keywords: Array.isArray(articleData.tags) ? articleData.tags.join(", ") : undefined,
     wordCount: articleData.wordCount || undefined,
     articleBody: articleData.articleBody || undefined,
     author: {
-      "@type": "Organization",
-      name: SEO_SITE_NAME,
+      "@type": "Person",
+      name: cleanText(articleData.author || "Sunwire News Desk"),
     },
     publisher: {
       "@type": "Organization",
@@ -361,7 +390,10 @@ function setSeo(title, description, image = "", canonicalUrl = window.location.h
       },
     },
     articleSection: articleData.section || "Latest",
-    mainEntityOfPage: resolvedCanonicalUrl,
+    mainEntityOfPage: {
+      "@type": "WebPage",
+      "@id": resolvedCanonicalUrl,
+    },
     url: resolvedCanonicalUrl,
   });
 }
@@ -388,6 +420,7 @@ function renderTagChips(tags = []) {
 
 function renderParagraphs(container, paragraphs = [], fallbackText = "") {
   if (!container) return;
+  container.className = "article-body";
   container.innerHTML = "";
   const items = Array.isArray(paragraphs) && paragraphs.length ? paragraphs : [fallbackText];
   items.forEach((paragraph) => {
@@ -424,6 +457,58 @@ function writeCachedArticle(url = "", title = "", article = null) {
   } catch (_) {
     // Ignore storage failures.
   }
+}
+
+function collectRelatedStories() {
+  const preloaded = readPreloadedArticleData();
+  const buckets = [
+    ...(preloaded?.relatedSets?.grid || []),
+    ...(preloaded?.relatedSets?.related || []),
+    ...(preloaded?.relatedSets?.latest || []),
+    ...(preloaded?.relatedSets?.trending || []),
+  ];
+  return dedupeStories(buckets);
+}
+
+function findRelatedStoryByHref(href = "") {
+  if (!href) return null;
+
+  let pathname = href;
+  try {
+    pathname = new URL(href, window.location.origin).pathname;
+  } catch (_) {
+    pathname = href;
+  }
+
+  return collectRelatedStories().find((story) => buildArticleHref(story) === pathname) || null;
+}
+
+async function prefetchArticleStory(story = {}) {
+  const href = buildArticleHref(story);
+  if (!href || href === "/") return null;
+
+  warmArticleRoute(href);
+
+  const existing = articlePrefetchPromises.get(href);
+  if (existing) return existing;
+
+  const apiUrl = `/api/article?${new URLSearchParams({
+    slug: slugify(story.slug || story.title || story.id || ""),
+    category: normalizeDeskFilter(story.category || "latest"),
+    id: story.id || "",
+  }).toString()}`;
+
+  const request = fetchJson(apiUrl, { ttlMs: 15 * 60 * 1000 })
+    .then((article) => {
+      writeCachedArticle(story.sourceUrl || story.url || "", story.title || "", article);
+      return article;
+    })
+    .finally(() => {
+      articlePrefetchPromises.delete(href);
+    });
+
+  articlePrefetchPromises.set(href, request);
+  return request;
 }
 
 function applyArticleData(article = {}, fallback = {}) {
@@ -484,6 +569,7 @@ function applyArticleData(article = {}, fallback = {}) {
       headline,
       author: sourceName,
       publishedAt,
+      modifiedAt: article.modifiedAt || article.published_at || article.publishedAt || publishedAt,
       section: displayDeskLabel(deskFilter),
       sectionUrl: buildSectionUrl(deskFilter),
       tags,
@@ -728,7 +814,7 @@ function renderInitialStoryState(story) {
   );
 
   renderTagChips([]);
-  renderParagraphs(dom.articleBody, [buildInitialBody(story.title, story.summary, story.source)], "Fetching full story...");
+  renderArticleBodySkeleton();
 
   attachNativeShare(
     cleanText(story.title),
@@ -823,9 +909,42 @@ async function loadStory() {
 }
 
 dom.copyLinkButton.addEventListener("click", copyCurrentLink);
+document.addEventListener("mouseover", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findRelatedStoryByHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleStory(story);
+});
+
+document.addEventListener("focusin", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findRelatedStoryByHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleStory(story);
+});
+
+document.addEventListener("touchstart", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findRelatedStoryByHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleStory(story);
+}, { passive: true });
+
 window.addEventListener("load", () => {
   scheduleIdleTask(() => {
     void loadRelatedModule();
+    collectRelatedStories().slice(0, 4).forEach((story) => {
+      void prefetchArticleStory(story);
+    });
   });
 }, { once: true });
 

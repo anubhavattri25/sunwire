@@ -106,20 +106,75 @@ export function buildUnsplashVariant(url = "", width = 1200) {
   }
 }
 
-export function applyResponsiveImage(imageElement, src, options = {}) {
-  if (!imageElement) return;
-
+export function buildResponsiveImageConfig(src = "", options = {}) {
   const {
-    alt = "",
     width = 1600,
     height = 900,
     sizes = "100vw",
-    highPriority = false,
   } = options;
+  const normalizedWidth = Math.max(320, Number(width) || 1600);
+  const normalizedHeight = Math.max(180, Number(height) || 900);
+
+  if (!isUnsplashImage(src)) {
+    return {
+      src,
+      srcset: "",
+      sizes,
+      width: normalizedWidth,
+      height: normalizedHeight,
+    };
+  }
+
+  const widths = [...new Set([320, 640, 960, 1280, 1600, normalizedWidth])]
+    .filter((entry) => entry <= Math.max(normalizedWidth, 1600))
+    .sort((left, right) => left - right);
+
+  return {
+    src: buildUnsplashVariant(src, widths[widths.length - 1] || normalizedWidth),
+    srcset: widths.map((entry) => `${buildUnsplashVariant(src, entry)} ${entry}w`).join(", "),
+    sizes,
+    width: normalizedWidth,
+    height: normalizedHeight,
+  };
+}
+
+export function upsertImagePreload(href = "", options = {}) {
+  if (!href) return;
+
+  const {
+    srcset = "",
+    sizes = "",
+  } = options;
+  const selector = 'link[data-sunwire-preload="hero-image"]';
+  let preload = document.head.querySelector(selector);
+
+  if (!preload) {
+    preload = document.createElement("link");
+    preload.rel = "preload";
+    preload.as = "image";
+    preload.dataset.sunwirePreload = "hero-image";
+    document.head.appendChild(preload);
+  }
+
+  preload.href = href;
+  if (srcset) {
+    preload.setAttribute("imagesrcset", srcset);
+    preload.setAttribute("imagesizes", sizes || "100vw");
+  } else {
+    preload.removeAttribute("imagesrcset");
+    preload.removeAttribute("imagesizes");
+  }
+}
+
+export function applyResponsiveImage(imageElement, src, options = {}) {
+  if (!imageElement) return;
+
+  const { alt = "", highPriority = false } = options;
+  const config = buildResponsiveImageConfig(src, options);
 
   imageElement.alt = alt;
-  imageElement.width = width;
-  imageElement.height = height;
+  imageElement.width = config.width;
+  imageElement.height = config.height;
   imageElement.decoding = "async";
   imageElement.loading = highPriority ? "eager" : "lazy";
 
@@ -129,15 +184,21 @@ export function applyResponsiveImage(imageElement, src, options = {}) {
     imageElement.removeAttribute("fetchpriority");
   }
 
-  if (!isUnsplashImage(src)) {
-    imageElement.src = src;
+  if (!config.srcset) {
+    imageElement.src = config.src;
     imageElement.removeAttribute("srcset");
     imageElement.removeAttribute("sizes");
+    if (highPriority) upsertImagePreload(config.src);
     return;
   }
 
-  const widths = [320, 640, 960, 1280, 1600].filter((entry) => entry <= Math.max(width, 1600));
-  imageElement.src = buildUnsplashVariant(src, Math.max(width, 1280));
-  imageElement.srcset = widths.map((entry) => `${buildUnsplashVariant(src, entry)} ${entry}w`).join(", ");
-  imageElement.sizes = sizes;
+  imageElement.src = config.src;
+  imageElement.srcset = config.srcset;
+  imageElement.sizes = config.sizes;
+  if (highPriority) {
+    upsertImagePreload(config.src, {
+      srcset: config.srcset,
+      sizes: config.sizes,
+    });
+  }
 }

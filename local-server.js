@@ -6,7 +6,7 @@ const { URL } = require("url");
 
 const ROOT_DIR = __dirname;
 const PORT = Number(process.env.PORT || 3000);
-const CATEGORY_FILTERS = new Set(["ai", "tech", "entertainment", "sports", "business"]);
+const CATEGORY_FILTERS = new Set(["general", "ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"]);
 const MIME_TYPES = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -56,6 +56,7 @@ const HANDLERS = {
   "/api/health": require("./api/health"),
   "/api/ingest": require("./api/ingest"),
   "/api/news": require("./api/news"),
+  "/api/news-sitemap": require("./api/news-sitemap"),
   "/api/page": require("./api/page"),
   "/api/sidebar": require("./api/sidebar"),
   "/api/sitemap": require("./api/sitemap"),
@@ -74,6 +75,10 @@ function appendQuery(targetPath, params = {}) {
 function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
   if (pathname === "/sitemap.xml") {
     return appendQuery("/api/sitemap", Object.fromEntries(searchParams.entries()));
+  }
+
+  if (pathname === "/news-sitemap.xml") {
+    return appendQuery("/api/news-sitemap", Object.fromEntries(searchParams.entries()));
   }
 
   if (pathname === "/article") {
@@ -101,7 +106,7 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
     return appendQuery("/api/page", params);
   }
 
-  const categoryPageMatch = pathname.match(/^\/(ai|tech|entertainment|sports|business)\/page\/(\d+)$/);
+  const categoryPageMatch = pathname.match(/^\/(general|ai|tech|entertainment|sports|business|politics|jobs|food)\/page\/(\d+)$/);
   if (categoryPageMatch) {
     const params = Object.fromEntries(searchParams.entries());
     params.filter = params.filter || categoryPageMatch[1];
@@ -115,7 +120,7 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
     return appendQuery("/api/page", params);
   }
 
-  const articleMatch = pathname.match(/^\/(ai|tech|entertainment|sports|business|latest)\/([^/]+)$/);
+  const articleMatch = pathname.match(/^\/(general|ai|tech|entertainment|sports|business|politics|jobs|food|latest)\/([^/]+)$/);
   if (articleMatch) {
     const params = Object.fromEntries(searchParams.entries());
     params.category = params.category || articleMatch[1];
@@ -127,7 +132,7 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
     return appendQuery("/api/page", Object.fromEntries(searchParams.entries()));
   }
 
-  return pathname;
+  return appendQuery(pathname, Object.fromEntries(searchParams.entries()));
 }
 
 function enhanceResponse(res) {
@@ -160,26 +165,34 @@ function enhanceResponse(res) {
 
 async function serveStatic(pathname = "", res) {
   const relativePath = pathname === "/" ? "index.html" : pathname.replace(/^\/+/, "");
-  const filePath = path.join(ROOT_DIR, relativePath);
-  const normalizedPath = path.normalize(filePath);
+  const candidatePaths = pathname === "/"
+    ? [relativePath]
+    : [relativePath, `${relativePath}.html`, path.join(relativePath, "index.html")];
 
-  if (!normalizedPath.startsWith(path.normalize(ROOT_DIR))) {
-    res.statusCode = 403;
-    res.end("Forbidden");
-    return true;
+  for (const candidatePath of candidatePaths) {
+    const filePath = path.join(ROOT_DIR, candidatePath);
+    const normalizedPath = path.normalize(filePath);
+
+    if (!normalizedPath.startsWith(path.normalize(ROOT_DIR))) {
+      res.statusCode = 403;
+      res.end("Forbidden");
+      return true;
+    }
+
+    try {
+      const stat = await fsPromises.stat(normalizedPath);
+      if (!stat.isFile()) continue;
+      const ext = path.extname(normalizedPath).toLowerCase();
+      res.statusCode = 200;
+      res.setHeader("Content-Type", MIME_TYPES[ext] || "application/octet-stream");
+      res.end(await fsPromises.readFile(normalizedPath));
+      return true;
+    } catch (_) {
+      // Try the next candidate path.
+    }
   }
 
-  try {
-    const stat = await fsPromises.stat(normalizedPath);
-    if (!stat.isFile()) return false;
-    const ext = path.extname(normalizedPath).toLowerCase();
-    res.statusCode = 200;
-    res.setHeader("Content-Type", MIME_TYPES[ext] || "application/octet-stream");
-    res.end(await fsPromises.readFile(normalizedPath));
-    return true;
-  } catch (_) {
-    return false;
-  }
+  return false;
 }
 
 async function serveNotFound(res) {

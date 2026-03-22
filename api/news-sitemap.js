@@ -1,4 +1,4 @@
-const { buildSitemapXml, fetchAllStories } = require("../lib/server/sitemap");
+const { buildNewsSitemapXml, fetchAllStories } = require("../lib/server/sitemap");
 
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
@@ -8,16 +8,13 @@ module.exports = async (req, res) => {
 
   try {
     const payload = await fetchAllStories();
-    const xml = buildSitemapXml(payload);
+    const xml = buildNewsSitemapXml(payload.stories);
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Cache-Control", "public, s-maxage=900, stale-while-revalidate=1800");
     res.status(200).send(xml);
   } catch (_) {
-    const xml = buildSitemapXml({
-      generatedAt: new Date().toISOString(),
-      stories: [],
-    });
+    const xml = buildNewsSitemapXml([]);
 
     res.setHeader("Content-Type", "application/xml; charset=utf-8");
     res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");

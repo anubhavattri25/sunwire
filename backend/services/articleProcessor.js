@@ -2,12 +2,19 @@ const prisma = require('../config/database');
 const { logEvent } = require('../utils/logger');
 const { pipelineState } = require('./newsIngestor');
 const { slugify } = require('../../lib/seo');
-const { normalizeTitle, classifyCategory } = require('../utils/articleUtils');
+const {
+  MIN_INDEXABLE_ARTICLE_WORDS,
+  buildIndexableArticlePayload,
+  normalizeAuthorName,
+} = require('../../lib/article/googleNews');
+const { normalizeTitle } = require('../utils/articleUtils');
 const { generateSummary } = require('./summaryGenerator');
 const {
   countWords,
 } = require('./contentQuality');
 const {
+  DESK_CATEGORY_CHOICES,
+  classifyArticleCategoryLocally,
   cleanArticleTextForRewrite,
   getLocalAiConfig,
   isLocalAiRewriteEnabled,
@@ -62,6 +69,23 @@ function rewriteHeadline(title = '') {
   return normalizeTitle(title);
 }
 
+function normalizeArticleCategory(value = '', fallback = 'general') {
+  const normalized = String(value || fallback).trim().toLowerCase();
+  return normalized || fallback;
+}
+
+function isTopicalDeskCategory(value = '') {
+  return DESK_CATEGORY_CHOICES.includes(normalizeArticleCategory(value));
+}
+
+function shouldSkipAiCategoryClassification() {
+  return process.env.SUNWIRE_SKIP_AI_CATEGORY_CLASSIFICATION === '1';
+}
+
+function shouldSkipSearchIndexing() {
+  return process.env.SUNWIRE_SKIP_SEARCH_INDEXING === '1';
+}
+
 function parseRawContentMetadata(value = '') {
   if (!value) return {};
 
@@ -87,6 +111,43 @@ function stringifyRawContentMetadata(metadata = {}) {
 
 function buildArticleSlug(article = {}) {
   return slugify(article.slug || article.title || 'story');
+}
+
+function buildSlugDateSuffix(value = '') {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const year = date.getUTCFullYear();
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  return `${year}${month}${day}`;
+}
+
+async function resolveUniqueArticleSlug(article = {}, existingArticle = null) {
+  const baseSlug = buildArticleSlug(article);
+  const dateSuffix = buildSlugDateSuffix(article.published_at || existingArticle?.published_at || '');
+  const candidates = [
+    baseSlug,
+    dateSuffix ? `${baseSlug}-${dateSuffix}` : '',
+  ].filter(Boolean);
+
+  let counter = 2;
+  while (candidates.length < 10) {
+    candidates.push(`${baseSlug}-${dateSuffix || 'story'}-${counter}`);
+    counter += 1;
+  }
+
+  for (const candidate of candidates) {
+    const collision = await prisma.article.findFirst({
+      where: { slug: candidate },
+      select: { id: true, source_url: true },
+    }).catch(() => null);
+
+    if (!collision) return candidate;
+    if (existingArticle?.id && collision.id === existingArticle.id) return candidate;
+    if (article.source_url && collision.source_url === article.source_url) return candidate;
+  }
+
+  return `${baseSlug}-${Date.now()}`;
 }
 
 function createExistingArticleRegistry(existingArticles = []) {
@@ -216,6 +277,8 @@ async function rewriteArticleContent(item = {}, sourceContent = '', options = {}
     ai_rewritten: false,
     primarySourceUrl: item.source_url || existingArticle?.source_url || existingState.metadata.primarySourceUrl || '',
     primarySourceName: item.source || existingArticle?.source || existingState.metadata.primarySourceName || '',
+    classifiedCategory: normalizeArticleCategory(item.category || existingArticle?.category || existingState.metadata.classifiedCategory || 'general'),
+    categoryOrigin: existingState.metadata.categoryOrigin || 'source',
   };
 
   if (existingState.aiRewritten && existingState.content) {
@@ -254,6 +317,8 @@ async function rewriteArticleContent(item = {}, sourceContent = '', options = {}
   let rewriteStatus = 'fallback_used';
   let rewriteError = '';
   let aiRewritten = false;
+  let classifiedCategory = normalizeArticleCategory(item.category || existingArticle?.category || 'general');
+  let categoryOrigin = 'source';
 
   if (isLocalAiRewriteEnabled()) {
     let rewritten = null;
@@ -305,6 +370,16 @@ async function rewriteArticleContent(item = {}, sourceContent = '', options = {}
     title: item.title,
   }).catch(() => '');
   const wordCount = countWords(finalContent);
+  if (!shouldSkipAiCategoryClassification()) {
+    const aiCategory = await classifyArticleCategoryLocally(finalContent || cleanedSourceContent, {
+      topic: item.title,
+      source: item.source,
+    }).catch(() => '');
+    if (isTopicalDeskCategory(aiCategory)) {
+      classifiedCategory = aiCategory;
+      categoryOrigin = 'ai_classified';
+    }
+  }
 
   return {
     summary: generatedSummary || fallbackSummary,
@@ -312,6 +387,8 @@ async function rewriteArticleContent(item = {}, sourceContent = '', options = {}
     word_count: wordCount,
     raw_content: stringifyRawContentMetadata({
       ...rewriteMetadata,
+      classifiedCategory,
+      categoryOrigin,
       rewriteModel: aiRewritten ? aiConfig.model : '',
       rewriteStatus,
       rewriteError,
@@ -332,7 +409,7 @@ async function buildArticlesFromTopics(rawArticles, options = {}) {
     const normalizedItem = {
       ...item,
       title: rewriteHeadline(item.title || 'Untitled'),
-      category: item.category || classifyCategory(item),
+      category: normalizeArticleCategory(item.category || 'general'),
     };
     const existingArticle = await findExistingArticle(normalizedItem, options);
     const content =
@@ -348,6 +425,14 @@ async function buildArticlesFromTopics(rawArticles, options = {}) {
       existingArticle,
     });
 
+    const rewrittenMetadata = parseRawContentMetadata(rewritten.raw_content);
+    const effectiveCategory = normalizeArticleCategory(
+      rewrittenMetadata.classifiedCategory
+      || normalizedItem.category
+      || existingArticle?.category
+      || 'general'
+    );
+
     articles.push({
       title: normalizedItem.title,
       slug: existingArticle?.slug || buildArticleSlug(normalizedItem),
@@ -355,7 +440,7 @@ async function buildArticlesFromTopics(rawArticles, options = {}) {
       content: rewritten.content,
       image_url: normalizedItem.image_url || existingArticle?.image_url || '',
       image_storage_url: normalizedItem.image_storage_url || existingArticle?.image_storage_url || '',
-      category: normalizedItem.category || existingArticle?.category || 'general',
+      category: effectiveCategory,
       source: normalizedItem.source || existingArticle?.source || 'Unknown',
       source_url: normalizedItem.source_url || existingArticle?.source_url || '',
       published_at: normalizedItem.published_at || existingArticle?.published_at || new Date().toISOString(),
@@ -372,7 +457,7 @@ async function buildArticlesFromTopics(rawArticles, options = {}) {
   return articles;
 }
 
-function buildPersistedArticleData(article = {}, existingArticle = null) {
+async function buildPersistedArticleData(article = {}, existingArticle = null) {
   const existingState = getStoredRewriteState(existingArticle || {});
   const incomingMetadata = parseRawContentMetadata(article.raw_content);
   const incomingAiRewritten = Boolean(
@@ -381,31 +466,84 @@ function buildPersistedArticleData(article = {}, existingArticle = null) {
     incomingMetadata.rewriteStatus === 'ai_rewritten'
   );
   const preserveExistingRewrite = existingState.aiRewritten && !incomingAiRewritten;
-  const content = preserveExistingRewrite
+  const baseContent = preserveExistingRewrite
     ? existingState.content
     : String(article.content || article.summary || article.subheadline || article.title || '').trim();
-  const summary = preserveExistingRewrite
+  const baseSummary = preserveExistingRewrite
     ? String(existingArticle?.summary || article.summary || '').trim()
     : String(article.summary || '').trim();
-  const wordCount = preserveExistingRewrite
-    ? Number(existingArticle?.word_count || existingState.wordCount || 0) || null
-    : Number(article.word_count || incomingMetadata.wordCount || countWords(content) || 0) || null;
+  const title = String(article.title || existingArticle?.title || 'Untitled').trim();
+  const category = normalizeArticleCategory(article.category || existingArticle?.category || 'general');
+  const publishedAt = article.published_at || existingArticle?.published_at || new Date().toISOString();
+  const imageUrl = article.image_storage_url || article.image_url || existingArticle?.image_storage_url || existingArticle?.image_url || '';
+  const source = article.source || existingArticle?.source || 'Unknown';
+  const sourceUrl = article.source_url || existingArticle?.source_url || '';
+  const uniqueSlug = await resolveUniqueArticleSlug({
+    ...article,
+    title,
+    source_url: sourceUrl,
+    published_at: publishedAt,
+  }, existingArticle);
+  const authorName = normalizeAuthorName(incomingMetadata.authorName || article.author_name || '');
+  const indexable = buildIndexableArticlePayload({
+    id: existingArticle?.id || article.existing_id || '',
+    slug: uniqueSlug,
+    title,
+    summary: baseSummary,
+    body: baseContent,
+    source,
+    sourceUrl,
+    image: imageUrl,
+    category,
+    publishedAt,
+    modifiedAt: existingArticle?.published_at || publishedAt,
+    tags: Array.isArray(incomingMetadata.tags) ? incomingMetadata.tags : [],
+    related: Array.isArray(incomingMetadata.coverage) ? incomingMetadata.coverage : [],
+    authorName,
+    metaTitle: incomingMetadata.metaTitle || '',
+    metaDescription: incomingMetadata.metaDescription || '',
+    primarySourceUrl: incomingMetadata.primarySourceUrl || sourceUrl,
+    primarySourceName: incomingMetadata.primarySourceName || source,
+  });
+  const content = String(indexable.body || baseContent || '').trim();
+  const summary = String(indexable.summary || baseSummary || '').trim();
+  const wordCount = Number(indexable.wordCount || article.word_count || incomingMetadata.wordCount || countWords(content) || 0) || null;
+  const mergedMetadata = {
+    ...(preserveExistingRewrite ? existingState.metadata : {}),
+    ...incomingMetadata,
+    slug: uniqueSlug,
+    body: content,
+    summary,
+    keyPoints: indexable.keyPoints,
+    deepDive: indexable.deepDive,
+    indiaPulse: indexable.indiaPulse,
+    background: indexable.background,
+    factSheet: indexable.factSheet,
+    tags: indexable.tags,
+    metaTitle: indexable.metaTitle,
+    metaDescription: indexable.metaDescription,
+    structuredData: indexable.structuredData,
+    primarySourceUrl: indexable.primarySourceUrl,
+    primarySourceName: indexable.primarySourceName,
+    authorName: indexable.authorName,
+    wordCount,
+    estimatedReadingTime: indexable.estimatedReadingTime,
+    sourceSummary: summary,
+  };
 
   return {
-    title: article.title,
-    slug: buildArticleSlug(article),
+    title,
+    slug: uniqueSlug,
     summary,
     content,
     word_count: wordCount,
-    raw_content: preserveExistingRewrite
-      ? existingArticle?.raw_content || article.raw_content || null
-      : article.raw_content || existingArticle?.raw_content || null,
+    raw_content: stringifyRawContentMetadata(mergedMetadata),
     image_url: article.image_url || existingArticle?.image_url || null,
     image_storage_url: article.image_storage_url || existingArticle?.image_storage_url || null,
-    category: article.category || existingArticle?.category || 'general',
-    source: article.source || existingArticle?.source || 'Unknown',
-    source_url: article.source_url || existingArticle?.source_url || '',
-    published_at: new Date(article.published_at || existingArticle?.published_at || new Date()),
+    category,
+    source,
+    source_url: sourceUrl,
+    published_at: new Date(publishedAt || new Date()),
     views: Number(article.views || existingArticle?.views || 0),
     shares: Number(article.shares || existingArticle?.shares || 0),
     ai_summary: article.subheadline || null,
@@ -421,7 +559,16 @@ async function saveArticle(article, options = {}) {
         select: EXISTING_ARTICLE_SELECT,
       }).catch(() => null)
     : await findExistingArticle(article, options);
-  const data = buildPersistedArticleData(article, existingArticle);
+  const data = await buildPersistedArticleData(article, existingArticle);
+  if (!data.content || Number(data.word_count || 0) < MIN_INDEXABLE_ARTICLE_WORDS) {
+    logEvent('article.rejected', {
+      stage: 'persist',
+      reasons: [`final_word_count_below_${MIN_INDEXABLE_ARTICLE_WORDS}`],
+      title: article.title,
+      source_url: article.source_url || null,
+    });
+    return null;
+  }
   const saved = existingArticle
     ? await prisma.article.update({
         where: { id: existingArticle.id },
@@ -487,7 +634,7 @@ async function processRawArticle(article = {}, recentArticles = [], options = {}
   const [processed] = await buildArticlesFromTopics([{
     ...article,
     title: rewriteHeadline(article.title || 'Untitled'),
-    category: article.category || classifyCategory(article),
+    category: normalizeArticleCategory(article.category || 'general'),
   }], {
     headlineExists: options.headlineExists,
   });
@@ -566,6 +713,9 @@ async function processPendingArticles(rawArticles = pipelineState.pendingRawArti
         existingArticle: matchedExisting,
         existingRegistry,
       });
+      if (!saved) {
+        continue;
+      }
 
       inserted += 1;
       workingSet.push(saved);
@@ -590,6 +740,10 @@ async function processPendingArticles(rawArticles = pipelineState.pendingRawArti
   pipelineState.pendingRawArticles = [];
   const { invalidateCache } = require('../utils/cache');
   await invalidateCache();
+  if (inserted > 0 && !shouldSkipSearchIndexing()) {
+    const { submitSearchConsoleSitemaps } = require('../utils/searchIndexing');
+    await submitSearchConsoleSitemaps().catch(() => null);
+  }
 
   logEvent('articles.processed', {
     processed: generatedArticles.length,

@@ -1,6 +1,7 @@
 const { findStoryBySlug } = require("../../lib/server/backendCompat");
 
-const ARTICLE_CACHE_HEADER = "public, s-maxage=300, stale-while-revalidate=600";
+const ARTICLE_CACHE_HEADER = "public, max-age=60, stale-while-revalidate=300";
+const ARTICLE_CDN_CACHE_HEADER = "public, s-maxage=300, stale-while-revalidate=600";
 
 function toArticlePayload(story = {}) {
   const title = story.title || "Story";
@@ -41,10 +42,14 @@ module.exports = async (req, res) => {
   const story = await findStoryBySlug({ slug, category }).catch(() => null);
   if (!story) {
     res.setHeader("Cache-Control", ARTICLE_CACHE_HEADER);
+    res.setHeader("CDN-Cache-Control", ARTICLE_CDN_CACHE_HEADER);
+    res.setHeader("Vercel-CDN-Cache-Control", ARTICLE_CDN_CACHE_HEADER);
     res.status(404).json({ error: "Article not found" });
     return;
   }
 
   res.setHeader("Cache-Control", ARTICLE_CACHE_HEADER);
+  res.setHeader("CDN-Cache-Control", ARTICLE_CDN_CACHE_HEADER);
+  res.setHeader("Vercel-CDN-Cache-Control", ARTICLE_CDN_CACHE_HEADER);
   res.status(200).json(toArticlePayload(story));
 };

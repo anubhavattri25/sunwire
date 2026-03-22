@@ -7,7 +7,7 @@ const {
 } = require('../utils/rssParser');
 const { logEvent } = require('../utils/logger');
 const { validateSourceArticle } = require('./contentQuality');
-const { classifyCategory, normalizeTitle } = require('../utils/articleUtils');
+const { normalizeTitle } = require('../utils/articleUtils');
 const { scrapeArticle } = require('../utils/articleScraper');
 const { cleanText, domainFromUrl } = require('../../lib/article/shared');
 
@@ -20,10 +20,89 @@ const pipelineState = {
   pendingRawArticles: [],
 };
 const RSS_SOURCE_ITEM_LIMIT = Math.max(1, Number.parseInt(process.env.SUNWIRE_RSS_ITEM_LIMIT || '6', 10) || 6);
+const MIN_VALID_ARTICLE_CONTENT_LENGTH = 1500;
+const SHORT_RSS_CONTENT_THRESHOLD = 1500;
+
+function normalizeSourceCategory(value = 'general') {
+  return String(value || 'general').trim().toLowerCase() || 'general';
+}
+
+function normalizeSourceLanguage(value = 'en') {
+  return String(value || 'en').trim().toLowerCase() || 'en';
+}
+
+function parseCsvEnvSet(value = '') {
+  return new Set(
+    String(value || '')
+      .split(',')
+      .map((entry) => String(entry || '').trim().toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+function filterSourcesByRuntimeConfig(sources = []) {
+  const categoryFilter = parseCsvEnvSet(
+    process.env.SUNWIRE_SOURCE_CATEGORIES || process.env.SUNWIRE_INGEST_CATEGORIES || ''
+  );
+  const sourceNameFilter = parseCsvEnvSet(process.env.SUNWIRE_SOURCE_NAMES || '');
+
+  return sources.filter((source) => {
+    const sourceCategory = normalizeSourceCategory(source.category || 'general');
+    const sourceName = String(source.name || '').trim().toLowerCase();
+
+    if (categoryFilter.size > 0 && !categoryFilter.has(sourceCategory)) {
+      return false;
+    }
+
+    if (sourceNameFilter.size > 0 && !sourceNameFilter.has(sourceName)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function isIndianSource(source = {}) {
+  return String(source.country || '').trim().toLowerCase() === 'india';
+}
+
+function parsePublishedAt(value = '') {
+  const timestamp = new Date(value).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function isValidArticle(article = {}) {
+  const cleanedContent = cleanText(article.content || '');
+  return Boolean(
+    article.title
+    && cleanedContent
+    && cleanedContent.length > MIN_VALID_ARTICLE_CONTENT_LENGTH
+    && normalizeSourceLanguage(article.language) === 'en'
+  );
+}
+
+function sortSourcesByPriority(sources = []) {
+  return [...sources].sort((left, right) => {
+    const countryDelta = Number(isIndianSource(right)) - Number(isIndianSource(left));
+    if (countryDelta !== 0) return countryDelta;
+    return String(left.name || '').localeCompare(String(right.name || ''));
+  });
+}
+
+function prioritizeArticles(articles = []) {
+  return [...articles].sort((left, right) => {
+    const countryDelta = Number(isIndianSource(right)) - Number(isIndianSource(left));
+    if (countryDelta !== 0) return countryDelta;
+
+    const contentDelta = cleanText(right.content || '').length - cleanText(left.content || '').length;
+    if (contentDelta !== 0) return contentDelta;
+
+    return parsePublishedAt(right.published_at) - parsePublishedAt(left.published_at);
+  });
+}
 
 function getSourceConfig() {
-  return [
-    
+  return sortSourcesByPriority(filterSourcesByRuntimeConfig([
     {
       name: "BBC",
       type: "rss",
@@ -40,13 +119,15 @@ function getSourceConfig() {
       name: "TechCrunch",
       type: "rss",
       url: "https://techcrunch.com/feed/",
-      category: "tech"
+      category: "tech",
+      language: "en"
     },
     {
       name: "The Verge",
       type: "rss",
       url: "https://www.theverge.com/rss/index.xml",
       category: "tech",
+      language: "en",
       preferPublisherScrape: true,
     },
     {
@@ -60,8 +141,347 @@ function getSourceConfig() {
       type: "rss",
       url: "https://www.hollywoodreporter.com/feed/",
       category: "entertainment"
+    },
+    {
+      name: "Hindustan Times",
+      type: "rss",
+      url: "https://www.hindustantimes.com/feeds/rss/topnews/rssfeed.xml",
+      category: "general",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Times of India",
+      type: "rss",
+      url: "https://timesofindia.indiatimes.com/rssfeeds/-2128936835.cms",
+      category: "general",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "India Today",
+      type: "rss",
+      url: "https://www.indiatoday.in/rss/home",
+      category: "general",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "News18",
+      type: "rss",
+      url: "https://www.news18.com/rss/india.xml",
+      category: "general",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "The Print",
+      type: "rss",
+      url: "https://theprint.in/feed/",
+      category: "general",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Analytics India Magazine",
+      type: "rss",
+      url: "https://analyticsindiamag.com/feed/",
+      category: "ai",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "AI News",
+      type: "rss",
+      url: "https://artificialintelligence-news.com/feed/",
+      category: "ai",
+      language: "en"
+    },
+    {
+      name: "VentureBeat AI",
+      type: "rss",
+      url: "https://venturebeat.com/category/ai/feed/",
+      category: "ai",
+      language: "en"
+    },
+    {
+      name: "MIT Tech Review",
+      type: "rss",
+      url: "https://www.technologyreview.com/feed/",
+      category: "ai",
+      language: "en"
+    },
+    {
+      name: "Towards Data Science",
+      type: "rss",
+      url: "https://towardsdatascience.com/feed",
+      category: "ai",
+      language: "en"
+    },
+    {
+      name: "Wired",
+      type: "rss",
+      url: "https://www.wired.com/feed/rss",
+      category: "tech",
+      language: "en"
+    },
+    {
+      name: "Gadgets 360",
+      type: "rss",
+      url: "https://feeds.feedburner.com/gadgets360-latest",
+      category: "tech",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "YourStory",
+      type: "rss",
+      url: "https://yourstory.com/feed",
+      category: "tech",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Bollywood Hungama",
+      type: "rss",
+      url: "https://www.bollywoodhungama.com/feed/",
+      category: "entertainment",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Filmfare",
+      type: "rss",
+      url: "https://www.filmfare.com/rss.xml",
+      category: "entertainment",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Pinkvilla",
+      type: "rss",
+      url: "https://www.pinkvilla.com/feed",
+      category: "entertainment",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Koimoi",
+      type: "rss",
+      url: "https://www.koimoi.com/feed/",
+      category: "entertainment",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "India Today Entertainment",
+      type: "rss",
+      url: "https://www.indiatoday.in/rss/1206578",
+      category: "entertainment",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "ESPN Cricinfo",
+      type: "rss",
+      url: "https://www.espncricinfo.com/rss/content/story/feeds/0.xml",
+      category: "sports",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Sportskeeda",
+      type: "rss",
+      url: "https://www.sportskeeda.com/rss",
+      category: "sports",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Cricbuzz",
+      type: "rss",
+      url: "https://www.cricbuzz.com/rss-feeds/news",
+      category: "sports",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "The Hindu Sports",
+      type: "rss",
+      url: "https://www.thehindu.com/sport/?service=rss",
+      category: "sports",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Indian Express Sports",
+      type: "rss",
+      url: "https://indianexpress.com/section/sports/feed/",
+      category: "sports",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Moneycontrol",
+      type: "rss",
+      url: "https://www.moneycontrol.com/rss/business.xml",
+      category: "business",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Economic Times",
+      type: "rss",
+      url: "https://economictimes.indiatimes.com/rssfeedsdefault.cms",
+      category: "business",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Business Standard",
+      type: "rss",
+      url: "https://www.business-standard.com/rss/home_page_top_stories.rss",
+      category: "business",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "LiveMint",
+      type: "rss",
+      url: "https://www.livemint.com/rss/homepage",
+      category: "business",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Financial Express",
+      type: "rss",
+      url: "https://www.financialexpress.com/feed/",
+      category: "business",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "The Wire",
+      type: "rss",
+      url: "https://thewire.in/rss",
+      category: "politics",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Scroll",
+      type: "rss",
+      url: "https://scroll.in/feeds/all.rss",
+      category: "politics",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "NDTV Politics",
+      type: "rss",
+      url: "https://feeds.feedburner.com/ndtvnews-politics",
+      category: "politics",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "India Today Politics",
+      type: "rss",
+      url: "https://www.indiatoday.in/rss/1206514",
+      category: "politics",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "The Hindu Politics",
+      type: "rss",
+      url: "https://www.thehindu.com/news/national/?service=rss",
+      category: "politics",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Sarkari Result",
+      type: "rss",
+      url: "https://www.sarkariresult.com/rss.xml",
+      category: "jobs",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "FreeJobAlert",
+      type: "rss",
+      url: "https://www.freejobalert.com/rss.xml",
+      category: "jobs",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Jagran Josh",
+      type: "rss",
+      url: "https://www.jagranjosh.com/rss/jobs.xml",
+      category: "jobs",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "FreshersLive",
+      type: "rss",
+      url: "https://www.fresherslive.com/rss",
+      category: "jobs",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Govt Jobs Updates",
+      type: "rss",
+      url: "https://www.indgovtjobs.in/feeds/posts/default",
+      category: "jobs",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Sanjeev Kapoor",
+      type: "rss",
+      url: "https://www.sanjeevkapoor.com/Recipe/rss",
+      category: "food",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Archana's Kitchen",
+      type: "rss",
+      url: "https://www.archanaskitchen.com/rss",
+      category: "food",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Veg Recipes of India",
+      type: "rss",
+      url: "https://www.vegrecipesofindia.com/feed/",
+      category: "food",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "NDTV Food",
+      type: "rss",
+      url: "https://feeds.feedburner.com/ndtvfood",
+      category: "food",
+      language: "en",
+      country: "india"
+    },
+    {
+      name: "Indian Healthy Recipes",
+      type: "rss",
+      url: "https://www.indianhealthyrecipes.com/feed/",
+      category: "food",
+      language: "en",
+      country: "india"
     }
-  ];
+  ]));
 }
 
 function normalizeArticle(article = {}) {
@@ -70,13 +490,15 @@ function normalizeArticle(article = {}) {
     content: article.content || article.summary || article.snippet || '',
     summary: article.summary || article.snippet || '',
     image_url: article.image_url || '',
-    category: article.category || classifyCategory(article),
+    category: normalizeSourceCategory(article.category || 'general'),
     source: article.source || 'Unknown',
     source_url: article.source_url || article.link || '',
     published_at: article.published_at || new Date().toISOString(),
+    language: normalizeSourceLanguage(article.language || 'en'),
+    country: String(article.country || '').trim().toLowerCase(),
     views: Number(article.views || 0),
     shares: Number(article.shares || 0),
-    word_count: Number(article.word_count || article.article_word_count || 0),
+    word_count: Number(article.word_count || article.article_word_count || cleanText(article.content || '').split(/\s+/).filter(Boolean).length || 0),
     raw_source_payload: article.raw_source_payload || null,
   };
 }
@@ -86,7 +508,7 @@ async function fetchFullArticle(url) {
   try {
     const article = await scrapeArticle(url);
     return {
-      content: String(article.content || '').slice(0, 3000),
+      content: String(article.content || '').slice(0, 20000),
       image_url: String(article.imageUrl || '').trim(),
     };
   } catch (err) {
@@ -108,7 +530,7 @@ async function fetchRssSource(source) {
       item.summary ||
       item.description ||
       "";
-    let content = feedContent;
+    let content = String(feedContent || '');
     let imageUrl =
       item.enclosure?.url ||
       item["media:content"]?.url ||
@@ -125,10 +547,10 @@ async function fetchRssSource(source) {
       }
     }
 
-    if (!source.preferPublisherScrape && content.length < 800 && item.link) {
+    if (!source.preferPublisherScrape && cleanText(content).length < SHORT_RSS_CONTENT_THRESHOLD && item.link) {
       const scrapedArticle = await fetchFullArticle(item.link);
 
-      if (scrapedArticle.content.length > content.length) {
+      if (cleanText(scrapedArticle.content).length > cleanText(content).length) {
         content = scrapedArticle.content;
       }
       if (!imageUrl && scrapedArticle.image_url) {
@@ -136,11 +558,7 @@ async function fetchRssSource(source) {
       }
     }
 
-    if (!content || content.length <= 120) {
-      return null;
-    }
-
-    return normalizeArticle({
+    const normalized = normalizeArticle({
       title: item.title,
       summary: item.contentSnippet || item.summary || item.description,
       content,
@@ -148,8 +566,17 @@ async function fetchRssSource(source) {
       source: source.name,
       source_url: item.link,
       published_at: item.isoDate || item.pubDate || new Date().toISOString(),
+      category: source.category,
+      language: source.language,
+      country: source.country,
       raw_source_payload: item,
     });
+
+    if (!isValidArticle(normalized)) {
+      return null;
+    }
+
+    return normalized;
   }));
 
   return articles.filter(Boolean);
@@ -186,7 +613,7 @@ async function fetchGoogleSearchSource(source) {
         return null;
       }
 
-      return normalizeArticle({
+      const normalized = normalizeArticle({
         title: scraped.title || item.title,
         summary: scraped.summary || snippet,
         content: sourceValidation.body,
@@ -208,6 +635,21 @@ async function fetchGoogleSearchSource(source) {
           },
         },
       });
+
+      if (!isValidArticle(normalized)) {
+        logEvent('source.item.rejected', {
+          stage: 'google_rss_scrape',
+          source: source.name,
+          title: item.title,
+          googleNewsUrl,
+          publisherUrl: scraped.url || publisherUrl,
+          reasons: ['article_quality_filter_failed'],
+          contentLength: String(normalized.content || '').length,
+        });
+        return null;
+      }
+
+      return normalized;
     } catch (error) {
       logEvent('source.item.error', {
         stage: 'google_rss_scrape',
@@ -294,7 +736,7 @@ async function ingestNewsSources() {
   const results = await Promise.all(getSourceConfig().map(fetchSource));
   const online = results.filter((result) => result.ok).map((result) => result.source);
   const failed = results.filter((result) => !result.ok).map((result) => ({ source: result.source, error: result.error }));
-  const rawArticles = results.flatMap((result) => result.articles);
+  const rawArticles = prioritizeArticles(results.flatMap((result) => result.articles));
 
   pipelineState.lastFetchAt = new Date().toISOString();
   pipelineState.sourcesOnline = online;
@@ -328,8 +770,10 @@ async function getStatusCounts() {
 }
 
 module.exports = {
+  fetchSource,
   ingestNewsSources,
   pipelineState,
+  prioritizeArticles,
   getSourceConfig,
   getStatusCounts,
 };

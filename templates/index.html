@@ -1,15 +1,6 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-GK3J8G4KTV"></script>
-  <script>
-    window.__SUNWIRE_GA_ID = "G-GK3J8G4KTV";
-    window.dataLayer = window.dataLayer || [];
-    function gtag(){dataLayer.push(arguments);}
-    window.gtag = window.gtag || gtag;
-    gtag("js", new Date());
-    gtag("config", "G-GK3J8G4KTV", { send_page_view: false, anonymize_ip: true });
-  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SunWire - Latest AI, Tech, Entertainment and Sports News</title>
@@ -26,7 +17,6 @@
   <meta name="twitter:title" content="SunWire - Latest AI, Tech, Entertainment and Sports News" />
   <meta name="twitter:description" content="Fresh AI, tech, entertainment, sports, and business stories with practical summaries and daily highlights." />
   <meta name="twitter:image" content="https://sunwire.in/social-card.svg" />
-  <script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105" crossorigin="anonymous"></script>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -34,9 +24,9 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/styles.css?v=20260311-30" />
+  <link rel="stylesheet" href="/styles.css?v=20260322-7" />
 </head>
-<body>
+<body data-home-mode="home">
   <div class="noise"></div>
 
   <header class="site-header">
@@ -101,7 +91,7 @@
 
   <main class="shell home-main">
     <section class="home-top-layout">
-      <div class="home-primary">
+      <div class="home-feature-stack">
         <section class="hero-section" id="heroSection" aria-live="polite">
           <div class="hero-section__copy">
             <span class="hero-section__kicker" id="heroDeskChip">Live Desk</span>
@@ -166,30 +156,32 @@
       </aside>
     </section>
 
-    <section class="category-zone" aria-labelledby="categoryNewsTitle">
-      <div class="section-head">
-        <div>
-          <p class="section-caption">Front page by desk</p>
-          <h2 class="section-title" id="categoryNewsTitle">Category News Grid</h2>
+    <div class="home-primary">
+      <section class="category-zone" aria-labelledby="categoryNewsTitle">
+        <div class="section-head">
+          <div>
+            <p class="section-caption">Front page by desk</p>
+            <h2 class="section-title" id="categoryNewsTitle">Category News Grid</h2>
+          </div>
+          <div class="section-head__actions">
+            <button class="ghost-button" id="showAllButton" type="button">Show All</button>
+            <span class="desk-chip" id="activeDeskChip">All</span>
+          </div>
         </div>
-        <div class="section-head__actions">
-          <button class="ghost-button" id="showAllButton" type="button">Show All</button>
-          <span class="desk-chip" id="activeDeskChip">All</span>
-        </div>
-      </div>
-      <div class="desk-panels desk-panels--top" id="categorySectionsGrid" aria-live="polite"></div>
-    </section>
+        <div class="desk-panels desk-panels--top" id="categorySectionsGrid" aria-live="polite"></div>
+      </section>
 
-    <section class="more-news-shell" aria-labelledby="moreNewsTitle">
-      <div class="section-head">
-        <div>
-          <p class="section-caption">Depth coverage</p>
-          <h2 class="section-title" id="moreNewsTitle">More News Sections</h2>
+      <section class="more-news-shell" aria-labelledby="moreNewsTitle">
+        <div class="section-head">
+          <div>
+            <p class="section-caption">Depth coverage</p>
+            <h2 class="section-title" id="moreNewsTitle">More News</h2>
+          </div>
+          <span class="section-head__meta" id="livePulseText">Scanning the live wire</span>
         </div>
-        <span class="section-head__meta" id="livePulseText">Scanning the live wire</span>
-      </div>
-      <div class="desk-panels desk-panels--expanded" id="moreNewsGrid" aria-live="polite"></div>
-    </section>
+        <div class="news-card-grid news-card-grid--homepage" id="moreNewsGrid" aria-live="polite"></div>
+      </section>
+    </div>
 
   </main>
 
@@ -208,9 +200,6 @@
            data-ad-slot="9518443817"
            data-ad-format="auto"
            data-full-width-responsive="true"></ins>
-      <script>
-        (adsbygoogle = window.adsbygoogle || []).push({});
-      </script>
     </div>
   </section>
 
@@ -224,6 +213,12 @@
         <span>sunwire.in</span>
         <span>Latest signals, cleanly organized.</span>
         <span>Founder Anubhav Attri</span>
+        <div class="site-footer__links" aria-label="Site information">
+          <a class="site-footer__link" href="/about-us">About Us</a>
+          <a class="site-footer__link" href="/contact-us">Contact Us</a>
+          <a class="site-footer__link" href="/privacy-policy">Privacy Policy</a>
+          <a class="site-footer__link" href="/terms-and-conditions">Terms &amp; Conditions</a>
+        </div>
       </div>
     </div>
   </footer>
@@ -260,6 +255,45 @@
     </section>
   </template>
 
-    <script type="module" src="/app.js?v=20260315-5"></script>
-  </body>
+  <script>
+    (function () {
+      const adSlot = document.querySelector(".ad-slot");
+      if (!adSlot) return;
+
+      function bootAds() {
+        if (window.__SUNWIRE_ADS_BOOTED) return;
+        window.__SUNWIRE_ADS_BOOTED = true;
+
+        const script = document.createElement("script");
+        script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105";
+        script.async = true;
+        script.crossOrigin = "anonymous";
+        script.onload = () => {
+          document.querySelectorAll(".adsbygoogle").forEach(() => {
+            try {
+              (window.adsbygoogle = window.adsbygoogle || []).push({});
+            } catch (_) {
+              // Ignore ad bootstrap errors.
+            }
+          });
+        };
+        document.head.appendChild(script);
+      }
+
+      if (!("IntersectionObserver" in window)) {
+        window.addEventListener("load", bootAds, { once: true });
+        return;
+      }
+
+      const observer = new IntersectionObserver((entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return;
+        observer.disconnect();
+        bootAds();
+      }, { rootMargin: "420px 0px" });
+
+      observer.observe(adSlot);
+    })();
+  </script>
+  <script type="module" src="/app.js?v=20260322-7"></script>
+</body>
 </html>

@@ -14,9 +14,10 @@ const MAX_REWRITE_INPUT_CHARS = 18000;
 const MAX_OLLAMA_INPUT_CHARS = 4200;
 const IMPORTANT_SENTENCE_LIMIT = 24;
 const OLLAMA_NUM_PREDICT = 360;
-const MIN_REWRITTEN_WORDS = 140;
-const PREFERRED_REWRITE_WORDS = 220;
-const MIN_REWRITTEN_PARAGRAPHS = 2;
+const MIN_REWRITTEN_WORDS = 200;
+const PREFERRED_REWRITE_WORDS = 560;
+const MIN_REWRITTEN_PARAGRAPHS = 4;
+const DESK_CATEGORY_CHOICES = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
 
 const CLEANUP_LINE_PATTERNS = [
   /^\s*(advertisement|ad|sponsored)\s*$/i,
@@ -186,11 +187,51 @@ function buildRewritePrompt(cleanedArticle = '', options = {}, runtime = {}) {
       'Use only facts from the source.',
       'Preserve names, dates, numbers, and quotes.',
       `Write at least ${preferredMinWords} words, ideally ${preferredMinWords}-${preferredMaxWords} words.`,
-      'Return only the rewritten article body in 4 to 6 short paragraphs.',
+      'Return only the rewritten article body in 4 to 6 clear paragraphs.',
       'Do not write a short summary.',
       'Do not use bullets or headings.',
     ].join(' '),
     user: cleanedArticle,
+  };
+}
+
+function normalizeDeskCategory(value = '') {
+  const normalized = cleanText(String(value || '')).toLowerCase();
+  return DESK_CATEGORY_CHOICES.includes(normalized) ? normalized : '';
+}
+
+function fallbackDeskCategoryClassifier(text = '', options = {}) {
+  const haystack = cleanText([
+    options.topic,
+    options.source,
+    text,
+  ].filter(Boolean).join(' ')).toLowerCase();
+
+  if (/(openai|anthropic|gemini|llm|model|ai agent|artificial intelligence|machine learning|prompt|inference)/i.test(haystack)) return 'ai';
+  if (/(software|startup|cloud|cybersecurity|chip|semiconductor|device|platform|api|browser|app|saas|database|technology)/i.test(haystack)) return 'tech';
+  if (/(movie|film|series|show|streaming|ott|box office|actor|actress|celebrity|bollywood|hollywood|music|album|trailer)/i.test(haystack)) return 'entertainment';
+  if (/(cricket|football|ipl|match|tournament|nba|nfl|goal|sports|athlete|league|cup|espn|cricbuzz)/i.test(haystack)) return 'sports';
+  if (/(stocks|market|earnings|funding|startup funding|revenue|profit|loss|ipo|investor|investment|business|economy|bank|finance)/i.test(haystack)) return 'business';
+  if (/(politics|minister|prime minister|parliament|government|election|policy|cabinet|lawmakers|president|supreme court|congress|senate)/i.test(haystack)) return 'politics';
+  if (/(jobs|job|hiring|recruitment|vacancy|vacancies|career|careers|internship|government job|employment news|sarkari)/i.test(haystack)) return 'jobs';
+  if (/(recipe|recipes|food|restaurant|chef|cuisine|kitchen|momos|paneer|coffee|tea|dining|grocery)/i.test(haystack)) return 'food';
+  return '';
+}
+
+function buildCategoryPrompt(cleanedArticle = '', options = {}) {
+  return {
+    system: [
+      'Classify the article into exactly one topical desk.',
+      `Choose only one from: ${DESK_CATEGORY_CHOICES.join(', ')}.`,
+      'Return only the category slug.',
+      'Base the answer on the article topic, not the publisher.',
+    ].join(' '),
+    user: [
+      `Title: ${cleanText(options.topic || 'Story')}`,
+      options.source ? `Source: ${cleanText(options.source)}` : '',
+      '',
+      cleanedArticle,
+    ].filter(Boolean).join('\n'),
   };
 }
 
@@ -274,6 +315,38 @@ async function requestOllamaRewrite(config, prompt, runtime) {
     response?.data?.response ||
     ''
   );
+}
+
+async function classifyArticleCategoryLocally(sourceContent = '', options = {}) {
+  const config = getLocalAiConfig();
+  if (config.provider !== DEFAULT_AI_PROVIDER) {
+    return fallbackDeskCategoryClassifier(sourceContent, options);
+  }
+
+  const cleanedArticle = cleanArticleTextForRewrite(sourceContent);
+  const importantContent = extractImportantContent(cleanedArticle, {
+    inputChars: 2200,
+    sentenceLimit: 14,
+  });
+  if (!importantContent) {
+    return fallbackDeskCategoryClassifier(sourceContent, options);
+  }
+
+  try {
+    const response = await requestOllamaRewrite(
+      config,
+      buildCategoryPrompt(importantContent, options),
+      {
+        timeoutMs: Math.min(getOllamaRuntimeConfig().timeoutMs, 90000),
+        numPredict: 24,
+        numCtx: 2048,
+        temperature: 0.1,
+      }
+    );
+    return normalizeDeskCategory(response) || fallbackDeskCategoryClassifier(sourceContent, options);
+  } catch (_) {
+    return fallbackDeskCategoryClassifier(sourceContent, options);
+  }
 }
 
 async function rewriteArticleLocally(sourceContent = '', options = {}) {
@@ -363,7 +436,9 @@ module.exports = {
   DEFAULT_AI_PROVIDER,
   DEFAULT_OLLAMA_BASE_URL,
   DEFAULT_OLLAMA_MODEL,
+  DESK_CATEGORY_CHOICES,
   OLLAMA_CHAT_PATH,
+  classifyArticleCategoryLocally,
   cleanArticleTextForRewrite,
   extractImportantContent,
   getLocalAiConfig,

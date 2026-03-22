@@ -10,7 +10,9 @@
     "@prisma/client": "^6.19.2",
     "axios": "^1.13.6",
     "cheerio": "^1.2.0",
+    "ioredis": "^5.10.1",
     "prisma": "^6.19.2",
-    "rss-parser": "^3.13.0"
+    "rss-parser": "^3.13.0",
+    "string-similarity-js": "^2.1.4"
   }
 }

@@ -4,7 +4,7 @@ const {
 } = require("../../lib/article/shared");
 
 const MIN_SOURCE_BODY_WORDS = 350;
-const MIN_FINAL_ARTICLE_WORDS = 400;
+const MIN_FINAL_ARTICLE_WORDS = 200;
 const PLACEHOLDER_OR_FILLER_PATTERNS = [
   /\bplaceholder\b/i,
   /\blorem ipsum\b/i,
@@ -96,7 +96,7 @@ function validateFinalArticle(article = {}) {
   const reasons = [];
 
   if (!content) reasons.push("article_content_missing");
-  if (content && wordCount < MIN_FINAL_ARTICLE_WORDS) reasons.push("final_word_count_below_400");
+  if (content && wordCount < MIN_FINAL_ARTICLE_WORDS) reasons.push(`final_word_count_below_${MIN_FINAL_ARTICLE_WORDS}`);
   if (!paragraphs.length || paragraphs.length < 2) reasons.push("paragraphs_missing");
   if (containsPlaceholderOrFiller(content)) reasons.push("placeholder_or_filler_text");
 

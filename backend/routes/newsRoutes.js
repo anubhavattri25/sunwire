@@ -13,16 +13,32 @@ const {
 
 const router = express.Router();
 const PAGE_SIZE = 12;
+const PUBLIC_API_CACHE_HEADER = 'public, max-age=60, stale-while-revalidate=120';
 const CATEGORY_MAP = {
-  ai: 'AI',
-  tech: 'Tech',
-  sports: 'Sports',
-  entertainment: 'Entertainment',
+  all: null,
+  latest: null,
+  random: null,
+  general: 'general',
+  ai: 'ai',
+  tech: 'tech',
+  sports: 'sports',
+  entertainment: 'entertainment',
+  business: 'business',
+  politics: 'politics',
+  jobs: 'jobs',
+  food: 'food',
 };
 
 function normalizeCategory(input) {
   if (!input) return null;
-  return CATEGORY_MAP[String(input).trim().toLowerCase()] || null;
+  const normalized = String(input).trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(CATEGORY_MAP, normalized)
+    ? CATEGORY_MAP[normalized]
+    : null;
+}
+
+function setPublicApiCacheHeaders(res) {
+  res.setHeader('Cache-Control', PUBLIC_API_CACHE_HEADER);
 }
 
 router.get('/news', async (req, res, next) => {
@@ -31,12 +47,16 @@ router.get('/news', async (req, res, next) => {
 
     const page = Math.max(Number.parseInt(req.query.page || '1', 10), 1);
     const requestedCategory = String(req.query.category || '').trim();
+    const requestedMode = requestedCategory.toLowerCase();
     const category = requestedCategory && requestedCategory.toLowerCase() !== 'all'
       ? normalizeCategory(requestedCategory)
       : null;
     const cacheKey = buildCacheKey('news', category || 'all', `page-${page}`);
     const cached = await getCachedJson(cacheKey);
-    if (cached) return res.json(cached);
+    if (cached) {
+      setPublicApiCacheHeaders(res);
+      return res.json(cached);
+    }
 
     const where = category ? { category } : {};
     const [total, records] = await Promise.all([
@@ -58,11 +78,12 @@ router.get('/news', async (req, res, next) => {
       pageSize: PAGE_SIZE,
       total,
       hasMore: page * PAGE_SIZE < total,
-      category,
+      category: requestedMode === 'random' ? 'random' : category,
       articles: records.map(toApiArticle),
     };
 
     await setCachedJson(cacheKey, payload, 120);
+    setPublicApiCacheHeaders(res);
     return res.json(payload);
   } catch (error) {
     return next(error);
@@ -75,6 +96,7 @@ router.post('/view', async (req, res, next) => {
 
     const { id } = req.body || {};
     if (!id) return res.status(400).json({ error: 'Article id is required.' });
+    res.setHeader('Cache-Control', 'no-store');
 
     const article = await prisma.article.update({
       where: { id },
@@ -91,6 +113,7 @@ router.post('/view', async (req, res, next) => {
 
 router.get('/system-status', async (req, res, next) => {
   try {
+    res.setHeader('Cache-Control', 'no-store');
     const redis = await safeConnectRedis();
     const aiConfig = getLocalAiConfig();
     const databaseConfigured = Boolean(process.env.DATABASE_URL);

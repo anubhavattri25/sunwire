@@ -1,3 +1,4 @@
+const { createHash } = require("node:crypto");
 const {
   buildArticlePath,
   buildArticleState,
@@ -7,6 +8,11 @@ const {
   readTemplate,
   slugify,
 } = require("../lib/seo");
+const {
+  DEFAULT_AUTHOR_NAME,
+  MIN_INDEXABLE_ARTICLE_WORDS,
+  buildIndexableArticlePayload,
+} = require("../lib/article/googleNews");
 const articleHandler = require("./article");
 const { findStoryByIdentity, findStoryBySlug } = require("../lib/server/backendCompat");
 const {
@@ -16,6 +22,8 @@ const {
 const { buildArticleRelatedSets, renderArticleTemplate } = require("../lib/ssr");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
 const ARTICLE_SSR_POOL_SIZE = 80;
+const ARTICLE_BROWSER_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=300";
+const ARTICLE_CDN_CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=600";
 
 function normalizeUrl(value = "") {
   return String(value || "").trim().replace(/\/+$/g, "");
@@ -70,6 +78,8 @@ function buildArticleQuery(story = {}, article = {}) {
     wordCount: article.wordCount || "",
     articleBody: article.body || story.content || "",
     primarySourceUrl: article.primarySource?.url || article.sourceUrl || story.sourceUrl || story.url || "",
+    authorName: article.authorName || story.authorName || DEFAULT_AUTHOR_NAME,
+    modifiedAt: article.modifiedAt || story.updatedAt || story.updated_at || story.source_published_at || story.published_at || "",
   };
 }
 
@@ -96,7 +106,7 @@ function hasVerifiedArticleContent(article = {}, story = {}) {
   const body = sanitizeArticleBody(article.body || story.content || "");
   const keyPoints = getVerifiedKeyPoints(article);
   const bodyWordCount = Number(article.wordCount || body.split(/\s+/).filter(Boolean).length);
-  return Boolean(summary) && keyPoints.length >= 3 && bodyWordCount >= 400;
+  return Boolean(summary) && keyPoints.length >= 3 && bodyWordCount >= MIN_INDEXABLE_ARTICLE_WORDS;
 }
 
 function isLowTrustSnapshotStory(story = {}, article = {}) {
@@ -123,7 +133,9 @@ function shouldRejectSnapshotArticle(sourceMode = "", story = {}, article = {}) 
 
 function sendNotFound(res) {
   res.status(404).setHeader("Content-Type", "text/html; charset=utf-8");
-  res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+  res.setHeader("Cache-Control", ARTICLE_BROWSER_CACHE_CONTROL);
+  res.setHeader("CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
+  res.setHeader("Vercel-CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
   res.send(readTemplate("404.html"));
 }
 
@@ -203,7 +215,9 @@ module.exports = async (req, res) => {
         title: story?.title || "",
         category: story?.category || "",
       }));
-      res.setHeader("Cache-Control", "public, s-maxage=300, stale-while-revalidate=600");
+      res.setHeader("Cache-Control", ARTICLE_BROWSER_CACHE_CONTROL);
+      res.setHeader("CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
+      res.setHeader("Vercel-CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
       res.status(301).send("");
       return;
     }
@@ -245,20 +259,44 @@ module.exports = async (req, res) => {
           name: story?.source || "Original Source",
           url: story?.sourceUrl || story?.url || "",
         },
+        authorName: story?.authorName || DEFAULT_AUTHOR_NAME,
         metaTitle: story?.metaTitle || "",
         metaDescription: story?.metaDescription || "",
         structuredData: story?.structuredData || null,
       };
     }
 
-    let cacheHeader = "public, s-maxage=300, stale-while-revalidate=600";
+    const relatedSets = buildArticleRelatedSets(story || {}, stories, article || {});
+
+    article = {
+      ...article,
+      ...buildIndexableArticlePayload({
+        id: story?.id || "",
+        slug: story?.slug || requestedSlug,
+        title: article?.title || story?.title || "Story",
+        summary: article?.summary || story?.summary || "",
+        body: article?.body || story?.content || "",
+        source: article?.source || story?.source || "Sunwire Desk",
+        sourceUrl: article?.sourceUrl || story?.sourceUrl || story?.url || "",
+        image: article?.image || story?.image || "",
+        category: article?.category || story?.category || requestedCategory || "latest",
+        publishedAt: article?.published_at || article?.publishedAt || story?.source_published_at || story?.published_at || "",
+        modifiedAt: article?.modifiedAt || story?.updatedAt || story?.updated_at || story?.source_published_at || "",
+        tags: Array.isArray(article?.tags) ? article.tags : [],
+        related: Array.isArray(relatedSets?.grid) ? relatedSets.grid : [],
+        authorName: article?.authorName || story?.authorName || DEFAULT_AUTHOR_NAME,
+        primarySourceUrl: article?.primarySource?.url || article?.sourceUrl || story?.sourceUrl || story?.url || "",
+        primarySourceName: article?.primarySource?.name || article?.source || story?.source || DEFAULT_AUTHOR_NAME,
+        metaTitle: article?.metaTitle || story?.metaTitle || "",
+        metaDescription: article?.metaDescription || story?.metaDescription || "",
+      }),
+    };
 
     if (shouldRejectSnapshotArticle(sourceMode, story, article)) {
       sendNotFound(res);
       return;
     }
 
-    const relatedSets = buildArticleRelatedSets(story || {}, stories, article || {});
     const template = renderArticleTemplate(readTemplate("article.html"), {
       story,
       article,
@@ -269,15 +307,31 @@ module.exports = async (req, res) => {
       ...baseHeadState,
       title: article?.metaTitle || story?.metaTitle || baseHeadState.title,
       description: article?.metaDescription || story?.metaDescription || baseHeadState.description,
+      preloadImage: article?.image || story?.image || "",
+      preloadImageWidth: 1600,
+      preloadImageHeight: 900,
+      preloadImageSizes: "(max-width: 960px) 100vw, 38vw",
       jsonLd: article?.structuredData
-        ? [...(baseHeadState.jsonLd || []), article.structuredData]
+        ? [...(baseHeadState.jsonLd || []).filter((item) => item?.["@type"] !== "NewsArticle"), article.structuredData]
         : baseHeadState.jsonLd,
       type: "article",
     });
+    const finalHtml = minifyHtml(html);
+    const etag = `W/"${Buffer.byteLength(finalHtml).toString(16)}-${createHash("sha1").update(finalHtml).digest("base64url")}"`;
+    const ifNoneMatch = String(req.headers["if-none-match"] || "");
 
     res.setHeader("Content-Type", "text/html; charset=utf-8");
-    res.setHeader("Cache-Control", cacheHeader);
-    res.status(200).send(minifyHtml(html));
+    res.setHeader("Cache-Control", ARTICLE_BROWSER_CACHE_CONTROL);
+    res.setHeader("CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
+    res.setHeader("Vercel-CDN-Cache-Control", ARTICLE_CDN_CACHE_CONTROL);
+    res.setHeader("ETag", etag);
+
+    if (ifNoneMatch.split(/\s*,\s*/).includes(etag)) {
+      res.status(304).end();
+      return;
+    }
+
+    res.status(200).send(finalHtml);
   } catch (_) {
     sendNotFound(res);
   }

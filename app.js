@@ -30,6 +30,8 @@ const headerSearchStatus = document.getElementById("headerSearchStatus");
 const showAllButton = document.getElementById("showAllButton");
 const activeDeskChip = document.getElementById("activeDeskChip");
 const heroDeskChip = document.getElementById("heroDeskChip");
+const heroSectionEl = document.getElementById("heroSection");
+const homeTopLayoutEl = document.querySelector(".home-top-layout");
 const navLinks = [...document.querySelectorAll("[data-nav-filter]")];
 const trendingModeButtons = [...document.querySelectorAll("[data-trending-mode]")];
 
@@ -40,11 +42,13 @@ const heroSummaryEl = document.getElementById("heroSummary");
 const heroImageEl = document.getElementById("heroImage");
 
 const trendingGridEl = document.getElementById("trendingGrid");
+const trendingSectionEl = trendingGridEl.closest(".trending-strip");
 const categorySectionsGridEl = document.getElementById("categorySectionsGrid");
 const moreNewsGridEl = document.getElementById("moreNewsGrid");
 const categoryZoneSectionEl = categorySectionsGridEl.closest(".category-zone");
 const moreNewsSectionEl = moreNewsGridEl.closest(".more-news-shell");
 const categoryNewsTitleEl = document.getElementById("categoryNewsTitle");
+const moreNewsTitleEl = document.getElementById("moreNewsTitle");
 const paginationShellEl = paginationEl?.closest(".pagination-shell");
 
 const eventsListEl = document.getElementById("eventsList");
@@ -59,13 +63,13 @@ const homepageSidebarEl = document.getElementById("homepageSidebar");
 const newsCardTemplate = document.getElementById("newsCardTemplate");
 const sectionPanelTemplate = document.getElementById("sectionPanelTemplate");
 
-const DEFAULT_HOME_PAGE_SIZE = 30;
+const DEFAULT_HOME_PAGE_SIZE = 32;
 const DESK_PAGE_SIZE = 20;
-const CATEGORY_RAIL_COUNT = 15;
+const CATEGORY_GRID_STORY_COUNT = 4;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
 const CATEGORY_POOL_FETCH_SIZE = 250;
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(CATEGORY_POOL_FETCH_SIZE / DEFAULT_HOME_PAGE_SIZE);
-const MORE_SECTION_COUNT = 4;
+const RANDOM_NEWS_COUNT = 8;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
 const LAST_HERO_STORAGE_KEY = "sunwire:last-hero-story-key";
@@ -74,7 +78,8 @@ const SIDEBAR_REFRESH_MS = 20 * 60 * 1000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 2 * 60 * 1000;
-const DEFERRED_ASSET_VERSION = "20260315-5";
+const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
+const DEFERRED_ASSET_VERSION = "20260322-7";
 const FILTER_ALIASES = {
   all: "all",
   latest: "all",
@@ -89,6 +94,16 @@ const FILTER_ALIASES = {
   business: "business",
 };
 const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business"];
+const HOMEPAGE_SECTION_DEFINITIONS = [
+  { key: "ai", title: "AI", eyebrow: "Models and agents", category: "ai", filter: "ai" },
+  { key: "tech", title: "Tech", eyebrow: "Platforms and chips", category: "tech", filter: "tech" },
+  { key: "entertainment", title: "Entertainment", eyebrow: "Culture and releases", category: "entertainment", filter: "entertainment" },
+  { key: "sports", title: "Sports", eyebrow: "Matches and momentum", category: "sports", filter: "sports" },
+  { key: "business", title: "Business", eyebrow: "Markets and money", category: "business", filter: "business" },
+  { key: "politics", title: "Politics", eyebrow: "Power and policy", source: "politics" },
+  { key: "jobs", title: "Jobs", eyebrow: "Hiring and careers", source: "jobs" },
+  { key: "food", title: "Food", eyebrow: "Dining and culture", source: "food" },
+];
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
 const SEO_DEFAULT_TITLE = "Sunwire - Latest AI, Tech, Entertainment and Sports News";
@@ -149,6 +164,22 @@ const BUSINESS_KEYWORDS = [
   "valuation", "venture capital", "vc", "private equity", "acquisition", "acquires",
   "acquired", "merger", "ipo", "listing", "listed", "shares", "earnings", "revenue",
   "profit", "loss", "unicorn", "fintech", "saas", "enterprise", "deal", "dealmaking"
+];
+const ECONOMY_KEYWORDS = [
+  "economy", "economic", "inflation", "deflation", "gdp", "cpi", "ppi", "interest rate",
+  "federal reserve", "fed", "rbi", "central bank", "treasury", "bond", "yield", "tariff",
+  "trade", "oil", "crude", "currency", "rupee", "dollar", "unemployment", "growth", "recession",
+  "markets", "market", "stocks", "shares", "sensex", "nifty", "nasdaq", "dow", "s&p"
+];
+const JOBS_KEYWORDS = [
+  "job", "jobs", "hiring", "hire", "recruit", "recruiting", "layoff", "layoffs", "career",
+  "careers", "workforce", "salary", "payroll", "headcount", "internship", "internships",
+  "employee", "employees", "talent", "opening", "openings", "resume"
+];
+const FOOD_KEYWORDS = [
+  "food", "restaurant", "restaurants", "dining", "chef", "menu", "cafe", "coffee", "tea",
+  "recipe", "recipes", "cooking", "kitchen", "grocery", "groceries", "snack", "snacks",
+  "beverage", "beverages", "drink", "drinks", "cuisine", "meals", "michelin"
 ];
 
 const TOPIC_FALLBACK_IMAGES = [
@@ -218,6 +249,8 @@ let searchIndexCache = {
 const apiResponseCache = new Map();
 let homeWidgetsModulePromise = null;
 let searchModulePromise = null;
+const articlePrefetchPromises = new Map();
+const routePrefetchSet = new Set();
 let sidebarObserver = null;
 let topSectionsObserver = null;
 let sidebarHydrationPromise = null;
@@ -334,6 +367,20 @@ function readPreloadedHomeData() {
     : null;
 }
 
+function isArchiveRouteState() {
+  return !activeSearchQuery && currentPage > 1;
+}
+
+function syncHomeModeVisibility() {
+  const archiveMode = isArchiveRouteState();
+  if (document.body) {
+    document.body.setAttribute("data-home-mode", archiveMode ? "archive" : "home");
+  }
+  if (homeTopLayoutEl) homeTopLayoutEl.hidden = archiveMode;
+  if (homepageSidebarEl) homepageSidebarEl.hidden = archiveMode;
+  if (archiveMode && categoryZoneSectionEl) categoryZoneSectionEl.hidden = true;
+}
+
 function extractNewsStories(payload = {}) {
   if (Array.isArray(payload?.pageStories)) return payload.pageStories;
   if (Array.isArray(payload?.stories)) return payload.stories;
@@ -447,6 +494,26 @@ function updateBrowserUrl(options = {}) {
   syncHomeSeo();
 }
 
+function buildNavigationUrl(options = {}) {
+  const config = typeof options === "string"
+    ? { filter: options }
+    : options;
+  const filter = String(config.filter ?? activeFilter ?? "all").toLowerCase();
+  const normalizedFilter = resolveFilter(filter);
+  const query = cleanText(config.query ?? activeSearchQuery);
+  const page = Math.max(1, Number(config.page ?? currentPage) || 1);
+  const url = new URL(window.location.href);
+  url.pathname = buildSectionPath(normalizedFilter, query ? 1 : page);
+  url.searchParams.delete("filter");
+  if (query) {
+    url.searchParams.set("q", query);
+  } else {
+    url.searchParams.delete("q");
+  }
+  url.searchParams.delete("page");
+  return `${url.pathname}${url.search}`;
+}
+
 function openDeskInPlace(filter = "all") {
   activeSearchQuery = "";
   currentPage = 1;
@@ -456,7 +523,7 @@ function openDeskInPlace(filter = "all") {
   activeFilter = filter;
   syncActiveControls();
   updateBrowserUrl({ filter, query: "", page: 1 });
-  return loadStories(1);
+  return loadStories(1, true);
 }
 
 function categoryLabel(story = {}) {
@@ -556,7 +623,7 @@ function isBusinessFocusStory(story = {}) {
     || story.category === "business";
 }
 
-function buildPoliticsStories(stories = [], used = new Set(), count = MORE_SECTION_COUNT, mode = "just-in") {
+function buildPoliticsStories(stories = [], used = new Set(), count = RANDOM_NEWS_COUNT, mode = "just-in") {
   return takeUnique(
     sortStoriesForTrending(stories.filter(isPoliticsRelatedStory), mode),
     used,
@@ -567,7 +634,7 @@ function buildPoliticsStories(stories = [], used = new Set(), count = MORE_SECTI
   }));
 }
 
-function buildWarStories(stories = [], used = new Set(), count = MORE_SECTION_COUNT, mode = "just-in") {
+function buildWarStories(stories = [], used = new Set(), count = RANDOM_NEWS_COUNT, mode = "just-in") {
   return takeUnique(
     sortStoriesForTrending(stories.filter(isWarRelatedStory), mode),
     used,
@@ -578,7 +645,7 @@ function buildWarStories(stories = [], used = new Set(), count = MORE_SECTION_CO
   }));
 }
 
-function buildBusinessFocusStories(stories = [], used = new Set(), count = MORE_SECTION_COUNT, mode = "just-in") {
+function buildBusinessFocusStories(stories = [], used = new Set(), count = RANDOM_NEWS_COUNT, mode = "just-in") {
   return takeUnique(
     sortStoriesForTrending(stories.filter(isBusinessFocusStory), mode),
     used,
@@ -587,6 +654,49 @@ function buildBusinessFocusStories(stories = [], used = new Set(), count = MORE_
     ...story,
     displayCategory: "Startups & Funding",
   }));
+}
+
+function isEconomyStory(story = {}) {
+  const haystack = cleanText([
+    story.title,
+    story.summary,
+    story.content,
+    story.displayCategory,
+    story.source,
+    story.category,
+    story.searchTrendTopic,
+  ].filter(Boolean).join(" ")).toLowerCase();
+
+  return ECONOMY_KEYWORDS.some((keyword) => haystack.includes(keyword))
+    || story.category === "business";
+}
+
+function isJobsStory(story = {}) {
+  const haystack = cleanText([
+    story.title,
+    story.summary,
+    story.content,
+    story.displayCategory,
+    story.source,
+    story.category,
+    story.searchTrendTopic,
+  ].filter(Boolean).join(" ")).toLowerCase();
+
+  return JOBS_KEYWORDS.some((keyword) => haystack.includes(keyword));
+}
+
+function isFoodStory(story = {}) {
+  const haystack = cleanText([
+    story.title,
+    story.summary,
+    story.content,
+    story.displayCategory,
+    story.source,
+    story.category,
+    story.searchTrendTopic,
+  ].filter(Boolean).join(" ")).toLowerCase();
+
+  return FOOD_KEYWORDS.some((keyword) => haystack.includes(keyword));
 }
 
 function isIndiaPriorityStory(story = {}) {
@@ -639,6 +749,99 @@ function dedupeStories(stories = []) {
     if (!key || seen.has(key)) return false;
     seen.add(key);
     return true;
+  });
+}
+
+function articleSessionCacheKey(story = {}) {
+  return `${ARTICLE_CACHE_PREFIX}${cleanText(story.sourceUrl || story.url || "")}|${cleanText(story.title || "")}`;
+}
+
+function writePrefetchedArticle(story = {}, article = null) {
+  if (!article) return;
+
+  try {
+    window.sessionStorage.setItem(articleSessionCacheKey(story), JSON.stringify(article));
+  } catch (_) {
+    // Ignore session storage failures.
+  }
+}
+
+function collectKnownStories() {
+  return dedupeStories([
+    ...currentStories,
+    ...Object.values(currentCategoryMap || {}).flatMap((stories) => Array.isArray(stories) ? stories : []),
+  ]);
+}
+
+function findStoryByArticleHref(href = "") {
+  if (!href) return null;
+
+  let pathname = href;
+  try {
+    pathname = new URL(href, window.location.origin).pathname;
+  } catch (_) {
+    pathname = href;
+  }
+
+  return collectKnownStories().find((story) => buildArticleHref(story) === pathname) || null;
+}
+
+function warmArticleRoute(href = "") {
+  if (!href || routePrefetchSet.has(href)) return;
+  routePrefetchSet.add(href);
+
+  const preload = document.createElement("link");
+  preload.rel = "prefetch";
+  preload.as = "document";
+  preload.href = href;
+  preload.dataset.sunwirePrefetch = href;
+  document.head.appendChild(preload);
+}
+
+function buildArticleApiUrl(story = {}) {
+  const href = buildArticleHref(story);
+  const slug = String(href.split("/").pop() || "").trim();
+  if (!slug) return "";
+
+  return `/api/article?${new URLSearchParams({
+    slug,
+    category: resolveFilter(story.category || "all"),
+    id: story.id || "",
+  }).toString()}`;
+}
+
+async function prefetchArticleForStory(story = {}) {
+  const href = buildArticleHref(story);
+  if (!href || href === "/") return null;
+
+  warmArticleRoute(href);
+
+  const existing = articlePrefetchPromises.get(href);
+  if (existing) return existing;
+
+  const apiUrl = buildArticleApiUrl(story);
+  if (!apiUrl) return null;
+
+  const request = fetchJson(apiUrl)
+    .then((article) => {
+      writePrefetchedArticle(story, article);
+      return article;
+    })
+    .finally(() => {
+      articlePrefetchPromises.delete(href);
+    });
+
+  articlePrefetchPromises.set(href, request);
+  return request;
+}
+
+function scheduleHomepageArticlePrefetch(limit = 6) {
+  scheduleIdleTask(() => {
+    collectKnownStories()
+      .slice(0, limit)
+      .forEach((story) => {
+        void prefetchArticleForStory(story);
+      });
   });
 }
 
@@ -768,14 +971,178 @@ function takeUnique(stories = [], used = new Set(), count = 0, fallbackStories =
   return picked;
 }
 
+function deterministicShuffle(stories = [], salt = 1) {
+  return [...stories]
+    .map((story, index) => {
+      const key = `${storyKey(story)}|${salt}|${index}`;
+      const weight = Array.from(key).reduce((hash, char) => ((hash * 33) + char.charCodeAt(0)) >>> 0, 5381);
+      return { story, weight };
+    })
+    .sort((left, right) => left.weight - right.weight)
+    .map((entry) => entry.story);
+}
+
+function mapSectionStories(stories = [], label = "") {
+  return stories.map((story) => ({
+    ...story,
+    displayCategory: label || story.displayCategory || story.category || "News",
+  }));
+}
+
+function buildHomepageSectionStories(section = {}, allStories = [], categoryMap = {}, latestPool = []) {
+  const baseStories = filterDisplayableStories(allStories);
+  const sectionLabel = section.title || "News";
+
+  if (section.category) {
+    const exactStories = takeUnique(
+      filterDisplayableStories([
+        ...(categoryMap[section.category] || []),
+        ...baseStories.filter((story) => String(story.category || "").toLowerCase() === section.category),
+      ]),
+      new Set(),
+      8
+    );
+    const fallbackStories = takeUnique(
+      latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
+      new Set(),
+      Math.max(0, 8 - exactStories.length)
+    );
+    return mapSectionStories([...exactStories, ...fallbackStories].slice(0, 8), sectionLabel);
+  }
+
+  if (section.source === "latest") {
+    return mapSectionStories(takeUnique(latestPool, new Set(), 8), sectionLabel);
+  }
+
+  if (section.source === "politics") {
+    const exactStories = takeUnique(
+      sortStoriesForTrending(baseStories.filter(isPoliticsRelatedStory), "just-in").map((story) => ({
+        ...story,
+        displayCategory: sectionLabel,
+      })),
+      new Set(),
+      8
+    );
+    const fallbackStories = mapSectionStories(
+      takeUnique(
+        latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
+        new Set(),
+        Math.max(0, 8 - exactStories.length)
+      ),
+      sectionLabel
+    );
+    return [...exactStories, ...fallbackStories].slice(0, 8);
+  }
+
+  if (section.source === "economy") {
+    const exactStories = takeUnique(
+      sortStoriesForTrending(baseStories.filter(isEconomyStory), "just-in").map((story) => ({
+        ...story,
+        displayCategory: sectionLabel,
+      })),
+      new Set(),
+      8
+    );
+    const fallbackStories = mapSectionStories(
+      takeUnique(
+        latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
+        new Set(),
+        Math.max(0, 8 - exactStories.length)
+      ),
+      sectionLabel
+    );
+    return [...exactStories, ...fallbackStories].slice(0, 8);
+  }
+
+  if (section.source === "jobs") {
+    const exactStories = takeUnique(
+      sortStoriesForTrending(baseStories.filter(isJobsStory), "just-in").map((story) => ({
+        ...story,
+        displayCategory: sectionLabel,
+      })),
+      new Set(),
+      8
+    );
+    const fallbackStories = mapSectionStories(
+      takeUnique(
+        latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
+        new Set(),
+        Math.max(0, 8 - exactStories.length)
+      ),
+      sectionLabel
+    );
+    return [...exactStories, ...fallbackStories].slice(0, 8);
+  }
+
+  if (section.source === "food") {
+    const exactStories = takeUnique(
+      sortStoriesForTrending(baseStories.filter(isFoodStory), "just-in").map((story) => ({
+        ...story,
+        displayCategory: sectionLabel,
+      })),
+      new Set(),
+      8
+    );
+    const fallbackStories = mapSectionStories(
+      takeUnique(
+        latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
+        new Set(),
+        Math.max(0, 8 - exactStories.length)
+      ),
+      sectionLabel
+    );
+    return [...exactStories, ...fallbackStories].slice(0, 8);
+  }
+
+  return [];
+}
+
+function buildHomepageDeskSections(allStories = [], categoryMap = {}, latestPool = []) {
+  return HOMEPAGE_SECTION_DEFINITIONS.map((section) => ({
+    key: section.key,
+    title: section.title,
+    eyebrow: section.eyebrow,
+    filter: section.filter || "",
+    hideAction: !section.filter,
+    layout: "rail",
+    cardVariant: "compact",
+    stories: buildHomepageSectionStories(section, allStories, categoryMap, latestPool),
+  })).filter((section) => section.stories.length);
+}
+
 function buildGlobalLayout(mainStories = [], categoryMap = {}) {
-  const used = new Set();
   const filteredMainStories = filterDisplayableStories(mainStories);
-  const latestPool = dedupeStories(sortStoriesForLatest(filteredMainStories));
   const allStories = filterDisplayableStories([
     ...mainStories,
     ...CATEGORY_KEYS.flatMap((key) => categoryMap[key] || []),
   ]);
+  const latestPool = dedupeStories(sortStoriesForLatest(filteredMainStories));
+  const allStoriesPool = dedupeStories(allStories);
+
+  if (currentPage > 1) {
+    const fallbackStories = deterministicShuffle(
+      allStoriesPool.filter((story) => !filteredMainStories.some((entry) => storyKey(entry) === storyKey(story))),
+      currentPage + 11
+    );
+    const fullGridStories = takeUnique(
+      filteredMainStories,
+      new Set(),
+      DEFAULT_HOME_PAGE_SIZE,
+      fallbackStories
+    );
+    return {
+      hero: null,
+      trending: [],
+      topSections: [],
+      moreSections: [],
+      fullGridStories,
+      hideHero: true,
+      hideTrending: true,
+      pageTitle: `Page ${currentPage} News Grid`,
+    };
+  }
+
+  const used = new Set();
   const homepagePriorityPool = dedupeStories(sortStoriesForHomepageFocus(allStories));
   const hero = selectHeadlineOfTheDay(homepagePriorityPool.length ? homepagePriorityPool : latestPool) || latestPool[0] || null;
   if (hero) used.add(storyKey(hero));
@@ -785,51 +1152,26 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     ...sortStoriesForTrending(filteredMainStories, activeTrendingMode),
   ]);
   const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, latestPool);
-  const topSections = ["ai", "tech"].map((key) => ({
-    key,
-    title: toTitleCase(key),
-    eyebrow: CATEGORY_EYEBROWS[key] || "Category desk",
-    filter: key,
-    layout: "rail",
-    stories: takeUnique(
-      filterDisplayableStories([
-        ...(categoryMap[key] || []),
-        ...filteredMainStories.filter((story) => story.category === key),
-      ]),
-      used,
-      CATEGORY_RAIL_COUNT,
-      latestPool
-    ),
-  })).filter((section) => section.stories.length);
+  const topSections = buildHomepageDeskSections(allStoriesPool, categoryMap, latestPool);
 
+  const randomMixStories = takeUnique(
+    deterministicShuffle(
+      allStoriesPool.filter((story) => !used.has(storyKey(story))),
+      currentPage
+    ),
+    new Set(),
+    RANDOM_NEWS_COUNT,
+    deterministicShuffle(allStoriesPool, currentPage + 11)
+  );
   const moreSections = [
     {
-      key: "latest-news",
-      title: "Latest News",
-      eyebrow: "Rapid read",
-      filter: "latest",
-      stories: takeUnique(sortStoriesForLatest(filteredMainStories), used, MORE_SECTION_COUNT, latestPool),
-    },
-    {
-      key: "entertainment-wire",
-      title: "Entertainment",
-      eyebrow: "Culture and releases",
-      filter: "entertainment",
-      stories: takeUnique(filterDisplayableStories(categoryMap.entertainment || []), used, MORE_SECTION_COUNT, latestPool),
-    },
-    {
-      key: "sports-wire",
-      title: "Sports",
-      eyebrow: "Matches and momentum",
-      filter: "sports",
-      stories: takeUnique(filterDisplayableStories(categoryMap.sports || []), used, MORE_SECTION_COUNT, latestPool),
-    },
-    {
-      key: "business-wire",
-      title: "Business",
-      eyebrow: "Markets and money",
-      filter: "business",
-      stories: takeUnique(filterDisplayableStories(categoryMap.business || []), used, MORE_SECTION_COUNT, latestPool),
+      key: "random-news",
+      title: "More News",
+      eyebrow: "Random mix",
+      hideAction: true,
+      layout: "catalog",
+      cardVariant: "dense",
+      stories: randomMixStories,
     },
   ].filter((section) => section.stories.length);
 
@@ -854,6 +1196,18 @@ function buildFocusedLayout(stories = [], filter = "all") {
   const trendingBase = filter === "india-pulse"
     ? sortStoriesForHomepageFocus(deskStories)
     : sortStoriesForTrending(deskStories, activeTrendingMode);
+  if (currentPage > 1) {
+    return {
+      hero: null,
+      trending: [],
+      topSections: [],
+      moreSections: [],
+      fullGridStories: deterministicShuffle(deskStories, currentPage).slice(0, getPageSizeForFilter(filter)),
+      hideHero: true,
+      hideTrending: true,
+      pageTitle: `${label} Page ${currentPage}`,
+    };
+  }
   const trending = trendingBase.slice(0, TRENDING_COUNT);
   const topSections = [
     {
@@ -892,43 +1246,65 @@ function createSkeletonCard(variant = "") {
 }
 
 function renderLoadingState() {
+  syncHomeModeVisibility();
   pendingTopSections = [];
   if (topSectionsObserver) {
     topSectionsObserver.disconnect();
     topSectionsObserver = null;
   }
 
-  headlineOfTheDayLink.textContent = "Loading headline...";
-  headlineOfTheDayLink.href = "/";
-  heroSummaryEl.textContent = "Preparing the latest stories across every SunWire desk.";
-  headlineOfTheDayMeta.textContent = "Loading publish time";
-  heroAuthorEl.textContent = "SunWire Desk";
-  heroDeskChip.textContent = activeDeskLabel();
-  applyResponsiveImage(heroImageEl, buildFallbackImage({ category: "tech", title: "SunWire Live Signal" }), {
-    alt: "SunWire loading state",
-    width: 1600,
-    height: 900,
-    sizes: "(max-width: 1050px) 100vw, 66vw",
-    highPriority: true,
-  });
+  if (heroSectionEl) heroSectionEl.hidden = currentPage > 1;
+  if (trendingSectionEl) trendingSectionEl.hidden = currentPage > 1;
+  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = currentPage > 1;
+  if (moreNewsSectionEl) moreNewsSectionEl.hidden = false;
+  if (homepageSidebarEl) homepageSidebarEl.hidden = currentPage > 1;
+  if (currentPage <= 1) {
+    headlineOfTheDayLink.textContent = "Loading headline...";
+    headlineOfTheDayLink.href = "/";
+    heroSummaryEl.textContent = "Preparing the latest stories across every SunWire desk.";
+    headlineOfTheDayMeta.textContent = "Loading publish time";
+    heroAuthorEl.textContent = "SunWire Desk";
+    heroDeskChip.textContent = activeDeskLabel();
+    applyResponsiveImage(heroImageEl, buildFallbackImage({ category: "tech", title: "SunWire Live Signal" }), {
+      alt: "SunWire loading state",
+      width: 1600,
+      height: 900,
+      sizes: "(max-width: 1200px) 100vw, 80vw",
+      highPriority: true,
+    });
+  }
 
   trendingGridEl.innerHTML = "";
   categorySectionsGridEl.innerHTML = "";
   moreNewsGridEl.innerHTML = "";
 
-  for (let i = 0; i < 4; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
-
-  for (let i = 0; i < 4; i += 1) {
-    const panel = sectionPanelTemplate.content.firstElementChild.cloneNode(true);
-    panel.classList.add("content-visibility");
-    panel.querySelector(".desk-panel__eyebrow").textContent = "Loading";
-    panel.querySelector(".desk-panel__title").textContent = "Loading stories";
-    panel.querySelector(".desk-panel__action").hidden = true;
-    const grid = panel.querySelector(".desk-panel__grid");
-    grid.classList.add("desk-panel__grid--rail");
-    for (let j = 0; j < CATEGORY_RAIL_COUNT; j += 1) grid.appendChild(createSkeletonCard("dense"));
-    categorySectionsGridEl.appendChild(panel);
+  if (currentPage <= 1) {
+    for (let i = 0; i < 4; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
   }
+
+  if (currentPage <= 1) {
+    for (let i = 0; i < HOMEPAGE_SECTION_DEFINITIONS.length; i += 1) {
+      const panel = sectionPanelTemplate.content.firstElementChild.cloneNode(true);
+      panel.classList.add("content-visibility");
+      panel.querySelector(".desk-panel__eyebrow").textContent = "Loading";
+      panel.querySelector(".desk-panel__title").textContent = "Loading stories";
+      panel.querySelector(".desk-panel__action").hidden = true;
+      const grid = panel.querySelector(".desk-panel__grid");
+      grid.classList.add("desk-panel__grid--rail");
+      for (let j = 0; j < 8; j += 1) grid.appendChild(createSkeletonCard("compact"));
+      categorySectionsGridEl.appendChild(panel);
+    }
+  }
+
+  moreNewsGridEl.classList.remove("desk-panels", "desk-panels--expanded");
+  moreNewsGridEl.classList.add("news-card-grid");
+  moreNewsGridEl.classList.toggle("news-card-grid--page", currentPage > 1);
+  moreNewsGridEl.classList.toggle("news-card-grid--homepage", currentPage <= 1);
+  const loadingGrid = document.createDocumentFragment();
+  for (let i = 0; i < (currentPage > 1 ? DEFAULT_HOME_PAGE_SIZE : RANDOM_NEWS_COUNT); i += 1) {
+    loadingGrid.appendChild(createSkeletonCard("dense"));
+  }
+  moreNewsGridEl.appendChild(loadingGrid);
 }
 
 function renderTicker(stories = []) {
@@ -951,7 +1327,7 @@ function renderHero(story) {
       alt: "SunWire lead story",
       width: 1600,
       height: 900,
-      sizes: "(max-width: 1050px) 100vw, 66vw",
+      sizes: "(max-width: 1200px) 100vw, 80vw",
       highPriority: true,
     });
     return;
@@ -967,7 +1343,7 @@ function renderHero(story) {
     alt: story.title || "Headline of the day",
     width: 1600,
     height: 900,
-    sizes: "(max-width: 1050px) 100vw, 66vw",
+    sizes: "(max-width: 1200px) 100vw, 80vw",
     highPriority: true,
   });
 }
@@ -1021,6 +1397,11 @@ function renderTrendingSection(stories = []) {
 
 function renderDeskPanels(container, sections = [], variant = "dense") {
   container.innerHTML = "";
+  const allRails = sections.every((section) => section?.layout === "rail");
+  container.classList.add("desk-panels");
+  container.classList.toggle("desk-panels--top", allRails);
+  container.classList.toggle("desk-panels--expanded", !allRails);
+  container.classList.remove("news-card-grid", "news-card-grid--page", "news-card-grid--homepage");
 
   sections
     .filter((section) => Array.isArray(section?.stories) && section.stories.length)
@@ -1056,6 +1437,9 @@ function renderDeskPanels(container, sections = [], variant = "dense") {
       const grid = panel.querySelector(".desk-panel__grid");
       if (section.layout === "rail") {
         grid.classList.add("desk-panel__grid--rail");
+      }
+      if (section.layout === "stack") {
+        grid.classList.add("desk-panel__grid--stack");
       }
       if (section.layout === "catalog") {
         grid.classList.add("desk-panel__grid--catalog");
@@ -1182,9 +1566,7 @@ function renderPagination(totalPagesCount, activePageNumber) {
     if (!disabled) {
       btn.addEventListener("click", async () => {
         if (page === currentPage || isLoading) return;
-        updateBrowserUrl({ filter: activeFilter, query: activeSearchQuery, page });
-        await loadStories(page);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+        window.location.assign(buildNavigationUrl({ filter: activeFilter, query: activeSearchQuery, page }));
       });
     }
     fragment.appendChild(btn);
@@ -1272,23 +1654,34 @@ async function fetchSidebarData(forceRefresh = false) {
   return fetchJson("/api/sidebar", { forceFresh: forceRefresh });
 }
 
+function renderFlatNewsGrid(container, stories = [], variant = "dense") {
+  container.innerHTML = "";
+  container.classList.remove("desk-panels", "desk-panels--expanded");
+  container.classList.add("news-card-grid");
+  container.classList.toggle("news-card-grid--page", currentPage > 1);
+  container.classList.toggle("news-card-grid--homepage", currentPage <= 1);
+  stories.forEach((story) => container.appendChild(createNewsCard(story, variant)));
+}
+
 function buildNewsApiUrl(params = new URLSearchParams()) {
-  const isLocalHost = window.location.hostname === "localhost"
-    || window.location.hostname === "127.0.0.1";
-  const baseUrl = isLocalHost
-    ? "http://127.0.0.1:4000/api/news"
-    : "/api/news";
+  const baseUrl = "/api/news";
   const query = params.toString();
   return query ? `${baseUrl}?${query}` : baseUrl;
 }
 
-async function fetchCentralNews(page = 1, filter = "all", pageSize = getPageSizeForFilter(filter), forceRefresh = false) {
+async function fetchCentralNews(
+  page = 1,
+  filter = "all",
+  pageSize = getPageSizeForFilter(filter),
+  forceRefresh = false,
+  triggerBackendRefresh = false
+) {
   const params = new URLSearchParams({
     page: String(page),
     pageSize: String(pageSize),
     filter: resolveFilter(filter),
   });
-  if (forceRefresh) params.set("refresh", "1");
+  if (triggerBackendRefresh) params.set("refresh", "1");
   const payload = await fetchJson(buildNewsApiUrl(params), { forceFresh: forceRefresh });
   return normalizeNewsPayload(payload);
 }
@@ -1313,8 +1706,8 @@ function buildHomepageCategoryMapFromStories(stories = []) {
   return categoryMap;
 }
 
-async function fetchHomepageCategoryMap(forceRefresh = false) {
-  const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh);
+async function fetchHomepageCategoryMap(forceRefresh = false, triggerBackendRefresh = false) {
+  const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh, triggerBackendRefresh);
   return buildHomepageCategoryMapFromStories(extractNewsStories(poolPayload));
 }
 
@@ -1389,6 +1782,7 @@ function applyHomepagePayload(main, mainStories, categoryMap) {
   currentPage = Number(main?.page) || currentPage;
   totalPages = Math.max(1, Number(main?.totalPages) || 1);
   totalStories = Math.max(filteredMainStories.length, Number(main?.totalStories) || filteredMainStories.length);
+  syncHomeModeVisibility();
 
   const layout = activeFilter === "all" || activeFilter === "latest"
     ? buildGlobalLayout(filteredMainStories, safeCategoryMap)
@@ -1396,6 +1790,7 @@ function applyHomepagePayload(main, mainStories, categoryMap) {
 
   renderTicker(sortStoriesForTrending(combinedStories, activeTrendingMode));
   renderHomepageLayout(layout);
+  scheduleHomepageArticlePrefetch();
   scheduleSidebarHydration();
   renderPagination(totalPages, currentPage);
   syncHomeSeo();
@@ -1416,6 +1811,9 @@ function renderCurrentStories() {
 
 function countVisibleStories(layout = {}) {
   const visibleKeys = new Set();
+  (layout.fullGridStories || [])
+    .filter(Boolean)
+    .forEach((story) => visibleKeys.add(storyKey(story)));
   [layout.hero, ...(layout.trending || [])]
     .filter(Boolean)
     .forEach((story) => visibleKeys.add(storyKey(story)));
@@ -1428,24 +1826,46 @@ function countVisibleStories(layout = {}) {
 }
 
 function renderHomepageLayout(layout) {
+  const hasFullGrid = Array.isArray(layout?.fullGridStories) && layout.fullGridStories.length > 0;
   const hasTopSections = Array.isArray(layout?.topSections) && layout.topSections.length > 0;
   const hasMoreSections = Array.isArray(layout?.moreSections) && layout.moreSections.length > 0;
   const isFocusedDeskView = activeFilter !== "all" && activeFilter !== "latest";
+  const archiveMode = isArchiveRouteState() || hasFullGrid;
 
-  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = !hasTopSections;
-  if (moreNewsSectionEl) moreNewsSectionEl.hidden = !hasMoreSections;
-  if (paginationShellEl) paginationShellEl.hidden = true;
+  if (homeTopLayoutEl) homeTopLayoutEl.hidden = archiveMode;
+  if (heroSectionEl) heroSectionEl.hidden = archiveMode;
+  if (trendingSectionEl) trendingSectionEl.hidden = archiveMode;
+  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = archiveMode || !hasTopSections;
+  if (moreNewsSectionEl) moreNewsSectionEl.hidden = !(hasMoreSections || hasFullGrid);
+  if (homepageSidebarEl) homepageSidebarEl.hidden = archiveMode;
+  if (paginationShellEl) paginationShellEl.hidden = totalPages <= 1;
+  if (document.body) {
+    document.body.setAttribute("data-home-mode", archiveMode ? "archive" : "home");
+  }
   categorySectionsGridEl.classList.toggle("desk-panels--focused", isFocusedDeskView);
   if (categoryNewsTitleEl) {
     categoryNewsTitleEl.textContent = activeFilter === "all" || activeFilter === "latest"
       ? "Category News Grid"
       : `${activeDeskLabel()} Desk`;
   }
+  if (moreNewsTitleEl) {
+    moreNewsTitleEl.textContent = hasFullGrid
+      ? (layout.pageTitle || `Page ${currentPage} News Grid`)
+      : "More News";
+  }
 
-  renderHero(layout.hero);
-  renderTrendingSection(layout.trending || []);
-  scheduleTopSectionsRender(layout.topSections || [], "dense");
-  renderDeskPanels(moreNewsGridEl, layout.moreSections || [], "dense");
+  if (!hasFullGrid) {
+    renderHero(layout.hero);
+    renderTrendingSection(layout.trending || []);
+    scheduleTopSectionsRender(layout.topSections || [], "dense");
+    const randomStories = Array.isArray(layout.moreSections?.[0]?.stories)
+      ? layout.moreSections[0].stories
+      : [];
+    renderFlatNewsGrid(moreNewsGridEl, randomStories, "dense");
+  } else {
+    scheduleTopSectionsRender([], "dense");
+    renderFlatNewsGrid(moreNewsGridEl, layout.fullGridStories || [], "dense");
+  }
   renderStats(countVisibleStories(layout));
 }
 
@@ -1473,6 +1893,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
     renderHero(resolvedLayout.hero);
     renderTrendingSection(resolvedLayout.trending);
     scheduleTopSectionsRender(resolvedLayout.topSections, "dense");
+    scheduleHomepageArticlePrefetch(4);
     scheduleSidebarHydration();
     livePulseText.textContent = `${stories.length} ${stories.length === 1 ? "story" : "stories"} matched "${normalizedQuery}"`;
     if (liveStatPrimary) liveStatPrimary.textContent = `${stories.length} search results`;
@@ -1505,21 +1926,26 @@ function renderSearchResults(query = "", stories = [], layout = null) {
 }
 
 async function loadSidebar(forceRefresh = false) {
+  if (isArchiveRouteState()) {
+    if (homepageSidebarEl) homepageSidebarEl.hidden = true;
+    return;
+  }
   scheduleSidebarHydration({ forceRefresh });
 }
 
-async function loadStories(page = 1, forceRefresh = false) {
+async function loadStories(page = 1, forceRefresh = false, triggerBackendRefresh = false) {
   if (isLoading) return;
   isLoading = true;
   const requestId = ++activeLoadRequestId;
   const requestedFilter = activeFilter;
   const normalizedFilter = String(requestedFilter || "all").toLowerCase();
+  currentPage = Math.max(1, Number(page) || 1);
   syncActiveControls();
   renderLoadingState();
 
   try {
     if ((normalizedFilter === "all" || normalizedFilter === "latest") && page <= HOME_POOL_PAGE_COVERAGE) {
-      const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh);
+      const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh, triggerBackendRefresh);
       if (requestId !== activeLoadRequestId) return;
       const derivedHomepageData = buildHomepageDataFromPool(poolPayload, page);
       applyHomepagePayload(
@@ -1531,9 +1957,15 @@ async function loadStories(page = 1, forceRefresh = false) {
     }
 
     const categoryMapPromise = normalizedFilter === "all" || normalizedFilter === "latest"
-      ? fetchHomepageCategoryMap(forceRefresh).catch(() => null)
+      ? fetchHomepageCategoryMap(forceRefresh, triggerBackendRefresh).catch(() => null)
       : null;
-    const main = await fetchCentralNews(page, normalizedFilter, getPageSizeForFilter(normalizedFilter), forceRefresh);
+    const main = await fetchCentralNews(
+      page,
+      normalizedFilter,
+      getPageSizeForFilter(normalizedFilter),
+      forceRefresh,
+      triggerBackendRefresh
+    );
     if (requestId !== activeLoadRequestId) return;
 
     const mainStories = dedupeStories(extractNewsStories(main));
@@ -1551,16 +1983,23 @@ async function loadStories(page = 1, forceRefresh = false) {
     }
   } catch (_) {
     if (requestId !== activeLoadRequestId) return;
-    currentStories = [];
-    currentCategoryMap = createEmptyCategoryMap();
-    currentPage = 1;
-    totalPages = 1;
-    totalStories = 0;
-    renderTicker([]);
-    renderHomepageLayout(buildFocusedLayout([], activeFilter));
-    scheduleSidebarHydration();
-    renderPagination(1, 1);
-    if (liveStatPrimary) liveStatPrimary.textContent = "0 stories on this page";
+    if (currentPage > 1 && !activeSearchQuery) {
+      syncHomeModeVisibility();
+      renderPagination(Math.max(1, totalPages), currentPage);
+      if (livePulseText) livePulseText.textContent = "Unable to refresh this page right now";
+      if (liveStatPrimary) liveStatPrimary.textContent = "Showing last loaded stories";
+      if (liveStatSecondary) liveStatSecondary.textContent = "Retry in a moment";
+    } else {
+      currentStories = [];
+      currentCategoryMap = createEmptyCategoryMap();
+      totalPages = 1;
+      totalStories = 0;
+      renderTicker([]);
+      renderHomepageLayout(buildFocusedLayout([], activeFilter));
+      scheduleSidebarHydration();
+      renderPagination(1, 1);
+      if (liveStatPrimary) liveStatPrimary.textContent = "0 stories on this page";
+    }
     syncHomeSeo();
   } finally {
     if (requestId === activeLoadRequestId) {
@@ -1692,7 +2131,7 @@ homeRefreshBtn.addEventListener("click", async () => {
   await Promise.allSettled([
     activeSearchQuery
       ? performSearch(activeSearchQuery, { forceRefresh: true })
-      : loadStories(1, true),
+      : loadStories(1, true, true),
     loadSidebar(true),
   ]);
 });
@@ -1761,6 +2200,36 @@ headerSearchInput?.addEventListener("focus", () => {
   void loadSearchModule();
 }, { once: true });
 
+document.addEventListener("mouseover", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findStoryByArticleHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleForStory(story);
+});
+
+document.addEventListener("focusin", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findStoryByArticleHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleForStory(story);
+});
+
+document.addEventListener("touchstart", (event) => {
+  const anchor = event.target instanceof Element
+    ? event.target.closest('a[href^="/article/"]')
+    : null;
+  if (!anchor) return;
+  const story = findStoryByArticleHref(anchor.getAttribute("href") || "");
+  if (!story) return;
+  void prefetchArticleForStory(story);
+}, { passive: true });
+
 document.addEventListener("click", (event) => {
   if (!siteHeader.contains(event.target)) {
     siteHeader.classList.remove("is-open");
@@ -1782,6 +2251,7 @@ document.addEventListener("click", (event) => {
   }
 }
 
+syncHomeModeVisibility();
 syncActiveControls();
 syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();
@@ -1835,7 +2305,7 @@ window.addEventListener("popstate", async () => {
   setSearchOpenState(false);
   syncActiveControls();
   syncHomeSeo();
-  await loadStories(currentPage);
+  await loadStories(currentPage, true);
 });
 window.setInterval(() => {
   if (document.hidden) return;
