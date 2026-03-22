@@ -32,6 +32,9 @@ const CATEGORY_FILTER_BYPASS = new Set(['all', 'latest', 'random']);
 const AI_KEYWORDS = [
   /\b(ai|a\.i\.|artificial intelligence|machine learning|generative ai|genai|llm|chatgpt|openai|anthropic|copilot|gemini|deepfake)\b/i,
 ];
+const TECH_KEYWORDS = [
+  /\b(tech|technology|app|apps|software|hardware|smartphone|iphone|android|laptop|tablet|chip|chips|chipset|semiconductor|browser|internet|cloud|server|microsoft|google|apple|meta|amazon|openai|anthropic|ai|artificial intelligence|gadget|gadgets|wearable|device|devices|gaming)\b/i,
+];
 const POLITICS_KEYWORDS = [
   /\b(election|elections|poll|polls|assembly|parliament|politics|political|government|cabinet|minister|bjp|congress|aap|lok sabha|rajya sabha|chief minister|prime minister|ordinance|bill)\b/i,
 ];
@@ -209,16 +212,16 @@ const SOURCE_CATALOG = [
   { name: "Indian Express", type: "rss", url: "https://indianexpress.com/feed/", homepageUrl: "https://indianexpress.com/latest-news/", category: "general", language: "en", country: "india" },
 
   { name: "YourStory AI", type: "rss", url: "https://yourstory.com/tag/artificial-intelligence/feed", homepageUrl: "https://yourstory.com/tag/artificial-intelligence", category: "ai", language: "en", country: "india" },
-  { name: "Inc42 AI", type: "rss", url: "https://inc42.com/tag/artificial-intelligence/feed/", homepageUrl: "https://inc42.com/tag/artificial-intelligence/", category: "ai", language: "en", country: "india" },
+  { name: "The Hindu Sci-Tech AI", type: "rss", url: "https://www.thehindu.com/sci-tech/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
   { name: "Indian Express AI", type: "rss", url: "https://indianexpress.com/section/technology/feed/", homepageUrl: "https://indianexpress.com/section/technology/", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
   { name: "The Hindu AI", type: "rss", url: "https://www.thehindu.com/sci-tech/technology/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/technology/", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
   { name: "LiveMint AI", type: "rss", url: "https://www.livemint.com/rss/technology", homepageUrl: "https://www.livemint.com/technology", category: "ai", language: "en", country: "india", includeKeywords: AI_KEYWORDS },
 
-  { name: "LiveMint Tech", type: "rss", url: "https://www.livemint.com/rss/technology", homepageUrl: "https://www.livemint.com/technology", category: "tech", language: "en", country: "india" },
-  { name: "Indian Express Tech", type: "rss", url: "https://indianexpress.com/section/technology/feed/", homepageUrl: "https://indianexpress.com/section/technology/", category: "tech", language: "en", country: "india" },
-  { name: "TechPP", type: "rss", url: "https://techpp.com/feed/", homepageUrl: "https://techpp.com/", category: "tech", language: "en", country: "india" },
-  { name: "India Today Technology", type: "rss", url: "https://www.indiatoday.in/rss/1206577", homepageUrl: "https://www.indiatoday.in/technology", category: "tech", language: "en", country: "india" },
-  { name: "The Hindu Technology", type: "rss", url: "https://www.thehindu.com/sci-tech/technology/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/technology/", category: "tech", language: "en", country: "india" },
+  { name: "LiveMint Tech", type: "rss", url: "https://www.livemint.com/rss/technology", homepageUrl: "https://www.livemint.com/technology", category: "tech", language: "en", country: "india", includeKeywords: TECH_KEYWORDS },
+  { name: "Indian Express Tech", type: "rss", url: "https://indianexpress.com/section/technology/feed/", homepageUrl: "https://indianexpress.com/section/technology/", category: "tech", language: "en", country: "india", includeKeywords: TECH_KEYWORDS },
+  { name: "TechPP", type: "rss", url: "https://techpp.com/feed/", homepageUrl: "https://techpp.com/", category: "tech", language: "en", country: "india", includeKeywords: TECH_KEYWORDS },
+  { name: "India Today Technology", type: "rss", url: "https://www.indiatoday.in/rss/1206577", homepageUrl: "https://www.indiatoday.in/technology", category: "tech", language: "en", country: "india", includeKeywords: TECH_KEYWORDS },
+  { name: "The Hindu Technology", type: "rss", url: "https://www.thehindu.com/sci-tech/technology/feeder/default.rss", homepageUrl: "https://www.thehindu.com/sci-tech/technology/", category: "tech", language: "en", country: "india", includeKeywords: TECH_KEYWORDS },
 
   { name: "Bollywood Hungama", type: "rss", url: "https://www.bollywoodhungama.com/feed/", homepageUrl: "https://www.bollywoodhungama.com/news/", category: "entertainment", language: "en", country: "india" },
   { name: "Filmfare", type: "rss", url: "https://www.filmfare.com/rss.xml", homepageUrl: "https://www.filmfare.com/news", category: "entertainment", language: "en", country: "india" },
