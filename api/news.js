@@ -177,8 +177,8 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     where: buildNewsWhere(normalizedFilter),
     select: articleSelect,
     orderBy: [
-      { published_at: "desc" },
       { created_at: "desc" },
+      { published_at: "desc" },
     ],
     skip: (safePage - 1) * safePageSize,
     take: safePageSize,

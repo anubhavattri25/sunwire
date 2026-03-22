@@ -65,8 +65,8 @@ router.get('/news', async (req, res, next) => {
         where,
         select: articleSelect,
         orderBy: [
-          { published_at: 'desc' },
           { created_at: 'desc' },
+          { published_at: 'desc' },
         ],
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
