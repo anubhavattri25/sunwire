@@ -6,6 +6,13 @@ const { buildHomeView } = require("../lib/ssr");
 
 const NEWS_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const memoryNewsCache = globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ || new Map();
+const TECH_SOURCE_FILTERS = [
+  "LiveMint Tech",
+  "Indian Express Tech",
+  "TechPP",
+  "India Today Technology",
+  "The Hindu Technology",
+];
 
 globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ = memoryNewsCache;
 
@@ -50,6 +57,27 @@ function normalizeNewsFilter(input = "all") {
 function buildNewsWhere(filter = "all") {
   const normalizedFilter = normalizeNewsFilter(filter);
   if (normalizedFilter === "all") return {};
+
+  if (normalizedFilter === "tech") {
+    return {
+      AND: [
+        {
+          category: {
+            equals: normalizedFilter,
+            mode: "insensitive",
+          },
+        },
+        {
+          OR: TECH_SOURCE_FILTERS.map((source) => ({
+            source: {
+              contains: source,
+              mode: "insensitive",
+            },
+          })),
+        },
+      ],
+    };
+  }
 
   return {
     category: {

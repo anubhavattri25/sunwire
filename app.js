@@ -94,6 +94,30 @@ const FILTER_ALIASES = {
   business: "business",
 };
 const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
+const TECH_DESK_SOURCE_PATTERNS = [
+  /livemint tech/i,
+  /indian express tech/i,
+  /techpp/i,
+  /india today technology/i,
+  /the hindu technology/i,
+];
+const NON_TECH_TECH_DESK_PATTERNS = [
+  /pinkvilla/i,
+  /filmfare/i,
+  /bollywood hungama/i,
+  /koimoi/i,
+  /india today entertainment/i,
+];
+const TECH_DESK_KEYWORDS = [
+  "tech", "technology", "software", "hardware", "smartphone", "iphone", "android", "samsung",
+  "apple", "google", "microsoft", "meta", "amazon", "chip", "chips", "chipset", "semiconductor",
+  "cybersecurity", "cloud", "browser", "api", "app", "apps", "platform", "device", "devices",
+  "gadget", "gadgets", "laptop", "tablet", "wearable", "startup", "saas", "ai", "artificial intelligence"
+];
+const NON_TECH_TECH_DESK_KEYWORDS = [
+  "movie", "film", "box office", "actor", "actress", "celebrity", "bollywood", "hollywood",
+  "trailer", "album", "music", "awards", "award", "kapoor", "ranveer", "janhvi", "karan johar"
+];
 const HOMEPAGE_SECTION_DEFINITIONS = [
   { key: "ai", title: "AI", eyebrow: "Models and agents", category: "ai", filter: "ai" },
   { key: "tech", title: "Tech", eyebrow: "Platforms and chips", category: "tech", filter: "tech" },
@@ -577,6 +601,23 @@ function isRenderableRemoteImage(value = "") {
   return !/\.svg(\?|$)/i.test(normalized);
 }
 
+function isLikelyTechStory(story = {}) {
+  const source = cleanText(String(story.source || "")).toLowerCase();
+  const haystack = cleanText([
+    story.title,
+    story.summary,
+    story.content,
+    story.body,
+    story.source,
+    story.category,
+  ].filter(Boolean).join(" ")).toLowerCase();
+
+  if (NON_TECH_TECH_DESK_PATTERNS.some((pattern) => pattern.test(source))) return false;
+  if (NON_TECH_TECH_DESK_KEYWORDS.some((keyword) => haystack.includes(keyword))) return false;
+  if (TECH_DESK_SOURCE_PATTERNS.some((pattern) => pattern.test(source))) return true;
+  return TECH_DESK_KEYWORDS.some((keyword) => haystack.includes(keyword));
+}
+
 function storyImage(story = {}) {
   const candidates = [story.image, story.image_url, story.image_storage_url]
     .map((value) => decodeHtmlEntities(String(value || "").trim()))
@@ -1032,10 +1073,16 @@ function buildHomepageSectionStories(section = {}, allStories = [], categoryMap 
   const sectionLabel = section.title || "News";
 
   if (section.category) {
+    const categoryStories = section.category === "tech"
+      ? (categoryMap[section.category] || []).filter(isLikelyTechStory)
+      : (categoryMap[section.category] || []);
     const exactStories = takeUnique(
       filterDisplayableStories([
-        ...(categoryMap[section.category] || []),
-        ...baseStories.filter((story) => String(story.category || "").toLowerCase() === section.category),
+        ...categoryStories,
+        ...baseStories.filter((story) =>
+          String(story.category || "").toLowerCase() === section.category
+          && (section.category !== "tech" || isLikelyTechStory(story))
+        ),
       ]),
       new Set(),
       8
@@ -1739,7 +1786,10 @@ function buildHomepageCategoryMapFromStories(stories = []) {
 
   CATEGORY_KEYS.forEach((key) => {
     categoryMap[key] = dedupeStories(
-      filteredStories.filter((story) => String(story.category || "").toLowerCase() === key)
+      filteredStories.filter((story) =>
+        String(story.category || "").toLowerCase() === key
+        && (key !== "tech" || isLikelyTechStory(story))
+      )
     );
   });
 
