@@ -1,5 +1,4 @@
 const crypto = require("node:crypto");
-const prisma = require("../backend/config/database");
 const newsService = require("../backend/services/news");
 
 function normalizeSecret(value) {
@@ -190,6 +189,5 @@ module.exports = async (req, res) => {
         delete process.env[key];
       }
     });
-    await prisma.$disconnect().catch(() => null);
   }
 };
