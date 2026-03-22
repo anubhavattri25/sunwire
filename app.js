@@ -758,13 +758,18 @@ function isAudienceGatheringStory(story = {}) {
 }
 
 function isHomepageGeneralStory(story = {}) {
-  return String(story.category || "").toLowerCase() !== "food" && !isFoodStory(story);
+  const category = String(story.category || "").toLowerCase();
+  return category !== "food"
+    && category !== "jobs"
+    && !isFoodStory(story)
+    && !isJobsStory(story);
 }
 
 function isHomepageFeaturedStory(story = {}) {
   const category = String(story.category || "").toLowerCase();
   if (!isHomepageGeneralStory(story)) return false;
-  if (category === "ai" || category === "tech") return true;
+  if (category === "ai") return true;
+  if (category === "tech") return isLikelyTechStory(story);
   if (isWarRelatedStory(story)) return true;
   return isAudienceGatheringStory(story);
 }
