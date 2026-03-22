@@ -85,17 +85,30 @@ function readOptionalNumber(req, key) {
   return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : "";
 }
 
+function readOptionalBoolean(req, key, defaultValue = false) {
+  const rawValue = readOptionalString(req, key);
+  if (!rawValue) return defaultValue;
+
+  const normalized = rawValue.trim().toLowerCase();
+  if (["1", "true", "yes", "on"].includes(normalized)) return true;
+  if (["0", "false", "no", "off"].includes(normalized)) return false;
+  return defaultValue;
+}
+
 function buildRuntimeOverrides(req) {
   const categories = readCsvValue(readOptionalString(req, "categories"));
   const sourceNames = readCsvValue(readOptionalString(req, "sourceNames"));
   const rssLimit = readOptionalNumber(req, "rssLimit");
+  const fastMode = readOptionalBoolean(req, "fast", true);
 
   return {
     SUNWIRE_SOURCE_CATEGORIES: categories,
     SUNWIRE_SOURCE_NAMES: sourceNames,
     SUNWIRE_RSS_ITEM_LIMIT: rssLimit,
-    SUNWIRE_SKIP_SEARCH_INDEXING: categories || sourceNames ? "1" : "",
-    SUNWIRE_SKIP_AI_CATEGORY_CLASSIFICATION: categories ? "1" : "",
+    SUNWIRE_SKIP_SEARCH_INDEXING: "1",
+    SUNWIRE_SKIP_AI_CATEGORY_CLASSIFICATION: "1",
+    AI_PROVIDER: fastMode ? "disabled" : "",
+    OLLAMA_TIMEOUT_MS: fastMode ? "5000" : "",
   };
 }
 
