@@ -547,7 +547,12 @@ async function fetchRssSource(source) {
       }
     }
 
-    if (!source.preferPublisherScrape && cleanText(content).length < SHORT_RSS_CONTENT_THRESHOLD && item.link) {
+    const needsContentHydration = !source.preferPublisherScrape
+      && cleanText(content).length < SHORT_RSS_CONTENT_THRESHOLD
+      && item.link;
+    const needsImageHydration = !source.preferPublisherScrape && !imageUrl && item.link;
+
+    if (needsContentHydration || needsImageHydration) {
       const scrapedArticle = await fetchFullArticle(item.link);
 
       if (cleanText(scrapedArticle.content).length > cleanText(content).length) {

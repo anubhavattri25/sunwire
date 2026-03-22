@@ -150,8 +150,9 @@ async function hydrateHomepagePoolPayload(payload = {}) {
   if (!candidateStories.length) return payload;
 
   const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    allowRemoteFetch: false,
-    concurrency: 4,
+    allowRemoteFetch: true,
+    remoteFetchLimit: 8,
+    concurrency: 3,
   });
   const replacementMap = new Map(
     enrichedStories
@@ -184,7 +185,9 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
   });
 
   const stories = await enrichStoriesWithImages(records.map(toCompatStory), {
-    allowRemoteFetch: false,
+    allowRemoteFetch: true,
+    remoteFetchLimit: 8,
+    concurrency: 3,
   });
   const hasMore = stories.length === safePageSize;
   const approximateTotal = hasMore

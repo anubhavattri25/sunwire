@@ -130,8 +130,9 @@ async function buildHydratedHomeView({
   if (!candidateStories.length) return initialView;
 
   const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    allowRemoteFetch: false,
-    concurrency: 4,
+    allowRemoteFetch: true,
+    remoteFetchLimit: 8,
+    concurrency: 3,
   });
   const replacementMap = new Map(
     enrichedStories
