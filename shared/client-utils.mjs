@@ -169,7 +169,7 @@ export function upsertImagePreload(href = "", options = {}) {
 export function applyResponsiveImage(imageElement, src, options = {}) {
   if (!imageElement) return;
 
-  const { alt = "", highPriority = false } = options;
+  const { alt = "", highPriority = false, fallbackSrc = "" } = options;
   const config = buildResponsiveImageConfig(src, options);
 
   imageElement.alt = alt;
@@ -182,6 +182,17 @@ export function applyResponsiveImage(imageElement, src, options = {}) {
     imageElement.fetchPriority = "high";
   } else {
     imageElement.removeAttribute("fetchpriority");
+  }
+
+  if (fallbackSrc && fallbackSrc !== config.src) {
+    imageElement.onerror = () => {
+      imageElement.onerror = null;
+      imageElement.removeAttribute("srcset");
+      imageElement.removeAttribute("sizes");
+      imageElement.src = fallbackSrc;
+    };
+  } else {
+    imageElement.onerror = null;
   }
 
   if (!config.srcset) {

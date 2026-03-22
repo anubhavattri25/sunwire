@@ -93,16 +93,16 @@ const FILTER_ALIASES = {
   sports: "sports",
   business: "business",
 };
-const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business"];
+const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
 const HOMEPAGE_SECTION_DEFINITIONS = [
   { key: "ai", title: "AI", eyebrow: "Models and agents", category: "ai", filter: "ai" },
   { key: "tech", title: "Tech", eyebrow: "Platforms and chips", category: "tech", filter: "tech" },
   { key: "entertainment", title: "Entertainment", eyebrow: "Culture and releases", category: "entertainment", filter: "entertainment" },
   { key: "sports", title: "Sports", eyebrow: "Matches and momentum", category: "sports", filter: "sports" },
   { key: "business", title: "Business", eyebrow: "Markets and money", category: "business", filter: "business" },
-  { key: "politics", title: "Politics", eyebrow: "Power and policy", source: "politics" },
-  { key: "jobs", title: "Jobs", eyebrow: "Hiring and careers", source: "jobs" },
-  { key: "food", title: "Food", eyebrow: "Dining and culture", source: "food" },
+  { key: "politics", title: "Politics", eyebrow: "Power and policy", category: "politics", filter: "politics" },
+  { key: "jobs", title: "Jobs", eyebrow: "Hiring and careers", category: "jobs", filter: "jobs" },
+  { key: "food", title: "Food", eyebrow: "Dining and culture", category: "food", filter: "food" },
 ];
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
@@ -569,10 +569,20 @@ function buildFallbackImage(story = {}) {
   return `https://placehold.co/1200x675/${palette.background}/${palette.foreground}?text=${encodeURIComponent(text)}`;
 }
 
+function isRenderableRemoteImage(value = "") {
+  const normalized = decodeHtmlEntities(String(value || "").trim());
+  if (!normalized) return false;
+  if (/\$\{[^}]+\}/.test(normalized) || /%24%7B[^%]+%7D/i.test(normalized)) return false;
+  if (!/^https?:\/\//i.test(normalized)) return false;
+  return !/\.svg(\?|$)/i.test(normalized);
+}
+
 function storyImage(story = {}) {
-  const candidate = decodeHtmlEntities(String(story.image || story.image_url || story.image_storage_url || "").trim());
-  const isValidRemote = /^https?:\/\//i.test(candidate) && !/\.svg(\?|$)/i.test(candidate);
-  return isValidRemote ? candidate : buildFallbackImage(story);
+  const candidates = [story.image, story.image_url, story.image_storage_url]
+    .map((value) => decodeHtmlEntities(String(value || "").trim()))
+    .filter(Boolean);
+  const candidate = candidates.find((value) => isRenderableRemoteImage(value)) || "";
+  return candidate || buildFallbackImage(story);
 }
 
 function buildArticleHref(story = {}) {
@@ -989,6 +999,34 @@ function mapSectionStories(stories = [], label = "") {
   }));
 }
 
+function buildCategoryPlaceholderStories(section = {}, currentStories = [], targetCount = 8) {
+  const count = Math.max(0, targetCount - currentStories.length);
+  if (!count) return [];
+
+  const category = String(section.category || section.key || "latest").trim().toLowerCase() || "latest";
+  const label = section.title || toTitleCase(category);
+  const source = currentStories.length ? "Sunwire Live Desk" : "Sunwire";
+
+  return Array.from({ length: count }, (_, index) => ({
+    id: `placeholder-${category}-${index + 1}`,
+    slug: `placeholder-${category}-${index + 1}`,
+    title: currentStories.length
+      ? `More ${label.toLowerCase()} updates coming soon`
+      : `${label} updates are loading`,
+    summary: currentStories.length
+      ? `More verified ${label.toLowerCase()} stories will appear here as fresh coverage is ingested.`
+      : `This ${label.toLowerCase()} rail is reserved for strictly matched stories only.`,
+    content: currentStories.length
+      ? `More verified ${label.toLowerCase()} stories will appear here as fresh coverage is ingested.`
+      : `This ${label.toLowerCase()} rail is reserved for strictly matched stories only.`,
+    source,
+    category,
+    displayCategory: label,
+    published_at: "",
+    source_published_at: "",
+  }));
+}
+
 function buildHomepageSectionStories(section = {}, allStories = [], categoryMap = {}, latestPool = []) {
   const baseStories = filterDisplayableStories(allStories);
   const sectionLabel = section.title || "News";
@@ -1002,12 +1040,10 @@ function buildHomepageSectionStories(section = {}, allStories = [], categoryMap 
       new Set(),
       8
     );
-    const fallbackStories = takeUnique(
-      latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
-      new Set(),
-      Math.max(0, 8 - exactStories.length)
-    );
-    return mapSectionStories([...exactStories, ...fallbackStories].slice(0, 8), sectionLabel);
+    return mapSectionStories([
+      ...exactStories.slice(0, 8),
+      ...buildCategoryPlaceholderStories(section, exactStories.slice(0, 8), 8),
+    ].slice(0, 8), sectionLabel);
   }
 
   if (section.source === "latest") {
@@ -1339,11 +1375,13 @@ function renderHero(story) {
   headlineOfTheDayMeta.textContent = fmtDate(getDisplayTimestamp(story));
   heroAuthorEl.textContent = story.source || "SunWire Desk";
   heroDeskChip.textContent = categoryLabel(story);
-  applyResponsiveImage(heroImageEl, storyImage(story), {
+  const heroImageSrc = storyImage(story);
+  applyResponsiveImage(heroImageEl, heroImageSrc, {
     alt: story.title || "Headline of the day",
     width: 1600,
     height: 900,
     sizes: "(max-width: 1200px) 100vw, 80vw",
+    fallbackSrc: buildFallbackImage(story),
     highPriority: true,
   });
 }
@@ -1361,10 +1399,11 @@ function createNewsCard(story, variant = "standard") {
   const timeEl = card.querySelector(".news-card__time");
   const sourceEl = card.querySelector(".news-card__source");
   const href = buildArticleHref(story);
+  const imageSrc = storyImage(story);
 
   mediaLink.href = href;
   headlineLink.href = href;
-  applyResponsiveImage(image, storyImage(story), {
+  applyResponsiveImage(image, imageSrc, {
     alt: story.title || "SunWire story image",
     width: 1600,
     height: variant === "standard" ? 1000 : 900,
@@ -1373,6 +1412,7 @@ function createNewsCard(story, variant = "standard") {
       : variant === "dense"
         ? "(max-width: 900px) 100vw, 48vw"
         : "(max-width: 900px) 100vw, 30vw",
+    fallbackSrc: buildFallbackImage(story),
   });
   tag.textContent = categoryLabel(story);
   headline.textContent = optimizeHeadline(story.title, variant === "compact" ? "compact" : "card");
