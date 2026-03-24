@@ -90,7 +90,7 @@ function delay(ms = 0) {
   return new Promise((resolve) => setTimeout(resolve, Math.max(0, Number(ms) || 0)));
 }
 
-async function runWithConcurrency(items = [], worker, concurrency = SOURCE_FETCH_CONCURRENCY) {
+async function runWithConcurrency(items = [], worker, concurrency = 3) {
   const input = Array.isArray(items) ? items : [];
   const safeConcurrency = Math.max(1, Number(concurrency) || 1);
   const results = new Array(input.length);
@@ -688,7 +688,7 @@ async function fetchSource(source) {
         status: error.response?.status || null,
       });
 
-      if (attempt > SOURCE_FETCH_RETRIES) break;
+      if (attempt > getSourceFetchRetries()) break;
       await delay(400 * attempt);
     }
   }
