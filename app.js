@@ -23,6 +23,13 @@ const trendingUpdatedAtEl = document.getElementById("trendingUpdatedAt");
 const menuToggle = document.getElementById("menuToggle");
 const siteHeader = document.querySelector(".site-header");
 const searchButton = document.getElementById("searchButton");
+const authButton = document.getElementById("authButton");
+const authStatus = document.getElementById("authStatus");
+const authFeedback = document.getElementById("authFeedback");
+const adminMenu = document.getElementById("adminMenu");
+const adminMenuButton = document.getElementById("adminMenuButton");
+const adminMenuPanel = document.getElementById("adminMenuPanel");
+const adminMenuItems = [...document.querySelectorAll("[data-admin-target]")];
 const headerSearchForm = document.getElementById("headerSearch");
 const headerSearchInput = document.getElementById("headerSearchInput");
 const headerSearchClear = document.getElementById("headerSearchClear");
@@ -80,6 +87,10 @@ const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 2 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const DEFERRED_ASSET_VERSION = "20260322-7";
+const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
+const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
+const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
+const ADMIN_EMAIL = "anubhavattri07@gmail.com";
 const FILTER_ALIASES = {
   all: "all",
   latest: "all",
@@ -258,6 +269,10 @@ const PLACEHOLDER_PALETTES = [
 
 let currentStories = [];
 let currentCategoryMap = {};
+let googleAuthSession = readGoogleAuthSession();
+let googleAuthIdToken = readGoogleAuthIdToken();
+let isAuthBusy = false;
+let authBusyLabel = "";
 let currentPage = 1;
 let totalPages = 1;
 let totalStories = 0;
@@ -290,6 +305,383 @@ function loadHomeWidgetsModule() {
 function loadSearchModule() {
   searchModulePromise ||= import(`./app-search.mjs?v=${DEFERRED_ASSET_VERSION}`);
   return searchModulePromise;
+}
+
+function readGoogleClientId() {
+  return cleanText(
+    window.__SUNWIRE_GOOGLE_CLIENT_ID__
+    || authButton?.dataset?.googleClientId
+    || document.documentElement?.dataset?.googleClientId
+    || ""
+  );
+}
+
+function readGoogleAuthSession() {
+  try {
+    const raw = window.localStorage.getItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const email = cleanText(parsed?.email || "");
+    if (!email) return null;
+    return {
+      email,
+      name: cleanText(parsed?.name || ""),
+      picture: cleanText(parsed?.picture || ""),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function readGoogleAuthIdToken() {
+  try {
+    const token = cleanText(window.localStorage.getItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY) || "");
+    if (!token) return "";
+    const payload = decodeJwtPayload(token);
+    const expiresAt = Number(payload?.exp || 0) * 1000;
+    if (expiresAt && expiresAt <= Date.now()) {
+      window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
+      return "";
+    }
+    return token;
+  } catch (_) {
+    window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
+    return "";
+  }
+}
+
+function saveGoogleAuthSession(session = null) {
+  if (!session?.email) {
+    window.localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
+    return;
+  }
+
+  window.localStorage.setItem(
+    GOOGLE_AUTH_SESSION_STORAGE_KEY,
+    JSON.stringify({
+      email: cleanText(session.email),
+      name: cleanText(session.name || ""),
+      picture: cleanText(session.picture || ""),
+    })
+  );
+}
+
+function saveGoogleAuthIdToken(token = "") {
+  const normalized = cleanText(token);
+  googleAuthIdToken = normalized;
+  if (!normalized) {
+    window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY, normalized);
+}
+
+function isAdminUserEmail(email = "") {
+  return cleanText(email).toLowerCase() === ADMIN_EMAIL;
+}
+
+function setAuthStatus(message = "") {
+  if (authStatus) authStatus.textContent = cleanText(message);
+}
+
+function showAuthFeedback(message = "", tone = "info") {
+  if (!authFeedback) return;
+  const normalized = cleanText(message);
+  authFeedback.hidden = !normalized;
+  authFeedback.textContent = normalized;
+  authFeedback.classList.remove("is-error", "is-success");
+  if (!normalized) return;
+  if (tone === "error") authFeedback.classList.add("is-error");
+  if (tone === "success") authFeedback.classList.add("is-success");
+}
+
+function formatAuthErrorMessage(error) {
+  const rawMessage = cleanText(error?.message || "");
+  const normalized = rawMessage.toLowerCase();
+  if (!normalized) return "Google login failed. Please try again.";
+  if (normalized.includes("not configured")) {
+    return "Google login is not configured yet. Add GOOGLE_CLIENT_ID to make the button work.";
+  }
+  if (normalized.includes("access_denied")) return "Google login was canceled.";
+  if (normalized.includes("state")) return "Google login could not be verified. Please try again.";
+  if (normalized.includes("nonce")) return "Google login could not be verified. Please try again.";
+  return rawMessage;
+}
+
+function syncAuthButton() {
+  if (!authButton) return;
+  const email = cleanText(googleAuthSession?.email || "");
+  authButton.disabled = isAuthBusy;
+  authButton.classList.toggle("is-busy", isAuthBusy);
+  authButton.classList.toggle("is-authenticated", Boolean(email));
+  authButton.textContent = isAuthBusy
+    ? (authBusyLabel || (email ? "Logging out..." : "Redirecting..."))
+    : (email || "Login");
+  authButton.title = email ? `${email} - click to logout` : "Login with Google";
+  authButton.setAttribute("aria-label", email ? `Logout ${email}` : "Login with Google");
+}
+
+function syncAdminMenu() {
+  if (!adminMenu || !adminMenuButton) return;
+  const isAdmin = isAdminUserEmail(googleAuthSession?.email || "");
+  adminMenu.hidden = !isAdmin;
+  if (!isAdmin) setAdminMenuOpenState(false);
+  adminMenuButton.classList.toggle("is-admin", isAdmin);
+}
+
+function setAuthBusyState(nextBusy, label = "") {
+  isAuthBusy = Boolean(nextBusy);
+  authBusyLabel = isAuthBusy ? cleanText(label) : "";
+  syncAuthButton();
+}
+
+function decodeJwtPayload(token = "") {
+  const parts = String(token || "").split(".");
+  if (parts.length < 2) throw new Error("Google login returned an invalid credential.");
+  const normalized = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+  const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, "=");
+  const decoded = window.atob(padded);
+  return JSON.parse(decoded);
+}
+
+function extractGoogleUserProfile(credential = "") {
+  const profile = decodeJwtPayload(credential);
+  const email = cleanText(profile.email || "");
+  if (!email) throw new Error("Google did not return an email address.");
+  return {
+    email,
+    name: cleanText(profile.name || ""),
+    picture: cleanText(profile.picture || ""),
+  };
+}
+
+function readGoogleAuthRequest() {
+  try {
+    const raw = window.sessionStorage.getItem(GOOGLE_AUTH_REQUEST_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const state = cleanText(parsed?.state || "");
+    const nonce = cleanText(parsed?.nonce || "");
+    const returnPath = cleanText(parsed?.returnPath || "/");
+    if (!state || !nonce) return null;
+    return { state, nonce, returnPath: returnPath || "/" };
+  } catch (_) {
+    return null;
+  }
+}
+
+function saveGoogleAuthRequest(request = null) {
+  if (!request?.state || !request?.nonce) {
+    window.sessionStorage.removeItem(GOOGLE_AUTH_REQUEST_STORAGE_KEY);
+    return;
+  }
+
+  window.sessionStorage.setItem(
+    GOOGLE_AUTH_REQUEST_STORAGE_KEY,
+    JSON.stringify({
+      state: cleanText(request.state),
+      nonce: cleanText(request.nonce),
+      returnPath: cleanText(request.returnPath || "/"),
+    })
+  );
+}
+
+function createRandomAuthToken(byteLength = 24) {
+  const bytes = new Uint8Array(byteLength);
+  window.crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function buildGoogleRedirectUri() {
+  return `${window.location.origin}/`;
+}
+
+function buildGoogleLoginUrl() {
+  const clientId = readGoogleClientId();
+  if (!clientId) throw new Error("Google login is not configured yet.");
+
+  const request = {
+    state: createRandomAuthToken(16),
+    nonce: createRandomAuthToken(16),
+    returnPath: `${window.location.pathname}${window.location.search}` || "/",
+  };
+  saveGoogleAuthRequest(request);
+
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: buildGoogleRedirectUri(),
+    response_type: "id_token",
+    scope: "openid email profile",
+    prompt: "select_account",
+    nonce: request.nonce,
+    state: request.state,
+  });
+
+  return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+}
+
+function clearGoogleAuthResponseFromUrl(nextPath = null) {
+  const targetPath = cleanText(nextPath || `${window.location.pathname}${window.location.search}` || "/");
+  if (window.location.hash) {
+    window.history.replaceState({}, document.title, targetPath);
+  }
+}
+
+function consumeGoogleRedirectResponse() {
+  const hash = String(window.location.hash || "").replace(/^#/, "").trim();
+  if (!hash) return;
+
+  const params = new URLSearchParams(hash);
+  const idToken = cleanText(params.get("id_token") || "");
+  const error = cleanText(params.get("error") || "");
+  const state = cleanText(params.get("state") || "");
+  if (!idToken && !error) return;
+
+  const authRequest = readGoogleAuthRequest();
+  const nextPath = cleanText(authRequest?.returnPath || "/");
+  clearGoogleAuthResponseFromUrl(nextPath);
+  saveGoogleAuthRequest(null);
+
+  if (error) {
+    const message = formatAuthErrorMessage(new Error(error));
+    setAuthStatus(message);
+    showAuthFeedback(message, "error");
+    return;
+  }
+
+  if (!authRequest || state !== authRequest.state) {
+    const message = formatAuthErrorMessage(new Error("state_mismatch"));
+    setAuthStatus(message);
+    showAuthFeedback(message, "error");
+    return;
+  }
+
+  try {
+    const payload = decodeJwtPayload(idToken);
+    const nonce = cleanText(payload?.nonce || "");
+    if (!nonce || nonce !== authRequest.nonce) {
+      throw new Error("nonce_mismatch");
+    }
+    const profile = extractGoogleUserProfile(idToken);
+    googleAuthSession = profile;
+    saveGoogleAuthSession(profile);
+    saveGoogleAuthIdToken(idToken);
+    setAuthStatus(`Logged in as ${profile.email}`);
+    showAuthFeedback(`Logged in as ${profile.email}`, "success");
+    syncAdminMenu();
+    if (isAdminUserEmail(profile.email)) {
+      void syncAdminSession(idToken, { quiet: true });
+    }
+  } catch (error) {
+    console.error(error);
+    const message = formatAuthErrorMessage(error);
+    setAuthStatus(message);
+    showAuthFeedback(message, "error");
+  }
+}
+
+function loginWithGoogle() {
+  if (isAuthBusy) return;
+
+  try {
+    setAuthBusyState(true, "Redirecting...");
+    setAuthStatus("Redirecting to Google sign in.");
+    showAuthFeedback("");
+    const loginUrl = buildGoogleLoginUrl();
+    window.location.assign(loginUrl);
+  } catch (error) {
+    console.error(error);
+    const message = formatAuthErrorMessage(error);
+    setAuthStatus(message);
+    showAuthFeedback(message, "error");
+    setAuthBusyState(false);
+  }
+}
+
+async function logoutGoogleUser() {
+  if (isAuthBusy) return;
+
+  const currentEmail = cleanText(googleAuthSession?.email || "");
+  setAuthBusyState(true, "Logging out...");
+
+  try {
+    googleAuthSession = null;
+    saveGoogleAuthSession(null);
+    saveGoogleAuthIdToken("");
+    await clearAdminSession();
+    setAuthStatus(currentEmail ? `${currentEmail} logged out.` : "Logged out.");
+    showAuthFeedback(currentEmail ? `${currentEmail} logged out.` : "Logged out.", "success");
+  } finally {
+    syncAdminMenu();
+    setAuthBusyState(false);
+  }
+}
+
+async function syncAdminSession(idToken = "", options = {}) {
+  const token = cleanText(idToken || googleAuthIdToken || "");
+  if (!token) {
+    if (!options.quiet) showAuthFeedback("Please log in again to verify admin access.", "error");
+    return false;
+  }
+
+  try {
+    const response = await fetch("/api/admin/session", {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ idToken: token }),
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      if (!options.quiet) {
+        showAuthFeedback(payload.error || "Admin access could not be verified.", "error");
+      }
+      return false;
+    }
+    return true;
+  } catch (_) {
+    if (!options.quiet) showAuthFeedback("Admin access could not be verified right now.", "error");
+    return false;
+  }
+}
+
+async function clearAdminSession() {
+  try {
+    await fetch("/api/admin/session", {
+      method: "DELETE",
+      credentials: "include",
+    });
+  } catch (_) {
+    // Ignore session cleanup failures.
+  }
+}
+
+function setAdminMenuOpenState(nextOpen) {
+  const shouldOpen = Boolean(nextOpen);
+  if (!adminMenu || !adminMenuButton || !adminMenuPanel) return;
+  adminMenu.classList.toggle("is-open", shouldOpen);
+  adminMenuButton.setAttribute("aria-expanded", shouldOpen ? "true" : "false");
+  adminMenuPanel.hidden = !shouldOpen;
+}
+
+async function openAdminDashboard() {
+  const email = cleanText(googleAuthSession?.email || "");
+  if (!email) {
+    showAuthFeedback("Login with Google to access the admin dashboard.", "error");
+    loginWithGoogle();
+    return;
+  }
+
+  if (!isAdminUserEmail(email)) {
+    showAuthFeedback(`Dashboard access is restricted to ${ADMIN_EMAIL}.`, "error");
+    return;
+  }
+
+  const ready = await syncAdminSession();
+  if (!ready) return;
+  window.location.assign("/admin/news");
 }
 
 function cleanTitle(title = "") {
@@ -633,7 +1025,17 @@ function buildArticleHref(story = {}) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
     .replace(/-{2,}/g, "-");
-  return slug ? `/article/${slug}` : "/";
+  if (!slug) return "/";
+
+  const params = new URLSearchParams();
+  if (story.id) params.set("id", String(story.id || "").trim());
+  if (story.sourceUrl || story.url) params.set("u", String(story.sourceUrl || story.url || "").trim());
+  if (story.title) params.set("t", cleanText(story.title || ""));
+  if (story.category) params.set("c", resolveFilter(story.category || "all"));
+  params.set("sw", "2");
+  const query = params.toString();
+
+  return query ? `/article/${slug}?${query}` : `/article/${slug}`;
 }
 
 function storyKey(story = {}) {
@@ -765,7 +1167,13 @@ function isHomepageGeneralStory(story = {}) {
     && !isJobsStory(story);
 }
 
+function isActiveFeaturedManualStory(story = {}) {
+  const featuredUntil = new Date(story?.featured_until || story?.featuredUntil || "").getTime();
+  return Boolean(story?.is_featured && featuredUntil && featuredUntil > Date.now());
+}
+
 function isHomepageFeaturedStory(story = {}) {
+  if (isActiveFeaturedManualStory(story)) return true;
   const category = String(story.category || "").toLowerCase();
   if (!isHomepageGeneralStory(story)) return false;
   if (category === "ai") return true;
@@ -795,6 +1203,9 @@ function isIndiaPriorityStory(story = {}) {
 }
 
 function compareHomepagePriority(a, b) {
+  const manualFeaturedDiff = Number(isActiveFeaturedManualStory(b)) - Number(isActiveFeaturedManualStory(a));
+  if (manualFeaturedDiff !== 0) return manualFeaturedDiff;
+
   const priorityFlagDiff = Number(isIndiaPriorityStory(b)) - Number(isIndiaPriorityStory(a));
   if (priorityFlagDiff !== 0) return priorityFlagDiff;
 
@@ -858,7 +1269,13 @@ function findStoryByArticleHref(href = "") {
     pathname = href;
   }
 
-  return collectKnownStories().find((story) => buildArticleHref(story) === pathname) || null;
+  return collectKnownStories().find((story) => {
+    try {
+      return new URL(buildArticleHref(story), window.location.origin).pathname === pathname;
+    } catch (_) {
+      return buildArticleHref(story) === pathname;
+    }
+  }) || null;
 }
 
 function warmArticleRoute(href = "") {
@@ -875,14 +1292,15 @@ function warmArticleRoute(href = "") {
 
 function buildArticleApiUrl(story = {}) {
   const href = buildArticleHref(story);
-  const slug = String(href.split("/").pop() || "").trim();
+  const parsedHref = new URL(href, window.location.origin);
+  const slug = String(parsedHref.pathname.split("/").pop() || "").trim();
   if (!slug) return "";
 
-  return `/api/article?${new URLSearchParams({
-    slug,
-    category: resolveFilter(story.category || "all"),
-    id: story.id || "",
-  }).toString()}`;
+  const params = new URLSearchParams(parsedHref.searchParams);
+  params.set("slug", slug);
+  params.set("category", resolveFilter(story.category || "all"));
+  if (story.id) params.set("id", String(story.id || "").trim());
+  return `/api/article?${params.toString()}`;
 }
 
 async function prefetchArticleForStory(story = {}) {
@@ -2272,6 +2690,33 @@ homeRefreshBtn.addEventListener("click", async () => {
   ]);
 });
 
+authButton?.addEventListener("click", async () => {
+  if (googleAuthSession?.email) {
+    await logoutGoogleUser();
+    return;
+  }
+  loginWithGoogle();
+});
+
+adminMenuButton?.addEventListener("click", () => {
+  const isOpen = adminMenu?.classList.contains("is-open");
+  setAdminMenuOpenState(!isOpen);
+});
+
+adminMenuItems.forEach((item) => {
+  item.addEventListener("click", async (event) => {
+    const target = item.dataset.adminTarget || "home";
+    setAdminMenuOpenState(false);
+    if (target === "home") {
+      event.preventDefault();
+      window.location.assign("/");
+      return;
+    }
+    event.preventDefault();
+    await openAdminDashboard();
+  });
+});
+
 searchButton.addEventListener("click", () => {
   const isOpen = siteHeader.classList.contains("is-search-open");
   if (!isOpen) {
@@ -2367,6 +2812,9 @@ document.addEventListener("touchstart", (event) => {
 }, { passive: true });
 
 document.addEventListener("click", (event) => {
+  if (adminMenu && !adminMenu.contains(event.target)) {
+    setAdminMenuOpenState(false);
+  }
   if (!siteHeader.contains(event.target)) {
     siteHeader.classList.remove("is-open");
     if (!activeSearchQuery && !cleanText(headerSearchInput?.value || "")) {
@@ -2389,6 +2837,9 @@ document.addEventListener("click", (event) => {
 
 syncHomeModeVisibility();
 syncActiveControls();
+consumeGoogleRedirectResponse();
+syncAuthButton();
+syncAdminMenu();
 syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();
 const preloadedHomeData = readPreloadedHomeData();
@@ -2412,13 +2863,20 @@ if (preloadedHomeData && !activeSearchQuery) {
     loadStories(currentPage);
   }
 }
-loadSidebar();
 window.addEventListener("load", () => {
   scheduleIdleTask(() => {
+    void loadSidebar();
     void loadHomeWidgetsModule();
     if (activeSearchQuery) void loadSearchModule();
   });
 }, { once: true });
+window.addEventListener("storage", (event) => {
+  if (event.key !== GOOGLE_AUTH_SESSION_STORAGE_KEY && event.key !== GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY) return;
+  googleAuthSession = readGoogleAuthSession();
+  googleAuthIdToken = readGoogleAuthIdToken();
+  syncAuthButton();
+  syncAdminMenu();
+});
 window.addEventListener("popstate", async () => {
   const route = parseHomeRoute(window.location);
   const previousFilter = activeFilter;

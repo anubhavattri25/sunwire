@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../config/database');
 const { articleSelect, toApiArticle } = require('../models/Article');
 const { buildCacheKey, getCachedJson, setCachedJson, invalidateCache } = require('../utils/cache');
+const { buildFeaturedOrderBy, expireFeaturedArticles } = require('../utils/adminArticle');
 const { getStatusCounts, pipelineState } = require('../services/newsIngestor');
 const { getLocalAiConfig, isLocalAiRewriteEnabled } = require('../services/localAiRewrite');
 const { safeConnectRedis } = require('../config/redis');
@@ -27,6 +28,8 @@ const CATEGORY_MAP = {
   politics: 'politics',
   jobs: 'jobs',
   food: 'food',
+  headline: 'headline',
+  trending: 'trending',
 };
 
 function normalizeCategory(input) {
@@ -37,13 +40,17 @@ function normalizeCategory(input) {
     : null;
 }
 
-function setPublicApiCacheHeaders(res) {
-  res.setHeader('Cache-Control', PUBLIC_API_CACHE_HEADER);
+function setPublicApiCacheHeaders(res, disableCache = false) {
+  res.setHeader('Cache-Control', disableCache ? 'no-store' : PUBLIC_API_CACHE_HEADER);
 }
 
 router.get('/news', async (req, res, next) => {
   try {
     if (await respondIfDatabaseUnavailable(res)) return;
+    const expired = await expireFeaturedArticles(prisma);
+    if (Number(expired?.count || 0) > 0) {
+      await invalidateCache();
+    }
 
     const page = Math.max(Number.parseInt(req.query.page || '1', 10), 1);
     const requestedCategory = String(req.query.category || '').trim();
@@ -54,7 +61,7 @@ router.get('/news', async (req, res, next) => {
     const cacheKey = buildCacheKey('news', category || 'all', `page-${page}`);
     const cached = await getCachedJson(cacheKey);
     if (cached) {
-      setPublicApiCacheHeaders(res);
+      setPublicApiCacheHeaders(res, false);
       return res.json(cached);
     }
 
@@ -64,10 +71,7 @@ router.get('/news', async (req, res, next) => {
       prisma.article.findMany({
         where,
         select: articleSelect,
-        orderBy: [
-          { created_at: 'desc' },
-          { published_at: 'desc' },
-        ],
+        orderBy: buildFeaturedOrderBy(),
         skip: (page - 1) * PAGE_SIZE,
         take: PAGE_SIZE,
       }),
@@ -83,7 +87,7 @@ router.get('/news', async (req, res, next) => {
     };
 
     await setCachedJson(cacheKey, payload, 120);
-    setPublicApiCacheHeaders(res);
+    setPublicApiCacheHeaders(res, false);
     return res.json(payload);
   } catch (error) {
     return next(error);

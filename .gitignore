@@ -3,3 +3,62 @@ node_modules
 .env.vercel.local
 .env.vercel.production
 *.log
+
+# Browser Profile Directories and Files
+ActorSafetyLists/
+AmountExtractionHeuristicRegexes/
+BrowserMetrics*/
+CaptchaProviders/
+CertificateRevocation/
+Crashpad/
+Crowd Deny/
+Default/
+FileTypePolicies/
+FirstPartySetsPreloaded/
+GrShaderCache/
+GraphiteDawnCache/
+MEIPreload/
+OnDeviceHeadSuggestModel/
+OptimizationHints/
+OriginTrials/
+PKIMetadata/
+PrivacySandboxAttestationsPreloaded/
+RecoveryImproved/
+SSLErrorAssistant/
+Safe Browsing/
+SafetyTips/
+ShaderCache/
+Subresource Filter/
+TrustTokenKeyCommitments/
+WasmTtsEngine/
+WidevineCdm/
+ZxcvbnData/
+component_crx_cache/
+extensions_crx_cache/
+hyphen-data/
+optimization_guide_model_store/
+segmentation_platform/
+*-spare.pma
+*-active.pma
+
+# Chrome Data Files
+Breadcrumbs
+Last Browser
+Last Version
+Local State
+Variations
+first_party_sets.db*
+lockfile
+
+# Temporary / Output Files
+.backfill-*.err
+.backfill-*.log
+.repair-missing-rewrites.*
+.local-*.log
+.env.vercel.production.bak
+codex-local-*.log
+diff.patch
+local-home-snapshot.html
+response*.txt
+tmp-page*.html
+homepage-dom.html

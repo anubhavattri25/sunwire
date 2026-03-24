@@ -191,7 +191,11 @@ async function main() {
     }
 
     const result = selectedArticles.length > 0
-      ? await processPendingArticles(prioritizeArticles(selectedArticles))
+      ? await (async () => {
+          // Force Prisma to reopen a fresh connection before writes after long RSS fetches.
+          await prisma.$disconnect().catch(() => null);
+          return processPendingArticles(prioritizeArticles(selectedArticles));
+        })()
       : { processed: 0, inserted: 0, duplicatesSkipped: 0 };
     console.log("PIPELINE RESULT:", JSON.stringify(result || {}, null, 2));
 

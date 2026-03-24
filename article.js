@@ -73,6 +73,35 @@ let pendingRelatedOptions = null;
 let appliedArticleScore = -1;
 const routePrefetchSet = new Set();
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function normalizeDisplayParagraph(value = "", preserveLines = false) {
+  const raw = String(value || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r/g, "");
+  if (!preserveLines) return cleanText(raw);
+  return raw
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .trim();
+}
+
+function splitDisplayParagraphs(value = "", preserveLines = false) {
+  return String(value || "")
+    .replace(/\r/g, "")
+    .split(/\n{2,}/)
+    .map((entry) => normalizeDisplayParagraph(entry, preserveLines))
+    .filter(Boolean);
+}
+
 function loadRelatedModule() {
   relatedModulePromise ||= import(`./article-related.mjs?v=${DEFERRED_ASSET_VERSION}`);
   return relatedModulePromise;
@@ -418,14 +447,19 @@ function renderTagChips(tags = []) {
   });
 }
 
-function renderParagraphs(container, paragraphs = [], fallbackText = "") {
+function renderParagraphs(container, paragraphs = [], fallbackText = "", options = {}) {
   if (!container) return;
   container.className = "article-body";
   container.innerHTML = "";
+  const preserveLines = Boolean(options?.preserveLines);
   const items = Array.isArray(paragraphs) && paragraphs.length ? paragraphs : [fallbackText];
   items.forEach((paragraph) => {
     const block = document.createElement("p");
-    block.textContent = cleanText(paragraph);
+    if (preserveLines) {
+      block.innerHTML = escapeHtml(String(paragraph || "")).replace(/\n/g, "<br />");
+    } else {
+      block.textContent = cleanText(paragraph);
+    }
     container.appendChild(block);
   });
 }
@@ -521,14 +555,18 @@ function applyArticleData(article = {}, fallback = {}) {
     article.summary || fallback.summary || fallback.subheadline || fallback.content || "",
     { maxSentences: 3 }
   );
+  const preserveManualParagraphs = Boolean(article.manual_upload || fallback.manual_upload);
   const fallbackBody = cleanText(fallback.body || fallback.content || "");
   const articleBody = cleanText(article.body || "");
   const preferredBody = wordCount(articleBody) >= wordCount(fallbackBody)
     ? (article.body || fallback.body || fallback.content || "")
     : (fallback.body || fallback.content || article.body || "");
   const deepDive = Array.isArray(article.deepDive) && article.deepDive.length
-    ? article.deepDive.map((entry) => cleanText(entry)).filter(Boolean)
-    : sanitizeArticleBody(preferredBody || summary).split(/\n{2,}/).map((entry) => cleanText(entry)).filter(Boolean);
+    ? article.deepDive.map((entry) => normalizeDisplayParagraph(entry, preserveManualParagraphs)).filter(Boolean)
+    : splitDisplayParagraphs(
+      preserveManualParagraphs ? preferredBody || summary : sanitizeArticleBody(preferredBody || summary),
+      preserveManualParagraphs,
+    );
   const publishedAt = article.published_at || article.publishedAt || fallback.publishedAt || "";
   const sourceName = article.source || fallback.source || "SunWire Desk";
   const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
@@ -558,7 +596,9 @@ function applyArticleData(article = {}, fallback = {}) {
   });
 
   renderTagChips(tags);
-  renderParagraphs(dom.articleBody, deepDive, "No additional verified details available.");
+  renderParagraphs(dom.articleBody, deepDive, "No additional verified details available.", {
+    preserveLines: preserveManualParagraphs,
+  });
 
   setSeo(
     article.seoTitle || `${headline} | SunWire`,
@@ -647,6 +687,17 @@ async function hydrateRelatedContent() {
 }
 
 function scheduleRelatedContentLoad(options = {}) {
+  if (
+    !dom.sidebarTrendingList
+    && !dom.sidebarLatestList
+    && !dom.sidebarRelatedList
+    && !dom.relatedGrid
+    && !dom.articleSidebar
+    && !dom.relatedSection
+  ) {
+    return;
+  }
+
   pendingRelatedOptions = options;
 
   if (

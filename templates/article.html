@@ -24,7 +24,7 @@
   <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
   <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/article.css?v=20260321-1" />
+  <link rel="stylesheet" href="/article.css?v=20260323-2" />
 </head>
 <body>
   <div class="noise"></div>
@@ -79,22 +79,31 @@
               <button class="action-button" id="copyLinkButton" type="button">Copy Link</button>
               <button class="action-button" id="nativeShareButton" type="button">Share</button>
             </div>
-
-            <section class="article-block article-block--story">
-              <div class="article-block__head">
-                <p class="article-block__eyebrow">Full Coverage</p>
-                <h2>Full Story</h2>
-              </div>
-              <div class="article-body" id="articleBody">
-                <p>Fetching full story...</p>
-              </div>
-            </section>
           </div>
 
           <figure class="article-media">
             <img id="articleImage" alt="" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
             <figcaption id="articleImageCaption">Image selected for this story.</figcaption>
           </figure>
+
+          <div class="article-inline-ad js-adsense-slot" aria-label="Advertisement">
+            <ins class="adsbygoogle"
+                 style="display:block; text-align:center;"
+                 data-ad-client="ca-pub-5608383950266105"
+                 data-ad-slot="3853179433"
+                 data-ad-layout="in-article"
+                 data-ad-format="fluid"></ins>
+          </div>
+
+          <section class="article-block article-block--story">
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Full Coverage</p>
+              <h2>Full Story</h2>
+            </div>
+            <div class="article-body" id="articleBody">
+              <p>Fetching full story...</p>
+            </div>
+          </section>
         </section>
 
         <div class="article-followup">
@@ -112,13 +121,6 @@
       </article>
     </div>
 
-    <section class="related-section">
-      <div class="related-section__head">
-        <p class="article-block__eyebrow">Internal Links</p>
-        <h2>Related Articles</h2>
-      </div>
-      <div class="related-grid" id="relatedGrid"></div>
-    </section>
   </main>
 
   <section class="shell ad-slot" aria-label="Advertisement">
@@ -153,43 +155,39 @@
 
   <script>
     (function () {
-      const adSlot = document.querySelector(".ad-slot");
-      if (!adSlot) return;
+      const adSlots = Array.from(document.querySelectorAll(".js-adsense-slot, .ad-slot"));
+      if (!adSlots.length) return;
 
-      function bootAds() {
-        if (window.__SUNWIRE_ADS_BOOTED) return;
-        window.__SUNWIRE_ADS_BOOTED = true;
+      function bootAd(slot) {
+        const adUnit = slot?.querySelector(".adsbygoogle");
+        if (!adUnit || adUnit.dataset.sunwireAdBooted === "1") return;
 
-        const script = document.createElement("script");
-        script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105";
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        script.onload = () => {
-          document.querySelectorAll(".adsbygoogle").forEach(() => {
-            try {
-              (window.adsbygoogle = window.adsbygoogle || []).push({});
-            } catch (_) {
-              // Ignore ad bootstrap errors.
-            }
-          });
-        };
-        document.head.appendChild(script);
+        try {
+          (window.adsbygoogle = window.adsbygoogle || []).push({});
+          adUnit.dataset.sunwireAdBooted = "1";
+        } catch (_) {
+          // Ignore AdSense bootstrap errors.
+        }
       }
 
       if (!("IntersectionObserver" in window)) {
-        window.addEventListener("load", bootAds, { once: true });
+        window.addEventListener("load", () => {
+          adSlots.forEach((slot) => bootAd(slot));
+        }, { once: true });
         return;
       }
 
       const observer = new IntersectionObserver((entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
-        bootAds();
+        entries.forEach((entry) => {
+          if (!entry.isIntersecting) return;
+          bootAd(entry.target);
+          observer.unobserve(entry.target);
+        });
       }, { rootMargin: "420px 0px" });
 
-      observer.observe(adSlot);
+      adSlots.forEach((slot) => observer.observe(slot));
     })();
   </script>
-  <script type="module" src="/article.js?v=20260321-1"></script>
+  <script type="module" src="/article.js?v=20260324-2"></script>
 </body>
 </html>

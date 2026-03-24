@@ -21,7 +21,9 @@ const {
 } = require("../lib/server/ssrStories");
 const { buildArticleRelatedSets, renderArticleTemplate } = require("../lib/ssr");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
-const ARTICLE_SSR_POOL_SIZE = 80;
+const ARTICLE_SSR_POOL_SIZE = 250;
+const ARTICLE_FALLBACK_POOL_SIZE = 120;
+const ARTICLE_FALLBACK_FILTERS = ["politics", "business", "ai", "tech", "entertainment", "sports", "jobs", "food"];
 const ARTICLE_BROWSER_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=300";
 const ARTICLE_CDN_CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=600";
 
@@ -151,6 +153,58 @@ function isCanonicalRequest(story = {}, query = {}) {
   return expectedPath.toLowerCase() === `/article/${requestedSlug}`;
 }
 
+function hasFallbackIdentityQuery(query = {}) {
+  return [
+    "id",
+    "u",
+    "url",
+    "t",
+    "title",
+    "s",
+    "source",
+    "p",
+    "publishedAt",
+    "m",
+    "summary",
+    "i",
+    "image",
+    "c",
+    "category",
+  ].some((key) => {
+    const value = query?.[key];
+    return value != null && String(value).trim() !== "";
+  });
+}
+
+async function findStoryInFallbackPools(query = {}) {
+  const requestedCategory = String(query.category || query.c || "").trim().toLowerCase();
+  const fallbackFilters = [...new Set([
+    requestedCategory && requestedCategory !== "all" ? requestedCategory : "",
+    ...ARTICLE_FALLBACK_FILTERS,
+  ].filter(Boolean))];
+
+  if (!fallbackFilters.length) return null;
+
+  const payloads = await Promise.allSettled(
+    fallbackFilters.map((filter) =>
+      getStoriesForSsr({
+        filter,
+        pageSize: ARTICLE_FALLBACK_POOL_SIZE,
+        reason: `article_page_fallback_${filter}`,
+      })
+    )
+  );
+
+  for (const result of payloads) {
+    if (result.status !== "fulfilled") continue;
+    const stories = getArticlesFromPayload(result.value || {});
+    const matched = findStory(stories, query);
+    if (matched) return matched;
+  }
+
+  return null;
+}
+
 module.exports = async (req, res) => {
   if (req.method !== "GET") {
     res.status(405).send("Method not allowed");
@@ -185,6 +239,24 @@ module.exports = async (req, res) => {
       }
 
       if (!story) {
+        story = await findStoryByIdentity({
+          id: query.id || "",
+          url: decodeParam(query.u || query.url || ""),
+          title: decodeParam(query.t || query.title || ""),
+          slug: requestedSlug,
+          category: requestedCategory,
+        }).catch(() => null);
+      }
+
+      if (!story) {
+        story = await findStoryInFallbackPools({
+          ...query,
+          slug: requestedSlug,
+          category: requestedCategory,
+        }).catch(() => null);
+      }
+
+      if (!story) {
         sendNotFound(res);
         return;
       }
@@ -199,7 +271,8 @@ module.exports = async (req, res) => {
           title: decodeParam(query.t || query.title || ""),
           slug: requestedSlug,
           category: requestedCategory,
-        }).catch(() => null);
+        }).catch(() => null)
+        || await findStoryInFallbackPools(query).catch(() => null);
     }
     const state = buildArticleState(buildArticleQuery(story || {}, story || {}));
 
@@ -208,7 +281,7 @@ module.exports = async (req, res) => {
       return;
     }
 
-    if ((query.category || query.slug) && !isCanonicalRequest(story || {}, query)) {
+    if ((query.category || query.slug) && !hasFallbackIdentityQuery(query) && !isCanonicalRequest(story || {}, query)) {
       res.setHeader("Location", buildArticlePath({
         id: story?.id || "",
         slug: story?.slug || "",
@@ -234,9 +307,12 @@ module.exports = async (req, res) => {
       category: story?.category || requestedCategory || "",
     };
 
-    let article = await articleHandler.enrichThinArticlePayload(
-      articleHandler.toArticlePayload(story || {}, requestedArticle)
-    ).catch(() => null);
+    const isManualStory = Boolean(story?.manual_upload);
+    let article = isManualStory
+      ? articleHandler.toArticlePayload(story || {}, requestedArticle)
+      : await articleHandler.enrichThinArticlePayload(
+        articleHandler.toArticlePayload(story || {}, requestedArticle)
+      ).catch(() => null);
 
     if (!article) {
       article = {
@@ -268,29 +344,31 @@ module.exports = async (req, res) => {
 
     const relatedSets = buildArticleRelatedSets(story || {}, stories, article || {});
 
-    article = {
-      ...article,
-      ...buildIndexableArticlePayload({
-        id: story?.id || "",
-        slug: story?.slug || requestedSlug,
-        title: article?.title || story?.title || "Story",
-        summary: article?.summary || story?.summary || "",
-        body: article?.body || story?.content || "",
-        source: article?.source || story?.source || "Sunwire Desk",
-        sourceUrl: article?.sourceUrl || story?.sourceUrl || story?.url || "",
-        image: article?.image || story?.image || "",
-        category: article?.category || story?.category || requestedCategory || "latest",
-        publishedAt: article?.published_at || article?.publishedAt || story?.source_published_at || story?.published_at || "",
-        modifiedAt: article?.modifiedAt || story?.updatedAt || story?.updated_at || story?.source_published_at || "",
-        tags: Array.isArray(article?.tags) ? article.tags : [],
-        related: Array.isArray(relatedSets?.grid) ? relatedSets.grid : [],
-        authorName: article?.authorName || story?.authorName || DEFAULT_AUTHOR_NAME,
-        primarySourceUrl: article?.primarySource?.url || article?.sourceUrl || story?.sourceUrl || story?.url || "",
-        primarySourceName: article?.primarySource?.name || article?.source || story?.source || DEFAULT_AUTHOR_NAME,
-        metaTitle: article?.metaTitle || story?.metaTitle || "",
-        metaDescription: article?.metaDescription || story?.metaDescription || "",
-      }),
-    };
+    if (!isManualStory) {
+      article = {
+        ...article,
+        ...buildIndexableArticlePayload({
+          id: story?.id || "",
+          slug: story?.slug || requestedSlug,
+          title: article?.title || story?.title || "Story",
+          summary: article?.summary || story?.summary || "",
+          body: article?.body || story?.content || "",
+          source: article?.source || story?.source || "Sunwire Desk",
+          sourceUrl: article?.sourceUrl || story?.sourceUrl || story?.url || "",
+          image: article?.image || story?.image || "",
+          category: article?.category || story?.category || requestedCategory || "latest",
+          publishedAt: article?.published_at || article?.publishedAt || story?.source_published_at || story?.published_at || "",
+          modifiedAt: article?.modifiedAt || story?.updatedAt || story?.updated_at || story?.source_published_at || "",
+          tags: Array.isArray(article?.tags) ? article.tags : [],
+          related: Array.isArray(relatedSets?.grid) ? relatedSets.grid : [],
+          authorName: article?.authorName || story?.authorName || DEFAULT_AUTHOR_NAME,
+          primarySourceUrl: article?.primarySource?.url || article?.sourceUrl || story?.sourceUrl || story?.url || "",
+          primarySourceName: article?.primarySource?.name || article?.source || story?.source || DEFAULT_AUTHOR_NAME,
+          metaTitle: article?.metaTitle || story?.metaTitle || "",
+          metaDescription: article?.metaDescription || story?.metaDescription || "",
+        }),
+      };
+    }
 
     if (shouldRejectSnapshotArticle(sourceMode, story, article)) {
       sendNotFound(res);

@@ -24,11 +24,16 @@ model Article {
   word_count        Int?
   trending_score    Float    @default(0)
   ai_summary        String?  @db.Text
+  ai_rewritten      Boolean  @default(false)
   raw_content       String?  @db.Text
   image_storage_url String?  @db.Text
+  is_featured       Boolean  @default(false)
+  featured_until    DateTime? @db.Timestamptz(6)
+  manual_upload     Boolean  @default(false)
   updated_at        DateTime @updatedAt @db.Timestamptz(6)
 
   @@index([category, created_at])
+  @@index([is_featured, featured_until, created_at])
   @@index([published_at])
   @@index([trending_score])
   @@map("articles")

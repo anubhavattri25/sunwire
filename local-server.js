@@ -47,12 +47,19 @@ function loadEnvFile(filePath = "") {
 }
 
 loadEnvFile(path.join(ROOT_DIR, ".env"));
+loadEnvFile(path.join(ROOT_DIR, ".env.vercel.local"));
+loadEnvFile(path.join(ROOT_DIR, ".env.vercel.production"));
 loadEnvFile(path.join(ROOT_DIR, "backend", ".env"));
+process.env.SSR_FETCH_MODE ||= "api";
+process.env.SUNWIRE_LOCAL_DATA_MODE ||= "production-api";
+process.env.SUNWIRE_REMOTE_NEWS_API ||= "https://sunwire.in/api/news";
+process.env.SUNWIRE_LOCAL_OFFLINE ||= "0";
 
 const HANDLERS = {
   "/api/article": require("./api/article"),
   "/api/article-page": require("./api/article-page"),
   "/api/article-redirect": require("./api/article-redirect"),
+  "/api/admin": require("./api/admin"),
   "/api/health": require("./api/health"),
   "/api/ingest": require("./api/ingest"),
   "/api/news": require("./api/news"),
@@ -83,6 +90,24 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
 
   if (pathname === "/article") {
     return appendQuery("/api/article-redirect", Object.fromEntries(searchParams.entries()));
+  }
+
+  if (pathname === "/api/admin/session") {
+    return appendQuery("/api/admin", { ...Object.fromEntries(searchParams.entries()), view: "session" });
+  }
+
+  if (pathname === "/api/admin/news") {
+    return appendQuery("/api/admin", { ...Object.fromEntries(searchParams.entries()), view: "news" });
+  }
+
+  if (pathname === "/api/admin/upload-image") {
+    return appendQuery("/api/admin", { ...Object.fromEntries(searchParams.entries()), view: "upload" });
+  }
+
+  if (pathname === "/admin/news") {
+    const params = Object.fromEntries(searchParams.entries());
+    params.view = params.view || "page";
+    return appendQuery("/api/admin", params);
   }
 
   const articlePageMatch = pathname.match(/^\/article\/([^/]+)$/);

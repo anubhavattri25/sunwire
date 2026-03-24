@@ -18,6 +18,10 @@ const articleSelect = {
   shares: true,
   word_count: true,
   trending_score: true,
+  ai_rewritten: true,
+  is_featured: true,
+  featured_until: true,
+  manual_upload: true,
 };
 
 function parseRawContentMetadata(value) {
@@ -55,7 +59,7 @@ function toApiArticle(record) {
     image_url: record.image_storage_url || record.image_url || '',
     category: record.category,
     source: record.source,
-    source_url: metadata.primarySourceUrl || record.source_url,
+    source_url: metadata.primarySourceUrl || (record.manual_upload ? '' : record.source_url),
     storage_source_url: record.source_url,
     published_at: record.published_at,
     created_at: record.created_at,
@@ -64,6 +68,10 @@ function toApiArticle(record) {
     shares: record.shares,
     word_count: Number(record.word_count || metadata.wordCount || 0),
     trending_score: record.trending_score,
+    ai_rewritten: Boolean(record.ai_rewritten || metadata.ai_rewritten),
+    is_featured: Boolean(record.is_featured),
+    featured_until: record.featured_until,
+    manual_upload: Boolean(record.manual_upload || metadata.manual_upload),
   };
 }
 

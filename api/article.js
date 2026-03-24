@@ -28,7 +28,7 @@ const ARTICLE_CACHE_HEADER = "public, max-age=60, stale-while-revalidate=300";
 const ARTICLE_CDN_CACHE_HEADER = "public, s-maxage=300, stale-while-revalidate=600";
 const ARTICLE_CACHE_TTL_SECONDS = 300;
 const MIN_RICH_BODY_WORDS = 160;
-const ENABLE_REQUEST_TIME_SOURCE_RECOVERY = process.env.ENABLE_REQUEST_TIME_SOURCE_RECOVERY === "1";
+const ENABLE_REQUEST_TIME_SOURCE_RECOVERY = process.env.ENABLE_REQUEST_TIME_SOURCE_RECOVERY !== "0";
 const ARTICLE_IN_FLIGHT_REQUESTS = globalThis.__SUNWIRE_ARTICLE_IN_FLIGHT_REQUESTS__ || new Map();
 const BODY_JUNK_PATTERNS = [
   /posts from this author will be added to your daily email digest/i,
@@ -178,7 +178,7 @@ function chooseBestBody(title = "", summary = "", candidates = []) {
 
 function toArticlePayload(story = {}, requested = {}) {
   const title = story.title || requested.title || "Story";
-  const summary = story.summary || story.subheadline || requested.summary || "";
+  const summary = story.subheadline || story.summary || requested.summary || "";
   const body = story.body || story.content || "";
   const publishedAt = story.source_published_at || story.published_at || story.publishedAt || requested.publishedAt || "";
   const sourceUrl = story.sourceUrl || story.url || requested.url || "";
@@ -212,11 +212,16 @@ function toArticlePayload(story = {}, requested = {}) {
     related: Array.isArray(story.trustedSources) ? story.trustedSources.slice(0, 5) : [],
     seoTitle: story.metaTitle || `${title} | Sunwire`,
     seoDescription: story.metaDescription || summary.slice(0, 160),
+    manual_upload: Boolean(story.manual_upload),
     validation: {
       status: "accepted",
-      reason: "database_only",
+      reason: story.manual_upload ? "manual_upload" : "database_only",
     },
   };
+
+  if (story.manual_upload) {
+    return basePayload;
+  }
 
   const enriched = buildIndexableArticlePayload({
     id: story.id || requested.id || "",
@@ -258,6 +263,7 @@ function buildArticleRequestCacheKey(requested = {}) {
 
 async function enrichThinArticlePayload(payload = {}) {
   if (!payload) return payload;
+  if (payload.manual_upload) return payload;
 
   const sourceUrl = cleanText(payload.primarySource?.url || payload.sourceUrl || "");
   const storedBodyIsPolluted = isPollutedArticleBody(payload.body, sourceUrl);

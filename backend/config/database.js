@@ -1,4 +1,16 @@
-const { PrismaClient } = require('@prisma/client');
+const path = require('node:path');
+
+function loadPrismaClient() {
+  const rootClientPath = path.join(__dirname, '..', '..', 'node_modules', '@prisma', 'client');
+
+  try {
+    return require(rootClientPath);
+  } catch (_) {
+    return require('@prisma/client');
+  }
+}
+
+const { PrismaClient } = loadPrismaClient();
 
 function getDatabaseUrl() {
   const rawUrl = process.env.DATABASE_URL;
@@ -7,8 +19,16 @@ function getDatabaseUrl() {
   try {
     const parsedUrl = new URL(rawUrl);
 
-    if (parsedUrl.hostname.includes('pooler.supabase.com') && !parsedUrl.searchParams.has('connection_limit')) {
-      parsedUrl.searchParams.set('connection_limit', '1');
+    if (parsedUrl.hostname.includes('pooler.supabase.com')) {
+      if (!parsedUrl.searchParams.has('connection_limit')) {
+        parsedUrl.searchParams.set('connection_limit', '1');
+      }
+      if (!parsedUrl.searchParams.has('pgbouncer')) {
+        parsedUrl.searchParams.set('pgbouncer', 'true');
+      }
+      if (!parsedUrl.searchParams.has('pool_timeout')) {
+        parsedUrl.searchParams.set('pool_timeout', '15');
+      }
     }
 
     return parsedUrl.toString();

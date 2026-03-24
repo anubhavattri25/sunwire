@@ -7,6 +7,7 @@ const helmet = require('helmet');
 const prisma = require('./config/database');
 const { getRedis } = require('./config/redis');
 const newsRoutes = require('./routes/newsRoutes');
+const adminRoutes = require('./routes/adminRoutes');
 const trendingRoutes = require('./routes/trendingRoutes');
 const breakingRoutes = require('./routes/breakingRoutes');
 const { ingestNewsSources } = require('./services/newsIngestor');
@@ -95,6 +96,7 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api', newsRoutes);
+app.use('/api', adminRoutes);
 app.use('/api', trendingRoutes);
 app.use('/api', breakingRoutes);
 

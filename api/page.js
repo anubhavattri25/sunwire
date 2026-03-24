@@ -17,10 +17,29 @@ const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
 const HOME_PAGE_SIZE = 32;
 const DESK_PAGE_SIZE = 20;
-const STORY_POOL_SIZE = 120;
+const STORY_POOL_SIZE = 72;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(STORY_POOL_SIZE / HOME_PAGE_SIZE);
-const HOMEPAGE_CATEGORY_POOL_FILTERS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
+const SKIP_LOCAL_HOME_SSR = false;
+
+function resolveGoogleClientId() {
+  return String(
+    process.env.GOOGLE_CLIENT_ID
+    || process.env.GOOGLE_AUTH_CLIENT_ID
+    || process.env.GOOGLE_OAUTH_CLIENT_ID
+    || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    || ""
+  ).trim();
+}
+
+function injectRuntimeConfig(template = "") {
+  const clientId = resolveGoogleClientId();
+  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260324-6"></script>`;
+  return String(template || "").replace(
+    /<script type="module" src="\/?app\.js\?v=[^"]+"><\/script>/,
+    runtimeScript
+  );
+}
 
 function storyKey(story = {}) {
   return String(story.id || story.sourceUrl || story.url || story.title || "").trim();
@@ -112,41 +131,13 @@ async function buildHydratedHomeView({
   pageStories = [],
   allStories = [],
 } = {}) {
-  const initialView = buildHomeView({
-    filter,
-    page,
-    totalPages,
-    totalStories,
-    pageStories,
-    allStories,
-  });
-  const visibleStories = collectVisibleStories(initialView);
-  const candidateStories = collectHomepageCandidateStories({
-    pageStories,
-    allStories,
-    prioritizedStories: visibleStories,
-  });
-
-  if (!candidateStories.length) return initialView;
-
-  const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    allowRemoteFetch: true,
-    remoteFetchLimit: 8,
-    concurrency: 3,
-  });
-  const replacementMap = new Map(
-    enrichedStories
-      .map((story) => [storyKey(story), story])
-      .filter(([key]) => Boolean(key))
-  );
-
   return buildHomeView({
     filter,
     page,
     totalPages,
     totalStories,
-    pageStories: replaceStoriesWithMap(pageStories, replacementMap),
-    allStories: replaceStoriesWithMap(allStories, replacementMap),
+    pageStories,
+    allStories,
   });
 }
 
@@ -161,7 +152,7 @@ module.exports = async (req, res) => {
   let template = readTemplate("index.html");
   let view = null;
 
-  if (!state.searchQuery) {
+  if (!state.searchQuery && !SKIP_LOCAL_HOME_SSR) {
     try {
       const filter = normalizeFilter(query.filter || "all");
       const requestedPage = normalizePageNumber(query.page || 1);
@@ -183,18 +174,6 @@ module.exports = async (req, res) => {
         });
 
         allStories = getArticlesFromPayload(poolPayload);
-        const categoryPoolPayloads = await Promise.all(
-          HOMEPAGE_CATEGORY_POOL_FILTERS.map((categoryFilter) =>
-            getStoriesForSsr({
-              page: 1,
-              pageSize: 8,
-              filter: categoryFilter,
-              reason: `page_ssr_pool_${categoryFilter}`,
-            }).catch(() => null)
-          )
-        );
-        const categoryStories = categoryPoolPayloads.flatMap((payload) => getArticlesFromPayload(payload || {}));
-        allStories = mergeUniqueStories(allStories, categoryStories);
         totalStories = Number(poolPayload?.totalStories) || Number(poolPayload?.total) || allStories.length;
         totalPages = Math.max(1, Math.ceil(Math.max(1, totalStories) / HOME_PAGE_SIZE));
         page = Math.min(requestedPage, totalPages);
@@ -250,18 +229,6 @@ module.exports = async (req, res) => {
             return pagePayload;
           });
           allStories = getArticlesFromPayload(poolPayload);
-          const categoryPoolPayloads = await Promise.all(
-            HOMEPAGE_CATEGORY_POOL_FILTERS.map((categoryFilter) =>
-              getStoriesForSsr({
-                page: 1,
-                pageSize: 8,
-                filter: categoryFilter,
-                reason: `page_ssr_pool_${categoryFilter}`,
-              }).catch(() => null)
-            )
-          );
-          const categoryStories = categoryPoolPayloads.flatMap((payload) => getArticlesFromPayload(payload || {}));
-          allStories = mergeUniqueStories(allStories, categoryStories);
         } else {
           allStories = pageStories;
         }
@@ -288,6 +255,10 @@ module.exports = async (req, res) => {
     } catch (error) {
       console.log("SSR failed, sending static template", error);
     }
+  }
+
+  if (SKIP_LOCAL_HOME_SSR) {
+    template = injectRuntimeConfig(template);
   }
 
   const html = injectHead(template, {
