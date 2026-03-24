@@ -1,37 +1,49 @@
 <!doctype html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>SunWire - Latest AI, Tech, Entertainment and Sports News</title>
-  <meta name="description" content="SunWire delivers fresh AI, technology, entertainment, sports, and business news with concise summaries and practical insights." />
+  <meta name="description"
+    content="SunWire delivers fresh AI, technology, entertainment, sports, and business news with concise summaries and practical insights." />
   <meta name="robots" content="index,follow,max-image-preview:large" />
   <link rel="canonical" href="https://sunwire.in/" />
   <meta property="og:type" content="website" />
   <meta property="og:title" content="SunWire - Latest AI, Tech, Entertainment and Sports News" />
-  <meta property="og:description" content="Fresh AI, tech, entertainment, sports, and business stories with practical summaries and daily highlights." />
+  <meta property="og:description"
+    content="Fresh AI, tech, entertainment, sports, and business stories with practical summaries and daily highlights." />
   <meta property="og:url" content="https://sunwire.in/" />
   <meta property="og:site_name" content="SunWire" />
   <meta property="og:image" content="https://sunwire.in/social-card.svg" />
   <meta name="twitter:card" content="summary_large_image" />
   <meta name="twitter:title" content="SunWire - Latest AI, Tech, Entertainment and Sports News" />
-  <meta name="twitter:description" content="Fresh AI, tech, entertainment, sports, and business stories with practical summaries and daily highlights." />
+  <meta name="twitter:description"
+    content="Fresh AI, tech, entertainment, sports, and business stories with practical summaries and daily highlights." />
   <meta name="twitter:image" content="https://sunwire.in/social-card.svg" />
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link rel="preconnect" href="https://images.unsplash.com" crossorigin />
-  <link rel="preload" as="style" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" media="print" onload="this.media='all'" />
-  <noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" /></noscript>
-  <link rel="stylesheet" href="/styles.css?v=20260322-7" />
+  <link rel="preload" as="style"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
+  <link rel="stylesheet"
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap"
+    media="print" onload="this.media='all'" />
+  <noscript>
+    <link rel="stylesheet"
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
+  </noscript>
+  <link rel="stylesheet" href="/styles.css?v=20260324-7" />
 </head>
+
 <body data-home-mode="home">
   <div class="noise"></div>
 
   <header class="site-header">
     <div class="shell site-header__inner">
-      <button class="menu-toggle" id="menuToggle" type="button" aria-label="Open navigation" aria-expanded="false" aria-controls="siteNav">
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="Open navigation" aria-expanded="false"
+        aria-controls="siteNav">
         <span></span>
         <span></span>
         <span></span>
@@ -51,8 +63,12 @@
       </nav>
 
       <div class="site-actions">
-        <button class="icon-button icon-button--search" id="searchButton" type="button" aria-label="Open search" aria-expanded="false" aria-controls="headerSearch">
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M10.5 4a6.5 6.5 0 1 0 4.09 11.56l4.42 4.43 1.41-1.42-4.42-4.42A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z"/></svg>
+        <button class="icon-button icon-button--search" id="searchButton" type="button" aria-label="Open search"
+          aria-expanded="false" aria-controls="headerSearch">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M10.5 4a6.5 6.5 0 1 0 4.09 11.56l4.42 4.43 1.41-1.42-4.42-4.42A6.5 6.5 0 0 0 10.5 4Zm0 2a4.5 4.5 0 1 1 0 9 4.5 4.5 0 0 1 0-9Z" />
+          </svg>
         </button>
         <button class="text-button" type="button">Login</button>
         <button id="homeRefreshBtn" class="signal-button" type="button">
@@ -64,16 +80,8 @@
 
     <form class="shell header-search" id="headerSearch" role="search" hidden>
       <label class="sr-only" for="headerSearchInput">Search all news</label>
-      <input
-        class="header-search__input"
-        id="headerSearchInput"
-        name="q"
-        type="search"
-        placeholder="Search all news"
-        autocomplete="off"
-        enterkeyhint="search"
-        inputmode="search"
-      />
+      <input class="header-search__input" id="headerSearchInput" name="q" type="search" placeholder="Search all news"
+        autocomplete="off" enterkeyhint="search" inputmode="search" />
       <button class="header-search__submit" type="submit">Search</button>
       <button class="header-search__clear" id="headerSearchClear" type="button">Close</button>
       <p class="sr-only" id="headerSearchStatus" aria-live="polite"></p>
@@ -84,7 +92,8 @@
     <div class="shell breaking-ticker__inner">
       <span class="breaking-ticker__label">Breaking News</span>
       <div class="breaking-ticker__viewport">
-        <div class="breaking-ticker__track" id="tickerTrack">BREAKING: SpaceX Announces Starship Flight 4 for June 7</div>
+        <div class="breaking-ticker__track" id="tickerTrack">BREAKING: SpaceX Announces Starship Flight 4 for June 7
+        </div>
       </div>
     </div>
   </section>
@@ -98,7 +107,8 @@
             <h1 class="hero-section__title">
               <a id="headlineOfTheDayLink" href="/" target="_self" rel="noopener noreferrer">Loading headline...</a>
             </h1>
-            <p class="hero-section__summary" id="heroSummary">Fresh AI, tech, entertainment, sports, and business stories are loading.</p>
+            <p class="hero-section__summary" id="heroSummary">Fresh AI, tech, entertainment, sports, and business
+              stories are loading.</p>
             <div class="hero-section__meta">
               <span class="hero-badge">Breaking</span>
               <span class="hero-section__author" id="heroAuthor">SunWire Desk</span>
@@ -106,7 +116,8 @@
             </div>
           </div>
           <div class="hero-section__media">
-            <img id="heroImage" src="/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
+            <img id="heroImage" src="/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async"
+              fetchpriority="high" width="1600" height="900" />
           </div>
         </section>
 
@@ -194,12 +205,8 @@
   <section class="shell ad-slot" aria-label="Advertisement">
     <div class="ad-slot__inner">
       <!-- footer -->
-      <ins class="adsbygoogle"
-           style="display:block"
-           data-ad-client="ca-pub-5608383950266105"
-           data-ad-slot="9518443817"
-           data-ad-format="auto"
-           data-full-width-responsive="true"></ins>
+      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5608383950266105" data-ad-slot="9518443817"
+        data-ad-format="auto" data-full-width-responsive="true"></ins>
     </div>
   </section>
 
@@ -207,7 +214,8 @@
     <div class="shell site-footer__inner">
       <div>
         <div class="site-footer__brand">SUNWIRE</div>
-        <p class="site-footer__copy">Be the First to Know. Fast reads across AI, tech, entertainment, sports, and business.</p>
+        <p class="site-footer__copy">Be the First to Know. Fast reads across AI, tech, entertainment, sports, and
+          business.</p>
       </div>
       <div class="site-footer__meta">
         <span>sunwire.in</span>
@@ -296,4 +304,5 @@
   </script>
   <script type="module" src="/app.js?v=20260322-7"></script>
 </body>
+
 </html>
