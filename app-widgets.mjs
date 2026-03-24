@@ -79,20 +79,15 @@ export function renderSidebarData(elements = {}, data = {}) {
     } else {
       prices.forEach((item) => {
         const li = document.createElement("li");
-        const deltaClass = item.deltaDirection === "up"
-          ? "is-up"
-          : item.deltaDirection === "down"
-            ? "is-down"
-            : "is-flat";
-        li.innerHTML = [
-          '<div class="price-item__head">',
-          `<strong>${escapeHtml(item.name || "Market")}</strong>`,
-          `<span class="price-item__market">${escapeHtml(item.market || "")}</span>`,
-          "</div>",
-          `<div class="price-item__row"><span>Today</span><strong>${escapeHtml(item.today || "-")}</strong></div>`,
-          `<div class="price-item__row"><span>Yesterday</span><span>${escapeHtml(item.yesterday || "-")}</span></div>`,
-          `<div class="price-item__row"><span>Change</span><span class="price-item__delta ${deltaClass}">${escapeHtml(item.change || "-")}</span></div>`,
-        ].join("");
+        const delta = parseFloat(item.change || "0");
+        const deltaClass = delta > 0 ? "price-item__change--up" : (delta < 0 ? "price-item__change--down" : "");
+        const sign = delta > 0 ? "+" : "";
+        li.className = "price-item";
+        li.innerHTML = `
+          <span class="price-item__label">${escapeHtml(item.name || "Market")}</span>
+          <span class="price-item__value">${escapeHtml(item.today || item.value || "-")}</span>
+          <span class="price-item__change ${deltaClass}">${sign}${escapeHtml(item.change || "-")}</span>
+        `;
         priceBoardListEl.appendChild(li);
       });
     }

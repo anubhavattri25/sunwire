@@ -47,6 +47,8 @@ const headlineOfTheDayMeta = document.getElementById("headlineOfTheDayMeta");
 const heroAuthorEl = document.getElementById("heroAuthor");
 const heroSummaryEl = document.getElementById("heroSummary");
 const heroImageEl = document.getElementById("heroImage");
+const heroViewStoryEl = document.getElementById("heroViewStory");
+const heroReactionTitleEl = document.getElementById("heroReactionTitle");
 
 const trendingGridEl = document.getElementById("trendingGrid");
 const trendingSectionEl = trendingGridEl.closest(".trending-strip");
@@ -1876,8 +1878,18 @@ function renderHero(story) {
     return;
   }
 
-  headlineOfTheDayLink.textContent = optimizeHeadline(story.title, "hero");
+  const optimizedHeadline = optimizeHeadline(story.title, "hero");
+  if (optimizedHeadline.includes(":")) {
+    const parts = optimizedHeadline.split(":");
+    headlineOfTheDayLink.innerHTML = `<span class="highlight">${escapeHtml(parts[0])}</span>: ${escapeHtml(parts.slice(1).join(":"))}`;
+  } else {
+    headlineOfTheDayLink.textContent = optimizedHeadline;
+  }
+
   headlineOfTheDayLink.href = buildArticleHref(story);
+  if (heroViewStoryEl) heroViewStoryEl.href = buildArticleHref(story);
+  if (heroReactionTitleEl) heroReactionTitleEl.textContent = story.title.split(":")[0] || "Global Impact";
+
   heroSummaryEl.textContent = optimizeSummary(story.summary || "", story, "hero");
   headlineOfTheDayMeta.textContent = fmtDate(getDisplayTimestamp(story));
   heroAuthorEl.textContent = story.source || "SunWire Desk";

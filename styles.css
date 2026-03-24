@@ -1919,6 +1919,16 @@ body[data-home-mode="archive"] .category-zone {
   text-underline-offset: 5px;
 }
 
+.hero-title .highlight {
+  background-color: var(--yellow);
+  padding: 0 8px;
+  margin: 0 -4px;
+  border-radius: 4px;
+  color: var(--ink);
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+}
+
 .hero-desc {
   margin: 0 0 18px;
   color: rgba(255, 255, 255, 0.75);
@@ -1994,6 +2004,34 @@ body[data-home-mode="archive"] .category-zone {
   border-color: transparent;
   color: #111;
   transform: translateY(-1px);
+}
+
+.hero-actions-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.hero-reactions-chip {
+  display: flex;
+  flex-direction: column;
+  padding-left: 16px;
+  border-left: 2px solid var(--yellow);
+}
+
+.hero-reactions-chip strong {
+  display: block;
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.01em;
+}
+
+.hero-reactions-chip span {
+  font-size: 0.82rem;
+  color: rgba(255, 255, 255, 0.6);
+  font-weight: 600;
 }
 
 /* ============================================================
@@ -2099,6 +2137,47 @@ body[data-home-mode="archive"] .category-zone {
 /* Price Moves card */
 .sidebar-card--prices {
   overflow: hidden;
+}
+
+.price-list {
+  margin: 0;
+  padding: 12px 20px 16px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.price-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.94rem;
+  font-weight: 700;
+}
+
+.price-item__label {
+  color: var(--ink);
+}
+
+.price-item__value {
+  margin-left: auto;
+  margin-right: 12px;
+  color: var(--ink);
+}
+
+.price-item__change {
+  min-width: 54px;
+  text-align: right;
+  font-weight: 800;
+}
+
+.price-item__change--up {
+  color: #27ae60;
+}
+
+.price-item__change--down {
+  color: #e74c3c;
 }
 
 .sidebar-card--prices .sidebar-card__header,

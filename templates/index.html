@@ -101,37 +101,34 @@
   <main class="shell home-main">
     <!-- PREMIUM HERO + SIDEBAR LAYOUT -->
     <div class="main-layout" id="heroSection" aria-live="polite">
-
       <!-- LEFT: CINEMATIC HERO -->
       <div class="left-hero">
-        <img id="heroImage" src="/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async"
-          fetchpriority="high" width="1600" height="900" />
-
+        <img id="heroImage" src="https://sunwire.in/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
         <div class="hero-overlay"></div>
-
         <div class="hero-content">
           <span class="hero-kicker" id="heroDeskChip">Live Desk</span>
-
           <h1 class="hero-title">
             <a id="headlineOfTheDayLink" href="/" target="_self" rel="noopener noreferrer">Loading headline…</a>
           </h1>
-
           <p class="hero-desc" id="heroSummary">Fresh AI, tech, entertainment, sports, and business stories are loading.</p>
-
           <div class="meta-row">
-            <span class="breaking-badge">
-              <span class="breaking-dot"></span>BREAKING
-            </span>
+            <span class="breaking-badge"><span class="breaking-dot"></span>BREAKING</span>
             <span class="hero-section__author" id="heroAuthor">SunWire Desk</span>
             <span class="hero-section__time" id="headlineOfTheDayMeta">Waiting for fresh stories.</span>
           </div>
-
-          <a id="heroViewStory" href="/" class="hero-view-btn" target="_self" rel="noopener noreferrer">View Full Story →</a>
+          <div class="hero-actions-row">
+            <a id="heroViewStory" href="/" class="hero-view-btn" target="_self" rel="noopener noreferrer">View Full Story →</a>
+            <div class="hero-reactions-chip" id="heroReactionsBlock">
+              <strong id="heroReactionTitle">Global Impact</strong>
+              <span id="heroReactionCaption">— Reactions Pour In</span>
+            </div>
+          </div>
         </div>
       </div>
+    </div>
 
-      <!-- RIGHT: SIDEBAR CARDS -->
-      <aside class="right-sidebar" id="homepageSidebar" aria-label="SunWire insights">
+    <!-- RIGHT: SIDEBAR CARDS -->
+    <aside class="right-sidebar" id="homepageSidebar" aria-label="SunWire insights">
 
         <!-- AI TOOL CARD -->
         <article class="sidebar-card sidebar-card--tool">
