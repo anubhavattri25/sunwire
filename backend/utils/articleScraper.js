@@ -274,7 +274,7 @@ async function scrapeArticle(url) {
   let response;
   try {
     response = await axios.get(url, {
-      timeout: 12000,
+      timeout: 8000,
       headers: REQUEST_HEADERS,
       maxRedirects: 5,
       validateStatus: (status) => status >= 200 && status < 400,

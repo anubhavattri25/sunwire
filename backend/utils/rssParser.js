@@ -12,7 +12,7 @@ const {
 const { extractArticleFromHtml, isTheVergeUrl } = require("./articleScraper");
 
 const parser = new Parser({
-  timeout: 10000,
+  timeout: 8000,
   customFields: {
     item: ["media:content", "media:thumbnail", "content:encoded", "description"],
   },
@@ -500,7 +500,7 @@ function decodeGoogleArticleIdFromBase64(articleId = "") {
 
 async function fetchGoogleDecodeParams(url = "") {
   const response = await axios.get(url, {
-    timeout: 10000,
+    timeout: 8000,
     headers: REQUEST_HEADERS,
   });
   const $ = cheerio.load(String(response.data || ""));
@@ -550,7 +550,7 @@ async function decodeGoogleArticleIdViaBatch(url = "", articleId = "") {
     "https://news.google.com/_/DotsSplashUi/data/batchexecute?rpcids=Fbv4je",
     payload,
     {
-      timeout: 10000,
+      timeout: 8000,
       headers: {
         ...REQUEST_HEADERS,
         "Content-Type": "application/x-www-form-urlencoded;charset=UTF-8",
@@ -589,7 +589,7 @@ async function resolveGoogleNewsUrl(url = "") {
 
   try {
     const response = await axios.get(url, {
-      timeout: 10000,
+      timeout: 8000,
       headers: REQUEST_HEADERS,
       maxRedirects: 5,
       validateStatus: (status) => status >= 200 && status < 400,
@@ -615,7 +615,7 @@ async function fetchPublisherArticle(url = "", options = {}) {
   }
 
   const response = await axios.get(url, {
-    timeout: 12000,
+    timeout: 8000,
     headers: REQUEST_HEADERS,
     maxRedirects: 5,
   });
@@ -643,7 +643,7 @@ function validateXmlFeed(xml = "", url = "") {
 
 async function parseRssFeed(url) {
   const rawXml = await fetchTextNoCache(url, {
-    timeoutMs: 10000,
+    timeoutMs: 8000,
     headers: REQUEST_HEADERS,
   });
   const xml = sanitizeXmlFeed(rawXml);

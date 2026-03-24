@@ -21,12 +21,27 @@ const pipelineState = {
   pendingRawArticles: [],
 };
 const DEFAULT_RSS_SOURCE_ITEM_LIMIT = 10;
-const RSS_SOURCE_ITEM_LIMIT = Math.max(5, Number.parseInt(process.env.SUNWIRE_RSS_ITEM_LIMIT || String(DEFAULT_RSS_SOURCE_ITEM_LIMIT), 10) || DEFAULT_RSS_SOURCE_ITEM_LIMIT);
+
+function getRssItemLimit() {
+  const envLimit = process.env.SUNWIRE_RSS_ITEM_LIMIT;
+  return Math.max(1, Number.parseInt(envLimit || String(DEFAULT_RSS_SOURCE_ITEM_LIMIT), 10) || DEFAULT_RSS_SOURCE_ITEM_LIMIT);
+}
+
+function getSourceFetchConcurrency() {
+  return Math.max(1, Number.parseInt(process.env.SUNWIRE_SOURCE_FETCH_CONCURRENCY || '6', 10) || 6);
+}
+
+function getArticleHydrationConcurrency() {
+  return Math.max(1, Number.parseInt(process.env.SUNWIRE_ARTICLE_HYDRATION_CONCURRENCY || '3', 10) || 3);
+}
+
 const MIN_VALID_ARTICLE_CONTENT_LENGTH = 900;
 const SHORT_RSS_CONTENT_THRESHOLD = 1500;
-const SOURCE_FETCH_RETRIES = Math.max(0, Number.parseInt(process.env.SUNWIRE_SOURCE_RETRIES || '2', 10) || 2);
-const SOURCE_FETCH_CONCURRENCY = Math.max(1, Number.parseInt(process.env.SUNWIRE_SOURCE_FETCH_CONCURRENCY || '6', 10) || 6);
-const ARTICLE_HYDRATION_CONCURRENCY = Math.max(1, Number.parseInt(process.env.SUNWIRE_ARTICLE_HYDRATION_CONCURRENCY || '3', 10) || 3);
+
+function getSourceFetchRetries() {
+  return Math.max(0, Number.parseInt(process.env.SUNWIRE_SOURCE_RETRIES || '1', 10) || 1);
+}
+
 const SCRAPE_FALLBACK_MULTIPLIER = 3;
 const CATEGORY_FILTER_BYPASS = new Set(['all', 'latest', 'random']);
 const AI_KEYWORDS = [
@@ -340,7 +355,7 @@ async function fetchScrapedSource(source) {
   const homepageUrl = source.homepageUrl || source.url;
   const homepageItems = filterSourceEntries(
     await scrapeHomepageFeed(homepageUrl, {
-      limit: RSS_SOURCE_ITEM_LIMIT * SCRAPE_FALLBACK_MULTIPLIER,
+      limit: getRssItemLimit() * SCRAPE_FALLBACK_MULTIPLIER,
     }),
     source,
     (item) => [
@@ -380,9 +395,9 @@ async function fetchScrapedSource(source) {
     });
 
     return isValidArticle(normalized) ? normalized : null;
-  }, ARTICLE_HYDRATION_CONCURRENCY);
+  }, getArticleHydrationConcurrency());
 
-  return hydrated.filter(Boolean).slice(0, RSS_SOURCE_ITEM_LIMIT);
+  return hydrated.filter(Boolean).slice(0, getRssItemLimit());
 }
 
 async function fetchRssSource(source) {
@@ -398,7 +413,7 @@ async function fetchRssSource(source) {
       item.link,
     ].filter(Boolean).join(' ')
   );
-  const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
+  const limitedItems = items.slice(0, getRssItemLimit());
   const articles = await runWithConcurrency(limitedItems, async (item) => {
     const feedContent =
       item["content:encoded"] ||
@@ -461,7 +476,7 @@ async function fetchRssSource(source) {
     }
 
     return normalized;
-  }, ARTICLE_HYDRATION_CONCURRENCY);
+  }, getArticleHydrationConcurrency());
 
   return articles.filter(Boolean);
 }
@@ -480,7 +495,7 @@ async function fetchGoogleSearchSource(source) {
       item.link,
     ].filter(Boolean).join(' ')
   );
-  const limitedItems = items.slice(0, RSS_SOURCE_ITEM_LIMIT);
+  const limitedItems = items.slice(0, getRssItemLimit());
   const articles = await runWithConcurrency(limitedItems, async (item) => {
     const snippet = cleanText(item.contentSnippet || item.summary || item.description || '');
     const googleNewsUrl = cleanText(item.link || '');
@@ -555,7 +570,7 @@ async function fetchGoogleSearchSource(source) {
       });
       return null;
     }
-  }, ARTICLE_HYDRATION_CONCURRENCY);
+  }, getArticleHydrationConcurrency());
 
   return articles.filter(Boolean);
 }
@@ -564,11 +579,11 @@ async function fetchHackerNewsSource() {
   const topUrl = process.env.HACKER_NEWS_TOP_URL || 'https://hacker-news.firebaseio.com/v0/topstories.json';
   const itemBase = process.env.HACKER_NEWS_ITEM_URL || 'https://hacker-news.firebaseio.com/v0/item';
   const topIdsResponse = await axios.get(topUrl, { timeout: 10000 });
-  const ids = Array.isArray(topIdsResponse.data) ? topIdsResponse.data.slice(0, RSS_SOURCE_ITEM_LIMIT) : [];
+  const ids = Array.isArray(topIdsResponse.data) ? topIdsResponse.data.slice(0, getRssItemLimit()) : [];
   const items = await runWithConcurrency(ids, async (id) => {
     const response = await axios.get(`${itemBase}/${id}.json`, { timeout: 10000 });
     return response.data;
-  }, ARTICLE_HYDRATION_CONCURRENCY);
+  }, getArticleHydrationConcurrency());
 
   return items
     .filter(Boolean)
@@ -623,7 +638,7 @@ async function fetchSource(source) {
 
   let lastError = null;
 
-  for (let attempt = 1; attempt <= SOURCE_FETCH_RETRIES + 1; attempt += 1) {
+  for (let attempt = 1; attempt <= getSourceFetchRetries() + 1; attempt += 1) {
     try {
       const { articles, method } = await fetchSourceByType(source);
       if (articles.length > 0) {
@@ -690,7 +705,7 @@ async function fetchSource(source) {
         method: 'scrape',
         fetched: scrapedArticles.length,
         ok: true,
-        attempt: SOURCE_FETCH_RETRIES + 1,
+        attempt: getSourceFetchRetries() + 1,
       });
       return { source: source.name, category: source.category, articles: scrapedArticles, ok: true, method: 'scrape' };
     } catch (scrapeError) {
@@ -718,7 +733,7 @@ async function fetchSource(source) {
 
 async function ingestNewsSources() {
   logEvent('scheduler.fetch.start');
-  const results = await runWithConcurrency(getSourceConfig(), fetchSource, SOURCE_FETCH_CONCURRENCY);
+  const results = await runWithConcurrency(getSourceConfig(), fetchSource, getSourceFetchConcurrency());
   const online = results.filter((result) => result.ok).map((result) => result.source);
   const failed = results.filter((result) => !result.ok).map((result) => ({ source: result.source, error: result.error }));
   const rawArticles = prioritizeArticles(dedupeRawArticles(results.flatMap((result) => result.articles)));
