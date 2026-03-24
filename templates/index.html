@@ -101,35 +101,54 @@
   <main class="shell home-main">
     <!-- PREMIUM HERO + SIDEBAR LAYOUT -->
     <div class="main-layout" id="heroSection" aria-live="polite">
-      <!-- LEFT: CINEMATIC HERO -->
-      <div class="left-hero">
-        <img id="heroImage" src="https://sunwire.in/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
-        <div class="hero-overlay"></div>
-        <div class="hero-content">
-          <span class="hero-kicker" id="heroDeskChip">Live Desk</span>
-          <h1 class="hero-title">
-            <a id="headlineOfTheDayLink" href="/" target="_self" rel="noopener noreferrer">Loading headline…</a>
-          </h1>
-          <p class="hero-desc" id="heroSummary">Fresh AI, tech, entertainment, sports, and business stories are loading.</p>
-          <div class="meta-row">
-            <span class="breaking-badge"><span class="breaking-dot"></span>BREAKING</span>
-            <span class="hero-section__author" id="heroAuthor">SunWire Desk</span>
-            <span class="hero-section__time" id="headlineOfTheDayMeta">Waiting for fresh stories.</span>
-          </div>
-          <div class="hero-actions-row">
-            <a id="heroViewStory" href="/" class="hero-view-btn" target="_self" rel="noopener noreferrer">View Full Story →</a>
-            <div class="hero-reactions-chip" id="heroReactionsBlock">
-              <strong id="heroReactionTitle">Global Impact</strong>
-              <span id="heroReactionCaption">— Reactions Pour In</span>
+      <!-- LEFT COLUMN: HERO + TRENDING -->
+      <div class="home-left-col">
+        <!-- LEFT: CINEMATIC HERO -->
+        <div class="left-hero">
+          <img id="heroImage" src="https://sunwire.in/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
+          <div class="hero-overlay"></div>
+          <div class="hero-content">
+            <span class="hero-kicker" id="heroDeskChip">Live Desk</span>
+            <h1 class="hero-title">
+              <a id="headlineOfTheDayLink" href="/" target="_self" rel="noopener noreferrer">Loading headline…</a>
+            </h1>
+            <p class="hero-desc" id="heroSummary">Fresh AI, tech, entertainment, sports, and business stories are loading.</p>
+            <div class="meta-row">
+              <span class="breaking-badge"><span class="breaking-dot"></span>BREAKING</span>
+              <span class="hero-section__author" id="heroAuthor">SunWire Desk</span>
+              <span class="hero-section__time" id="headlineOfTheDayMeta">Waiting for fresh stories.</span>
+            </div>
+            <div class="hero-actions-row">
+              <a id="heroViewStory" href="/" class="hero-view-btn" target="_self" rel="noopener noreferrer">View Full Story →</a>
+              <div class="hero-reactions-chip" id="heroReactionsBlock">
+                <strong id="heroReactionTitle">Global Impact</strong>
+                <span id="heroReactionCaption">— Reactions Pour In</span>
+              </div>
             </div>
           </div>
         </div>
+
+        <!-- TRENDING (under hero) -->
+        <section class="trending-strip" aria-labelledby="trendingSectionTitle">
+          <div class="section-head">
+            <div>
+              <p class="section-caption">Live momentum</p>
+              <h2 class="section-title" id="trendingSectionTitle">Trending Now</h2>
+            </div>
+            <div class="section-head__actions">
+              <div class="section-switcher" aria-label="Trending feed mode">
+                <button class="section-tab is-active" type="button" data-trending-mode="trending">Trending</button>
+                <button class="section-tab" type="button" data-trending-mode="just-in">Just In</button>
+              </div>
+              <span class="section-head__meta" id="trendingUpdatedAt">Updated just now</span>
+            </div>
+          </div>
+          <div class="trending-strip__cards" id="trendingGrid" aria-live="polite"></div>
+        </section>
       </div>
-    </div>
 
-    <!-- RIGHT: SIDEBAR CARDS -->
-    <aside class="right-sidebar" id="homepageSidebar" aria-label="SunWire insights">
-
+      <!-- RIGHT: SIDEBAR CARDS -->
+      <aside class="right-sidebar" id="homepageSidebar" aria-label="SunWire insights">
         <!-- AI TOOL CARD -->
         <article class="sidebar-card sidebar-card--tool">
           <p class="sidebar-card__eyebrow">
@@ -165,28 +184,7 @@
             <li>Loading events…</li>
           </ul>
         </article>
-
       </aside>
-    </div>
-
-    <!-- TRENDING (below hero) -->
-    <div class="home-feature-stack">
-      <section class="trending-strip" aria-labelledby="trendingSectionTitle">
-        <div class="section-head">
-          <div>
-            <p class="section-caption">Live momentum</p>
-            <h2 class="section-title" id="trendingSectionTitle">Trending Now</h2>
-          </div>
-          <div class="section-head__actions">
-            <div class="section-switcher" aria-label="Trending feed mode">
-              <button class="section-tab is-active" type="button" data-trending-mode="trending">Trending</button>
-              <button class="section-tab" type="button" data-trending-mode="just-in">Just In</button>
-            </div>
-            <span class="section-head__meta" id="trendingUpdatedAt">Updated just now</span>
-          </div>
-        </div>
-        <div class="trending-strip__cards" id="trendingGrid" aria-live="polite"></div>
-      </section>
     </div>
 
     <div class="home-primary">
@@ -215,7 +213,6 @@
         <div class="news-card-grid news-card-grid--homepage" id="moreNewsGrid" aria-live="polite"></div>
       </section>
     </div>
-
   </main>
 
   <nav class="shell pagination-shell" aria-label="Pagination" hidden>

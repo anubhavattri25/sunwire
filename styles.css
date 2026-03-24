@@ -400,10 +400,16 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .hero-section,
-.trending-strip,
 .category-zone,
 .more-news-shell {
   padding: 24px;
+}
+
+.trending-strip {
+  padding: 24px;
+  flex-grow: 1;
+  display: flex;
+  flex-direction: column;
 }
 
 .hero-section {
@@ -1549,7 +1555,6 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .hero-section,
-  .trending-strip,
   .category-zone,
   .more-news-shell {
     padding: 18px;
@@ -1557,6 +1562,13 @@ body[data-home-mode="archive"] .category-zone {
     max-width: 100%;
     min-width: 0;
     overflow: hidden;
+  }
+
+  .trending-strip {
+    padding: 18px;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
   }
 
   .category-zone {
@@ -1830,8 +1842,16 @@ body[data-home-mode="archive"] .category-zone {
   display: grid;
   grid-template-columns: 2fr 1fr;
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
+}
+
+.home-left-col {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 22px;
+  min-width: 0;
 }
 
 /* ---- LEFT HERO ---- */
