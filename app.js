@@ -51,11 +51,11 @@ const heroViewStoryEl = document.getElementById("heroViewStory");
 const heroReactionTitleEl = document.getElementById("heroReactionTitle");
 
 const trendingGridEl = document.getElementById("trendingGrid");
-const trendingSectionEl = trendingGridEl.closest(".trending-strip");
+const trendingSectionEl = trendingGridEl?.closest(".trending-strip");
 const categorySectionsGridEl = document.getElementById("categorySectionsGrid");
 const moreNewsGridEl = document.getElementById("moreNewsGrid");
-const categoryZoneSectionEl = categorySectionsGridEl.closest(".category-zone");
-const moreNewsSectionEl = moreNewsGridEl.closest(".more-news-shell");
+const categoryZoneSectionEl = categorySectionsGridEl?.closest(".category-zone");
+const moreNewsSectionEl = moreNewsGridEl?.closest(".more-news-shell");
 const categoryNewsTitleEl = document.getElementById("categoryNewsTitle");
 const moreNewsTitleEl = document.getElementById("moreNewsTitle");
 const paginationShellEl = paginationEl?.closest(".pagination-shell");
@@ -1819,15 +1819,15 @@ function renderLoadingState() {
     });
   }
 
-  trendingGridEl.innerHTML = "";
-  categorySectionsGridEl.innerHTML = "";
-  moreNewsGridEl.innerHTML = "";
+  if (trendingGridEl) trendingGridEl.innerHTML = "";
+  if (categorySectionsGridEl) categorySectionsGridEl.innerHTML = "";
+  if (moreNewsGridEl) moreNewsGridEl.innerHTML = "";
 
-  if (currentPage <= 1) {
+  if (currentPage <= 1 && trendingGridEl) {
     for (let i = 0; i < 4; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
   }
 
-  if (currentPage <= 1) {
+  if (currentPage <= 1 && categorySectionsGridEl) {
     for (let i = 0; i < HOMEPAGE_SECTION_DEFINITIONS.length; i += 1) {
       const panel = sectionPanelTemplate.content.firstElementChild.cloneNode(true);
       panel.classList.add("content-visibility");
@@ -1841,15 +1841,17 @@ function renderLoadingState() {
     }
   }
 
-  moreNewsGridEl.classList.remove("desk-panels", "desk-panels--expanded");
-  moreNewsGridEl.classList.add("news-card-grid");
-  moreNewsGridEl.classList.toggle("news-card-grid--page", currentPage > 1);
-  moreNewsGridEl.classList.toggle("news-card-grid--homepage", currentPage <= 1);
-  const loadingGrid = document.createDocumentFragment();
-  for (let i = 0; i < (currentPage > 1 ? DEFAULT_HOME_PAGE_SIZE : RANDOM_NEWS_COUNT); i += 1) {
-    loadingGrid.appendChild(createSkeletonCard("dense"));
+  if (moreNewsGridEl) {
+    moreNewsGridEl.classList.remove("desk-panels", "desk-panels--expanded");
+    moreNewsGridEl.classList.add("news-card-grid");
+    moreNewsGridEl.classList.toggle("news-card-grid--page", currentPage > 1);
+    moreNewsGridEl.classList.toggle("news-card-grid--homepage", currentPage <= 1);
+    const loadingGrid = document.createDocumentFragment();
+    for (let i = 0; i < (currentPage > 1 ? DEFAULT_HOME_PAGE_SIZE : RANDOM_NEWS_COUNT); i += 1) {
+      loadingGrid.appendChild(createSkeletonCard("dense"));
+    }
+    moreNewsGridEl.appendChild(loadingGrid);
   }
-  moreNewsGridEl.appendChild(loadingGrid);
 }
 
 function renderTicker(stories = []) {
@@ -2104,7 +2106,7 @@ function scheduleSidebarHydration({ forceRefresh = false } = {}) {
 }
 
 function renderStats(visibleCount) {
-  livePulseText.textContent = currentStories[0]
+  if (livePulseText) livePulseText.textContent = currentStories[0]
     ? `${activeDeskLabel()} updated ${timeAgo(getDisplayTimestamp(currentStories[0]))}`
     : "Scanning the live wire";
   if (liveStatPrimary) liveStatPrimary.textContent = `${visibleCount} stories on this page`;
@@ -2148,16 +2150,16 @@ function renderPagination(totalPagesCount, activePageNumber) {
 
 function updateActiveDeskChip() {
   if (activeSearchQuery) {
-    activeDeskChip.textContent = "Search";
-    showAllButton.textContent = "Clear Search";
-    showAllButton.disabled = isLoading;
+    if (activeDeskChip) activeDeskChip.textContent = "Search";
+    if (showAllButton) showAllButton.textContent = "Clear Search";
+    if (showAllButton) showAllButton.disabled = isLoading;
     return;
   }
 
   const label = activeDeskLabel();
-  activeDeskChip.textContent = label;
-  showAllButton.textContent = activeFilter === "all" ? "Showing All" : "Show All";
-  showAllButton.disabled = activeFilter === "all" || isLoading;
+  if (activeDeskChip) activeDeskChip.textContent = label;
+  if (showAllButton) showAllButton.textContent = activeFilter === "all" ? "Showing All" : "Show All";
+  if (showAllButton) showAllButton.disabled = activeFilter === "all" || isLoading;
 }
 
 function syncActiveControls() {
@@ -2214,6 +2216,7 @@ async function fetchSidebarData(forceRefresh = false) {
 }
 
 function renderFlatNewsGrid(container, stories = [], variant = "dense") {
+  if (!container) return;
   container.innerHTML = "";
   container.classList.remove("desk-panels", "desk-panels--expanded");
   container.classList.add("news-card-grid");
@@ -2408,7 +2411,7 @@ function renderHomepageLayout(layout) {
   if (document.body) {
     document.body.setAttribute("data-home-mode", archiveMode ? "archive" : "home");
   }
-  categorySectionsGridEl.classList.toggle("desk-panels--focused", isFocusedDeskView);
+  if (categorySectionsGridEl) categorySectionsGridEl.classList.toggle("desk-panels--focused", isFocusedDeskView);
   if (categoryNewsTitleEl) {
     categoryNewsTitleEl.textContent = activeFilter === "all" || activeFilter === "latest"
       ? "Category News Grid"
@@ -2427,10 +2430,10 @@ function renderHomepageLayout(layout) {
     const randomStories = Array.isArray(layout.moreSections?.[0]?.stories)
       ? layout.moreSections[0].stories
       : [];
-    renderFlatNewsGrid(moreNewsGridEl, randomStories, "dense");
+    if (moreNewsGridEl) renderFlatNewsGrid(moreNewsGridEl, randomStories, "dense");
   } else {
     scheduleTopSectionsRender([], "dense");
-    renderFlatNewsGrid(moreNewsGridEl, layout.fullGridStories || [], "dense");
+    if (moreNewsGridEl) renderFlatNewsGrid(moreNewsGridEl, layout.fullGridStories || [], "dense");
   }
   renderStats(countVisibleStories(layout));
 }
@@ -2449,7 +2452,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
   if (moreNewsGridEl) moreNewsGridEl.innerHTML = "";
   if (moreNewsSectionEl) moreNewsSectionEl.hidden = true;
   if (paginationShellEl) paginationShellEl.hidden = true;
-  categorySectionsGridEl.classList.add("desk-panels--focused");
+  if (categorySectionsGridEl) categorySectionsGridEl.classList.add("desk-panels--focused");
   if (categoryNewsTitleEl) categoryNewsTitleEl.textContent = hasResults
     ? `Results for "${normalizedQuery}"`
     : "Search Results";
@@ -2461,7 +2464,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
     scheduleTopSectionsRender(resolvedLayout.topSections, "dense");
     scheduleHomepageArticlePrefetch(4);
     scheduleSidebarHydration();
-    livePulseText.textContent = `${stories.length} ${stories.length === 1 ? "story" : "stories"} matched "${normalizedQuery}"`;
+    if (livePulseText) livePulseText.textContent = `${stories.length} ${stories.length === 1 ? "story" : "stories"} matched "${normalizedQuery}"`;
     if (liveStatPrimary) liveStatPrimary.textContent = `${stories.length} search results`;
     if (liveStatSecondary) liveStatSecondary.textContent = "Across all desks";
     syncHomeSeo();
@@ -2482,10 +2485,10 @@ function renderSearchResults(query = "", stories = [], layout = null) {
     sizes: "(max-width: 1050px) 100vw, 66vw",
     highPriority: true,
   });
-  trendingGridEl.innerHTML = `<p>No stories matched "${escapeHtml(normalizedQuery)}".</p>`;
+  if (trendingGridEl) trendingGridEl.innerHTML = `<p>No stories matched "${escapeHtml(normalizedQuery)}".</p>`;
   scheduleTopSectionsRender([], "dense");
   scheduleSidebarHydration();
-  livePulseText.textContent = `No results for "${normalizedQuery}"`;
+  if (livePulseText) livePulseText.textContent = `No results for "${normalizedQuery}"`;
   if (liveStatPrimary) liveStatPrimary.textContent = "0 search results";
   if (liveStatSecondary) liveStatSecondary.textContent = "Try another keyword";
   syncHomeSeo();
@@ -2678,7 +2681,7 @@ trendingModeButtons.forEach((button) => {
   });
 });
 
-showAllButton.addEventListener("click", async () => {
+showAllButton?.addEventListener("click", async () => {
   if (activeSearchQuery) {
     await performSearch("", { shouldPushState: true });
     window.scrollTo({ top: 0, behavior: "smooth" });

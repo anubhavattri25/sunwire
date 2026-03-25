@@ -311,13 +311,7 @@ module.exports = async function handler(req, res) {
   const requestedPage = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
   const requestedFilter = req.query.filter || req.query.category || "all";
   const normalizedFilter = normalizeNewsFilter(requestedFilter);
-
   try {
-    const expired = await expireFeaturedArticles(prisma);
-    if (Number(expired?.count || 0) > 0) {
-      memoryNewsCache.clear();
-    }
-
     if (process.env.SUNWIRE_LOCAL_DATA_MODE === "production-api") {
       try {
         let payload = await fetchRemoteNewsPayload({
@@ -335,6 +329,15 @@ module.exports = async function handler(req, res) {
       } catch (error) {
         if (!isLocalOfflineMode()) throw error;
       }
+    }
+
+    try {
+      const expired = await expireFeaturedArticles(prisma);
+      if (Number(expired?.count || 0) > 0) {
+        memoryNewsCache.clear();
+      }
+    } catch (_) {
+      // Ignore background database maintenance failures
     }
 
     if (isLocalOfflineMode()) {
