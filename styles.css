@@ -1847,16 +1847,17 @@ body[data-home-mode="archive"] .category-zone {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(320px, 1fr);
   gap: 22px;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
 }
 
 .home-left-col {
   display: flex;
   flex-direction: column;
+  height: 100%;
   gap: 22px;
   min-width: 0;
-  align-self: start;
+  align-self: stretch;
 }
 
 /* ---- LEFT HERO ---- */
@@ -1865,9 +1866,9 @@ body[data-home-mode="archive"] .category-zone {
   border-radius: 24px;
   overflow: hidden;
   background: #111;
-  height: auto;
-  aspect-ratio: 16 / 10;
-  min-height: 480px;
+  height: 100%;
+  aspect-ratio: auto;
+  min-height: 0;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
 }
 
@@ -1875,7 +1876,7 @@ body[data-home-mode="archive"] .category-zone {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 480px;
+  min-height: 0;
   object-fit: cover;
   object-position: center top;
   mask-image: none;
@@ -2066,10 +2067,11 @@ body[data-home-mode="archive"] .category-zone {
    ============================================================ */
 
 .right-sidebar {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1.05fr) minmax(0, 0.84fr) minmax(0, 1fr);
   gap: 18px;
-  align-self: start;
+  align-self: stretch;
+  height: 100%;
   min-width: 0;
 }
 
@@ -2082,6 +2084,9 @@ body[data-home-mode="archive"] .category-zone {
   transition: box-shadow 0.22s, transform 0.22s;
   position: relative;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .sidebar-card:hover {
@@ -2091,7 +2096,7 @@ body[data-home-mode="archive"] .category-zone {
 
 /* AI Tool card */
 .sidebar-card--tool {
-  padding: 22px 22px 20px;
+  padding: 24px 26px 22px;
 }
 
 .sidebar-card--tool .sidebar-card__eyebrow {
@@ -2166,23 +2171,30 @@ body[data-home-mode="archive"] .category-zone {
 /* Price Moves card */
 .sidebar-card--prices {
   overflow: hidden;
+  padding-bottom: 14px;
 }
 
 .price-list {
   margin: 0;
-  padding: 12px 20px 16px;
+  padding: 10px 22px 18px;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 .price-item {
-  display: flex;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
   align-items: center;
-  justify-content: space-between;
+  gap: 10px;
   font-size: 0.94rem;
   font-weight: 700;
+}
+
+.price-item__icon {
+  font-size: 1.1rem;
+  line-height: 1;
 }
 
 .price-item__label {
@@ -2190,13 +2202,12 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .price-item__value {
-  margin-left: auto;
-  margin-right: 12px;
   color: var(--ink);
+  font-weight: 800;
 }
 
 .price-item__change {
-  min-width: 54px;
+  min-width: 0;
   text-align: right;
   font-weight: 800;
 }
@@ -2243,20 +2254,22 @@ body[data-home-mode="archive"] .category-zone {
 /* Latest Updates card */
 .sidebar-card--updates .event-list {
   margin: 0;
-  padding: 10px 20px 16px;
+  padding: 16px 22px 20px;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 16px;
+  justify-content: space-evenly;
+  flex: 1;
 }
 
 .sidebar-card--updates .event-list li {
   display: grid;
-  grid-template-columns: 10px minmax(0, 1fr);
-  gap: 10px;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 12px;
   align-items: start;
-  padding: 10px 0;
-  border-bottom: 1px solid rgba(17, 17, 17, 0.06);
+  padding: 0;
+  border-bottom: none;
   color: var(--ink-soft);
   font-size: 0.93rem;
   min-width: 0;
@@ -2290,6 +2303,12 @@ body[data-home-mode="archive"] .category-zone {
   min-width: 0;
   overflow-wrap: break-word !important;
   word-break: normal !important;
+}
+
+.sidebar-card--updates .event-list li > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* ---- RESPONSIVE ---- */
@@ -2368,8 +2387,8 @@ body[data-home-mode="archive"] .category-zone {
   z-index: 2;
 }
 .sidebar-card--tool h3 {
-  font-family: Arial, sans-serif !important;
-  font-size: 2.2rem !important;
+  font-family: "Inter Tight", sans-serif !important;
+  font-size: clamp(2.1rem, 2.35vw, 2.8rem) !important;
   font-weight: 900 !important;
   color: #111 !important;
   letter-spacing: -0.05em !important;
@@ -2378,19 +2397,27 @@ body[data-home-mode="archive"] .category-zone {
 .sidebar-card--tool p:not(.tool-no-cc) {
   font-size: 1rem !important;
   color: #555 !important;
-  max-width: 90% !important;
+  max-width: 52% !important;
+  margin-bottom: 18px !important;
 }
 .sidebar-button {
   background: #fcc23a !important;
   font-weight: 900 !important;
   font-size: 1.05rem !important;
-  width: auto !important;
+  width: fit-content !important;
+  min-width: 236px !important;
   display: inline-flex !important;
-  padding: 14px 24px !important;
+  justify-content: center !important;
+  padding: 14px 28px !important;
   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.1) !important;
   margin-top: 10px !important;
 }
 .eyebrow-icon { color: #fcc23a !important; }
+
+.tool-no-cc {
+  text-align: left !important;
+  color: #5f574d !important;
+}
 
 .sidebar-card--prices::after {
   content: '';
@@ -2421,33 +2448,32 @@ body[data-home-mode="archive"] .category-zone {
 /* SIDEBAR LATEST UPDATES DOTS */
 .sidebar-card--updates .event-list li {
   position: relative !important;
-  grid-template-columns: 10px minmax(0, 1fr) !important;
-  padding-left: 24px !important;
-  margin-bottom: 16px !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  gap: 12px !important;
+  padding: 0 !important;
+  margin: 0 !important;
   min-width: 0 !important;
 }
 .sidebar-card--updates .event-list li::before {
   content: "" !important;
-  position: absolute !important;
-  left: 0 !important;
-  top: 7px !important;
+  position: static !important;
   width: 10px !important;
   height: 10px !important;
   background: #e02020 !important;
   border-radius: 50% !important;
+  margin-top: 0.6rem !important;
 }
 .sidebar-card--updates .event-list li strong {
   display: block !important;
-  font-size: 1.15rem !important;
+  font-size: 1.08rem !important;
   font-weight: 900 !important;
   color: #111 !important;
-  margin-bottom: 2px !important;
 }
 .sidebar-card--updates .event-list li span {
   display: block !important;
-  font-size: 0.96rem !important;
-  color: #666 !important;
-  line-height: 1.4 !important;
+  font-size: 0.97rem !important;
+  color: #766c63 !important;
+  line-height: 1.32 !important;
   overflow-wrap: break-word !important;
   word-break: normal !important;
 }
@@ -2456,10 +2482,15 @@ body[data-home-mode="archive"] .category-zone {
 .price-moves-date {
   margin-left: auto !important;
   float: none !important;
-  font-size: 0.82rem !important;
-  color: #999 !important;
-  font-weight: 500 !important;
+  font-size: 0.9rem !important;
+  color: #7b7369 !important;
+  font-weight: 600 !important;
   margin-top: 2px !important;
+}
+
+.price-board__meta,
+.price-board__sources {
+  display: none !important;
 }
 
 /* HOVER ZOOM ON TRENDING */
