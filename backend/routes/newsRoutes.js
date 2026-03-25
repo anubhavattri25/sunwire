@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('../config/database');
 const { articleSelect, toApiArticle } = require('../models/Article');
+const { buildPublisherReview } = require('../../lib/article/publisherReview');
 const { buildCacheKey, getCachedJson, setCachedJson, invalidateCache } = require('../utils/cache');
 const { buildFeaturedOrderBy, expireFeaturedArticles } = require('../utils/adminArticle');
 const { getStatusCounts, pipelineState } = require('../services/newsIngestor');
@@ -66,16 +67,31 @@ router.get('/news', async (req, res, next) => {
     }
 
     const where = category ? { category } : {};
-    const [total, records] = await Promise.all([
-      prisma.article.count({ where }),
-      prisma.article.findMany({
-        where,
-        select: articleSelect,
-        orderBy: buildFeaturedOrderBy(),
-        skip: (page - 1) * PAGE_SIZE,
-        take: PAGE_SIZE,
-      }),
-    ]);
+    const records = await prisma.article.findMany({
+      where,
+      select: articleSelect,
+      orderBy: buildFeaturedOrderBy(),
+    });
+    const eligibleArticles = records
+      .map((record) => ({
+        record,
+        article: toApiArticle(record),
+      }))
+      .filter(({ record, article }) => buildPublisherReview({
+        title: article?.title || record.title || '',
+        summary: article?.summary || '',
+        content: article?.content || record.content || '',
+        raw_content: record.raw_content || '',
+        source: article?.source || record.source || '',
+        source_url: article?.source_url || record.source_url || '',
+        word_count: article?.word_count || record.word_count || 0,
+        ai_rewritten: Boolean(article?.ai_rewritten || record.ai_rewritten),
+        manual_upload: Boolean(article?.manual_upload || record.manual_upload),
+      }).showInPublicListings !== false);
+    const total = eligibleArticles.length;
+    const pageArticles = eligibleArticles
+      .slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+      .map(({ article }) => article);
 
     const payload = {
       page,
@@ -83,7 +99,7 @@ router.get('/news', async (req, res, next) => {
       total,
       hasMore: page * PAGE_SIZE < total,
       category: requestedMode === 'random' ? 'random' : category,
-      articles: records.map(toApiArticle),
+      articles: pageArticles,
     };
 
     await setCachedJson(cacheKey, payload, 120);

@@ -13,6 +13,9 @@ const {
   countWords,
 } = require('./contentQuality');
 const {
+  buildPublisherReview,
+} = require('../../lib/article/publisherReview');
+const {
   DESK_CATEGORY_CHOICES,
   classifyArticleCategoryLocally,
   cleanArticleTextForRewrite,
@@ -530,6 +533,19 @@ async function buildPersistedArticleData(article = {}, existingArticle = null) {
     estimatedReadingTime: indexable.estimatedReadingTime,
     sourceSummary: summary,
   };
+  const publisherReview = buildPublisherReview({
+    title,
+    summary,
+    content,
+    raw_content: stringifyRawContentMetadata(mergedMetadata),
+    source,
+    source_url: sourceUrl,
+    word_count: wordCount,
+    ai_rewritten: preserveExistingRewrite ? existingState.aiRewritten : article.ai_rewritten,
+    rewriteStatus: preserveExistingRewrite ? existingState.rewriteStatus : article.rewriteStatus,
+    manual_upload: Boolean(existingArticle?.manual_upload || article.manual_upload),
+  }, { metadata: mergedMetadata });
+  mergedMetadata.publisherReview = publisherReview;
 
   return {
     title,
@@ -560,10 +576,32 @@ async function saveArticle(article, options = {}) {
       }).catch(() => null)
     : await findExistingArticle(article, options);
   const data = await buildPersistedArticleData(article, existingArticle);
+  const persistedMetadata = parseRawContentMetadata(data.raw_content);
+  const publisherReview = buildPublisherReview({
+    title: data.title,
+    summary: data.summary,
+    content: data.content,
+    raw_content: data.raw_content,
+    source: data.source,
+    source_url: data.source_url,
+    word_count: data.word_count,
+    ai_rewritten: article.ai_rewritten,
+    rewriteStatus: article.rewriteStatus,
+    manual_upload: Boolean(existingArticle?.manual_upload || article.manual_upload),
+  }, { metadata: persistedMetadata });
   if (!data.content || Number(data.word_count || 0) < MIN_INDEXABLE_ARTICLE_WORDS) {
     logEvent('article.rejected', {
       stage: 'persist',
       reasons: [`final_word_count_below_${MIN_INDEXABLE_ARTICLE_WORDS}`],
+      title: article.title,
+      source_url: article.source_url || null,
+    });
+    return null;
+  }
+  if (!publisherReview.eligibleForPublisherNetwork) {
+    logEvent('article.rejected', {
+      stage: 'publisher_review',
+      reasons: publisherReview.reasons,
       title: article.title,
       source_url: article.source_url || null,
     });

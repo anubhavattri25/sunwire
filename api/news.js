@@ -221,19 +221,19 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     where: buildNewsWhere(normalizedFilter),
     select: articleSelect,
     orderBy: buildFeaturedOrderBy(),
-    skip: (safePage - 1) * safePageSize,
-    take: safePageSize,
   });
 
-  const stories = await enrichStoriesWithImages(records.map(toCompatStory), {
+  const eligibleStories = records
+    .map(toCompatStory)
+    .filter((story) => story?.publisherReview?.showInPublicListings !== false);
+  const pagedStories = eligibleStories.slice((safePage - 1) * safePageSize, safePage * safePageSize);
+  const stories = await enrichStoriesWithImages(pagedStories, {
     allowRemoteFetch: true,
     remoteFetchLimit: 8,
     concurrency: 3,
   });
-  const hasMore = stories.length === safePageSize;
-  const approximateTotal = hasMore
-    ? (safePage * safePageSize) + 1
-    : ((safePage - 1) * safePageSize) + stories.length;
+  const approximateTotal = eligibleStories.length;
+  const hasMore = safePage * safePageSize < approximateTotal;
 
   return {
     generatedAt: new Date().toISOString(),

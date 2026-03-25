@@ -72,7 +72,7 @@
               </div>
             </header>
 
-            <p class="article-summary" id="articleSummary">Fetching deep summary...</p>
+            <p class="article-summary" id="articleSummary">Loading verified summary...</p>
             <div class="tag-row" id="articleTags"></div>
 
             <div class="article-actions">
@@ -101,7 +101,7 @@
               <h2>Full Story</h2>
             </div>
             <div class="article-body" id="articleBody">
-              <p>Fetching full story...</p>
+              <p>Loading verified story...</p>
             </div>
           </section>
         </section>
@@ -123,18 +123,6 @@
 
   </main>
 
-  <section class="shell ad-slot" aria-label="Advertisement">
-    <div class="ad-slot__inner">
-      <!-- footer -->
-      <ins class="adsbygoogle"
-           style="display:block"
-           data-ad-client="ca-pub-5608383950266105"
-           data-ad-slot="9518443817"
-           data-ad-format="auto"
-           data-full-width-responsive="true"></ins>
-    </div>
-  </section>
-
   <footer class="article-footer">
     <div class="shell article-footer__inner">
       <div>
@@ -153,41 +141,6 @@
     </div>
   </footer>
 
-  <script>
-    (function () {
-      const adSlots = Array.from(document.querySelectorAll(".js-adsense-slot, .ad-slot"));
-      if (!adSlots.length) return;
-
-      function bootAd(slot) {
-        const adUnit = slot?.querySelector(".adsbygoogle");
-        if (!adUnit || adUnit.dataset.sunwireAdBooted === "1") return;
-
-        try {
-          (window.adsbygoogle = window.adsbygoogle || []).push({});
-          adUnit.dataset.sunwireAdBooted = "1";
-        } catch (_) {
-          // Ignore AdSense bootstrap errors.
-        }
-      }
-
-      if (!("IntersectionObserver" in window)) {
-        window.addEventListener("load", () => {
-          adSlots.forEach((slot) => bootAd(slot));
-        }, { once: true });
-        return;
-      }
-
-      const observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          if (!entry.isIntersecting) return;
-          bootAd(entry.target);
-          observer.unobserve(entry.target);
-        });
-      }, { rootMargin: "420px 0px" });
-
-      adSlots.forEach((slot) => observer.observe(slot));
-    })();
-  </script>
   <script type="module" src="/article.js?v=20260324-2"></script>
 </body>
 </html>

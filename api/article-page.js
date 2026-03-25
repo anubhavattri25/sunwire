@@ -20,6 +20,7 @@ const {
   getArticlesFromPayload,
 } = require("../lib/server/ssrStories");
 const { buildArticleRelatedSets, renderArticleTemplate } = require("../lib/ssr");
+const { buildPublisherReview } = require("../lib/article/publisherReview");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
 const ARTICLE_SSR_POOL_SIZE = 250;
 const ARTICLE_FALLBACK_POOL_SIZE = 120;
@@ -374,11 +375,33 @@ module.exports = async (req, res) => {
       sendNotFound(res);
       return;
     }
+    const publisherReview = buildPublisherReview({
+      title: article?.title || story?.title || "",
+      summary: article?.summary || story?.summary || "",
+      content: article?.body || story?.content || "",
+      keyPoints: article?.keyPoints || story?.keyPoints || [],
+      deepDive: article?.deepDive || story?.deepDive || [],
+      background: article?.background || story?.background || [],
+      factSheet: article?.factSheet || story?.factSheet || [],
+      raw_content: story?.raw_content || "",
+      source: article?.source || story?.source || "",
+      source_url: article?.sourceUrl || story?.sourceUrl || story?.url || "",
+      word_count: article?.wordCount || story?.wordCount || 0,
+      ai_rewritten: Boolean(story?.ai_rewritten || article?.ai_rewritten),
+      rewriteStatus: story?.rewriteStatus || article?.rewriteStatus || "",
+      manual_upload: Boolean(story?.manual_upload || article?.manual_upload),
+    });
+
+    if (!publisherReview.eligibleForPublisherNetwork) {
+      sendNotFound(res);
+      return;
+    }
 
     const template = renderArticleTemplate(readTemplate("article.html"), {
       story,
       article,
       relatedSets,
+      showAds: publisherReview.allowAds && process.env.SUNWIRE_ENABLE_ADSENSE === "1",
     });
     const baseHeadState = buildArticleState(buildArticleQuery(story || {}, article || {}));
     const html = injectHead(template, {
@@ -393,6 +416,7 @@ module.exports = async (req, res) => {
         ? [...(baseHeadState.jsonLd || []).filter((item) => item?.["@type"] !== "NewsArticle"), article.structuredData]
         : baseHeadState.jsonLd,
       type: "article",
+      enableAdsense: publisherReview.allowAds && process.env.SUNWIRE_ENABLE_ADSENSE === "1",
     });
     const finalHtml = minifyHtml(html);
     const etag = `W/"${Buffer.byteLength(finalHtml).toString(16)}-${createHash("sha1").update(finalHtml).digest("base64url")}"`;

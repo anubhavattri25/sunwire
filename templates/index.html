@@ -233,14 +233,6 @@
     <div class="pagination-status pagination-status--secondary" id="paginationStatusSecondary"></div>
   </nav>
 
-  <section class="shell ad-slot" aria-label="Advertisement">
-    <div class="ad-slot__inner">
-      <!-- footer -->
-      <ins class="adsbygoogle" style="display:block" data-ad-client="ca-pub-5608383950266105" data-ad-slot="9518443817"
-        data-ad-format="auto" data-full-width-responsive="true"></ins>
-    </div>
-  </section>
-
   <footer class="site-footer">
     <div class="shell site-footer__inner">
       <div>
@@ -307,45 +299,6 @@
     })();
   </script>
 
-  <script>
-    (function () {
-      const adSlot = document.querySelector(".ad-slot");
-      if (!adSlot) return;
-
-      function bootAds() {
-        if (window.__SUNWIRE_ADS_BOOTED) return;
-        window.__SUNWIRE_ADS_BOOTED = true;
-
-        const script = document.createElement("script");
-        script.src = "https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-5608383950266105";
-        script.async = true;
-        script.crossOrigin = "anonymous";
-        script.onload = () => {
-          document.querySelectorAll(".adsbygoogle").forEach(() => {
-            try {
-              (window.adsbygoogle = window.adsbygoogle || []).push({});
-            } catch (_) {
-              // Ignore ad bootstrap errors.
-            }
-          });
-        };
-        document.head.appendChild(script);
-      }
-
-      if (!("IntersectionObserver" in window)) {
-        window.addEventListener("load", bootAds, { once: true });
-        return;
-      }
-
-      const observer = new IntersectionObserver((entries) => {
-        if (!entries.some((entry) => entry.isIntersecting)) return;
-        observer.disconnect();
-        bootAds();
-      }, { rootMargin: "420px 0px" });
-
-      observer.observe(adSlot);
-    })();
-  </script>
   <script type="module" src="/app.js?v=20260326-13"></script>
 </body>
 

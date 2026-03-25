@@ -37,6 +37,9 @@ function parseRawContentMetadata(value) {
 function toApiArticle(record) {
   if (!record) return null;
   const metadata = parseRawContentMetadata(record.raw_content);
+  const publisherReview = metadata.publisherReview && typeof metadata.publisherReview === 'object'
+    ? metadata.publisherReview
+    : null;
   return {
     id: record.id,
     slug: metadata.slug || record.slug || '',
@@ -72,6 +75,8 @@ function toApiArticle(record) {
     is_featured: Boolean(record.is_featured),
     featured_until: record.featured_until,
     manual_upload: Boolean(record.manual_upload || metadata.manual_upload),
+    publisher_review: publisherReview,
+    review_ready: Boolean(publisherReview?.eligibleForPublisherNetwork),
   };
 }
 
