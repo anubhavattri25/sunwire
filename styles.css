@@ -1854,9 +1854,9 @@ body[data-home-mode="archive"] .category-zone {
 .home-left-col {
   display: flex;
   flex-direction: column;
-  height: 100%;
   gap: 22px;
   min-width: 0;
+  align-self: start;
 }
 
 /* ---- LEFT HERO ---- */
@@ -1865,7 +1865,8 @@ body[data-home-mode="archive"] .category-zone {
   border-radius: 24px;
   overflow: hidden;
   background: #111;
-  height: 100%;
+  height: auto;
+  aspect-ratio: 16 / 10;
   min-height: 480px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
 }
@@ -2251,13 +2252,14 @@ body[data-home-mode="archive"] .category-zone {
 
 .sidebar-card--updates .event-list li {
   display: grid;
-  grid-template-columns: 10px 1fr auto;
+  grid-template-columns: 10px minmax(0, 1fr);
   gap: 10px;
   align-items: start;
   padding: 10px 0;
   border-bottom: 1px solid rgba(17, 17, 17, 0.06);
   color: var(--ink-soft);
   font-size: 0.93rem;
+  min-width: 0;
 }
 
 .sidebar-card--updates .event-list li:last-child {
@@ -2280,6 +2282,14 @@ body[data-home-mode="archive"] .category-zone {
   color: var(--ink);
   font-weight: 700;
   font-size: 0.95rem;
+}
+
+.sidebar-card--updates .event-list li > div,
+.sidebar-card--updates .event-list li strong,
+.sidebar-card--updates .event-list li span {
+  min-width: 0;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
 }
 
 /* ---- RESPONSIVE ---- */
@@ -2411,8 +2421,10 @@ body[data-home-mode="archive"] .category-zone {
 /* SIDEBAR LATEST UPDATES DOTS */
 .sidebar-card--updates .event-list li {
   position: relative !important;
+  grid-template-columns: 10px minmax(0, 1fr) !important;
   padding-left: 24px !important;
   margin-bottom: 16px !important;
+  min-width: 0 !important;
 }
 .sidebar-card--updates .event-list li::before {
   content: "" !important;
@@ -2436,6 +2448,8 @@ body[data-home-mode="archive"] .category-zone {
   font-size: 0.96rem !important;
   color: #666 !important;
   line-height: 1.4 !important;
+  overflow-wrap: break-word !important;
+  word-break: normal !important;
 }
 
 /* PRICE MOVES DATE */
