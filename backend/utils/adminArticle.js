@@ -89,14 +89,62 @@ function normalizeManualParagraph(value = '') {
     .trim();
 }
 
+function normalizeManualList(values = [], maxItems = 8) {
+  return (Array.isArray(values) ? values : [])
+    .map((entry) => cleanText(entry))
+    .filter(Boolean)
+    .slice(0, maxItems);
+}
+
+function normalizeFactSheetRows(rows = [], maxItems = 8) {
+  return (Array.isArray(rows) ? rows : [])
+    .map((row) => ({
+      label: cleanText(row?.label || ''),
+      value: cleanText(row?.value || ''),
+    }))
+    .filter((row) => row.label && row.value)
+    .slice(0, maxItems);
+}
+
+function normalizeBackgroundItems(items = [], maxItems = 6) {
+  return (Array.isArray(items) ? items : [])
+    .map((item) => ({
+      title: cleanText(item?.title || ''),
+      context: cleanText(item?.context || ''),
+      url: cleanText(item?.url || ''),
+      source: cleanText(item?.source || ''),
+    }))
+    .filter((item) => item.title && item.context)
+    .slice(0, maxItems);
+}
+
+function parseManualRawContent(value = '') {
+  if (!value) return {};
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch (_) {
+    return {};
+  }
+}
+
 function buildManualRawContent({
   title = '',
   subheadline = '',
   content = '',
   source = '',
+  authorName = '',
+  primarySourceName = '',
+  primarySourceUrl = '',
   imageUrl = '',
   category = '',
-  placement = 'headline',
+  tags = [],
+  keyPoints = [],
+  factSheet = [],
+  background = [],
+  indiaPulse = '',
+  metaTitle = '',
+  metaDescription = '',
   publishedAt = '',
 } = {}) {
   const normalizedContent = String(content || '')
@@ -114,8 +162,20 @@ function buildManualRawContent({
   const normalizedSubheadline = cleanText(subheadline || paragraphs[0] || normalizedContent);
   const normalizedSource = cleanText(source || 'Sunwire');
   const normalizedCategory = cleanText(category || 'ai').toLowerCase();
-  const normalizedPlacement = cleanText(placement || 'headline').toLowerCase();
+  const normalizedTags = normalizeManualList([
+    ...normalizeManualList(tags, 8),
+    normalizedCategory,
+  ], 8);
+  const normalizedKeyPoints = normalizeManualList(keyPoints, 6);
+  const normalizedFactSheet = normalizeFactSheetRows(factSheet, 8);
+  const normalizedBackground = normalizeBackgroundItems(background, 6);
+  const normalizedIndiaPulse = cleanText(indiaPulse || '');
+  const normalizedMetaTitle = cleanText(metaTitle || normalizedTitle);
   const summary = trimToLength(normalizedSubheadline || normalizedContent, 240);
+  const normalizedMetaDescription = trimToLength(
+    metaDescription || summary || normalizedContent,
+    160
+  );
   const wordCount = Number(countWords(normalizedContent) || 0);
 
   return {
@@ -123,27 +183,53 @@ function buildManualRawContent({
     subheadline: summary,
     body: normalizedContent,
     summary,
-    keyPoints: [],
+    keyPoints: normalizedKeyPoints,
     deepDive: [],
-    indiaPulse: '',
-    background: [],
-    factSheet: [],
-    tags: [normalizedCategory].filter(Boolean),
-    metaTitle: normalizedTitle,
-    metaDescription: trimToLength(summary || normalizedContent, 160),
+    indiaPulse: normalizedIndiaPulse,
+    background: normalizedBackground,
+    factSheet: normalizedFactSheet,
+    tags: normalizedTags,
+    metaTitle: normalizedMetaTitle,
+    metaDescription: normalizedMetaDescription,
     structuredData: null,
-    primarySourceUrl: '',
-    primarySourceName: normalizedSource,
-    authorName: normalizeAuthorName('Sunwire News Desk'),
+    primarySourceUrl: cleanText(primarySourceUrl || ''),
+    primarySourceName: cleanText(primarySourceName || normalizedSource),
+    authorName: normalizeAuthorName(authorName || 'Sunwire News Desk'),
     wordCount,
     estimatedReadingTime: Math.max(1, Math.ceil(Math.max(wordCount, 1) / 200)),
     ai_rewritten: true,
     rewriteStatus: 'manual_upload',
     manual_upload: true,
     featured_category: normalizedCategory,
-    placement: normalizedPlacement,
     publishedAt,
     image: cleanText(imageUrl || ''),
+  };
+}
+
+function toAdminArticleInput(record = {}) {
+  const metadata = parseManualRawContent(record?.raw_content || '');
+  return {
+    id: record?.id || '',
+    headline: cleanText(record?.title || ''),
+    subheadline: cleanText(metadata?.subheadline || record?.ai_summary || record?.summary || ''),
+    source: cleanText(record?.source || ''),
+    authorName: cleanText(metadata?.authorName || 'Sunwire News Desk'),
+    primarySourceName: cleanText(metadata?.primarySourceName || record?.source || ''),
+    primarySourceUrl: cleanText(metadata?.primarySourceUrl || ''),
+    category: normalizeAdminCategory(record?.category || ''),
+    image_url: cleanText(record?.image_storage_url || record?.image_url || metadata?.image || ''),
+    content: String(metadata?.body || record?.content || '').replace(/\r/g, '').trim(),
+    keyPoints: normalizeManualList(metadata?.keyPoints || [], 6),
+    factSheet: normalizeFactSheetRows(metadata?.factSheet || [], 8),
+    background: normalizeBackgroundItems(metadata?.background || [], 6),
+    indiaPulse: cleanText(metadata?.indiaPulse || ''),
+    tags: normalizeManualList(metadata?.tags || [], 8),
+    metaTitle: cleanText(metadata?.metaTitle || record?.title || ''),
+    metaDescription: cleanText(metadata?.metaDescription || record?.summary || ''),
+    showOnHero: Boolean(record?.is_featured && new Date(record?.featured_until || '').getTime() > Date.now()),
+    featuredUntil: record?.featured_until ? new Date(record.featured_until).toISOString() : '',
+    createdAt: record?.created_at ? new Date(record.created_at).toISOString() : '',
+    publishedAt: record?.published_at ? new Date(record.published_at).toISOString() : '',
   };
 }
 
@@ -156,4 +242,6 @@ module.exports = {
   expireFeaturedArticles,
   normalizeAdminCategory,
   normalizeAdminPlacement,
+  parseManualRawContent,
+  toAdminArticleInput,
 };

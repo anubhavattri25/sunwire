@@ -1,400 +1,930 @@
-const adminUser = window.__SUNWIRE_ADMIN_USER__ || null;
+import { cleanText, fmtDate, toTitleCase } from "../shared/client-utils.mjs";
 
-const adminUserEmailEl = document.getElementById("adminUserEmail");
-const featuredStatusEl = document.getElementById("featuredStatus");
-const featuredMetaEl = document.getElementById("featuredMeta");
-const featuredPreviewCard = document.getElementById("featuredPreviewCard");
-const featuredPreviewImage = document.getElementById("featuredPreviewImage");
-const featuredPreviewCategory = document.getElementById("featuredPreviewCategory");
-const featuredPreviewHeadline = document.getElementById("featuredPreviewHeadline");
-const featuredPreviewSource = document.getElementById("featuredPreviewSource");
-const featuredRemoveButton = document.getElementById("featuredRemoveButton");
-const recentManualList = document.getElementById("recentManualList");
-const imageInput = document.getElementById("imageInput");
-const imagePreview = document.getElementById("imagePreview");
-const imageUploadStatus = document.getElementById("imageUploadStatus");
-const headlineInput = document.getElementById("headlineInput");
-const subheadlineInput = document.getElementById("subheadlineInput");
-const sourceInput = document.getElementById("sourceInput");
-const categoryInput = document.getElementById("categoryInput");
-const placementInput = document.getElementById("placementInput");
-const durationMinutesInput = document.getElementById("durationMinutesInput");
-const featuredUntilInput = document.getElementById("featuredUntilInput");
-const contentEditor = document.getElementById("contentEditor");
-const newsForm = document.getElementById("newsForm");
-const formStatus = document.getElementById("formStatus");
-const pushNewsButton = document.getElementById("pushNewsButton");
-const resetFormButton = document.getElementById("resetFormButton");
-const refreshAdminDataButton = document.getElementById("refreshAdminDataButton");
-const logoutAdminButton = document.getElementById("logoutAdminButton");
-const toast = document.getElementById("toast");
-const toastMessage = document.getElementById("toastMessage");
-const imageUploadButtonLabel = document.getElementById("imageUploadButtonLabel");
-const quickDurationButtons = [...document.querySelectorAll("[data-duration-minutes]")];
+const DISPLAY_TIMEZONE = "Asia/Kolkata";
+const MIN_BODY_WORDS = 500;
+const MIN_SUMMARY_WORDS = 20;
+const MIN_PARAGRAPHS = 4;
+const MIN_KEY_POINTS = 3;
+const MIN_FACT_ROWS = 4;
+const MIN_BACKGROUND = 2;
+const PAGE_MODE = String(window.__SUNWIRE_ADMIN_PAGE_MODE__ || "edit-news").trim() || "edit-news";
 
-let uploadedImageUrl = "";
-let pendingUploadName = "";
-let activeToastTimer = 0;
+const dom = {
+  adminUserEmail: document.getElementById("adminUserEmail"),
+  adminPageEyebrow: document.getElementById("adminPageEyebrow"),
+  adminPageTitle: document.getElementById("adminPageTitle"),
+  adminPageDescription: document.getElementById("adminPageDescription"),
+  navEditNews: document.getElementById("navEditNews"),
+  navWatchAllNews: document.getElementById("navWatchAllNews"),
+  editDashboardSection: document.getElementById("editDashboardSection"),
+  watchAllDashboardSection: document.getElementById("watchAllDashboardSection"),
+  featuredStatus: document.getElementById("featuredStatus"),
+  featuredMeta: document.getElementById("featuredMeta"),
+  featuredRemoveButton: document.getElementById("featuredRemoveButton"),
+  featuredPreviewImage: document.getElementById("featuredPreviewImage"),
+  featuredPreviewCategory: document.getElementById("featuredPreviewCategory"),
+  featuredPreviewHeadline: document.getElementById("featuredPreviewHeadline"),
+  featuredPreviewSource: document.getElementById("featuredPreviewSource"),
+  imagePreview: document.getElementById("imagePreview"),
+  imageInput: document.getElementById("imageInput"),
+  imageUploadButtonLabel: document.getElementById("imageUploadButtonLabel"),
+  imageUploadStatus: document.getElementById("imageUploadStatus"),
+  headlineInput: document.getElementById("headlineInput"),
+  subheadlineInput: document.getElementById("subheadlineInput"),
+  authorNameInput: document.getElementById("authorNameInput"),
+  sourceInput: document.getElementById("sourceInput"),
+  primarySourceNameInput: document.getElementById("primarySourceNameInput"),
+  primarySourceUrlInput: document.getElementById("primarySourceUrlInput"),
+  categoryInput: document.getElementById("categoryInput"),
+  showOnHeroInput: document.getElementById("showOnHeroInput"),
+  durationMinutesInput: document.getElementById("durationMinutesInput"),
+  featuredUntilInput: document.getElementById("featuredUntilInput"),
+  tagsInput: document.getElementById("tagsInput"),
+  metaTitleInput: document.getElementById("metaTitleInput"),
+  metaDescriptionInput: document.getElementById("metaDescriptionInput"),
+  contentEditor: document.getElementById("contentEditor"),
+  keyPointsList: document.getElementById("keyPointsList"),
+  factSheetRows: document.getElementById("factSheetRows"),
+  backgroundRows: document.getElementById("backgroundRows"),
+  addKeyPointButton: document.getElementById("addKeyPointButton"),
+  addFactSheetRowButton: document.getElementById("addFactSheetRowButton"),
+  addBackgroundItemButton: document.getElementById("addBackgroundItemButton"),
+  indiaPulseInput: document.getElementById("indiaPulseInput"),
+  newsForm: document.getElementById("newsForm"),
+  pushNewsButton: document.getElementById("pushNewsButton"),
+  resetFormButton: document.getElementById("resetFormButton"),
+  refreshAdminDataButton: document.getElementById("refreshAdminDataButton"),
+  formStatus: document.getElementById("formStatus"),
+  editorModeLabel: document.getElementById("editorModeLabel"),
+  editorHeading: document.getElementById("editorHeading"),
+  currentEditMeta: document.getElementById("currentEditMeta"),
+  cancelEditButton: document.getElementById("cancelEditButton"),
+  recentManualCount: document.getElementById("recentManualCount"),
+  recentManualList: document.getElementById("recentManualList"),
+  manualTotalCount: document.getElementById("manualTotalCount"),
+  archiveUpdatedAt: document.getElementById("archiveUpdatedAt"),
+  archiveGroups: document.getElementById("archiveGroups"),
+  archiveEmptyState: document.getElementById("archiveEmptyState"),
+  logoutAdminButton: document.getElementById("logoutAdminButton"),
+  toast: document.getElementById("toast"),
+  toastMessage: document.getElementById("toastMessage"),
+};
 
-function cleanText(value = "") {
-  return String(value)
-    .replace(/<[^>]*>/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
+const state = {
+  mode: PAGE_MODE === "watch-all-news" ? "watch-all-news" : "edit-news",
+  currentEditingArticleId: "",
+  featuredArticle: null,
+  recentArticles: [],
+  archiveArticles: [],
+  imageUrl: "",
+  toastTimer: null,
+  formBusy: false,
+};
+
+function wordCount(value = "") {
+  return cleanText(value).split(/\s+/).filter(Boolean).length;
 }
 
-function escapeHtml(value = "") {
-  return String(value)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-function normalizeEditorParagraph(value = "") {
+function paragraphCount(value = "") {
   return String(value || "")
-    .replace(/\u00a0/g, " ")
-    .replace(/\r/g, "")
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .join("\n")
-    .trim();
-}
-
-function showToast(message, tone = "default") {
-  window.clearTimeout(activeToastTimer);
-  toastMessage.textContent = cleanText(message);
-  toastMessage.className = tone === "error"
-    ? "rounded-full bg-red-600 px-5 py-3 text-sm font-semibold text-white shadow-2xl"
-    : "rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-2xl";
-  toast.classList.remove("translate-y-4", "opacity-0");
-  toast.classList.add("translate-y-0", "opacity-100");
-  activeToastTimer = window.setTimeout(() => {
-    toast.classList.add("translate-y-4", "opacity-0");
-    toast.classList.remove("translate-y-0", "opacity-100");
-  }, 2400);
-}
-
-function setFormBusyState(isBusy, label = "") {
-  pushNewsButton.disabled = isBusy;
-  refreshAdminDataButton.disabled = isBusy;
-  formStatus.textContent = cleanText(label || (isBusy ? "Working..." : "Ready to publish."));
-}
-
-function formatDateTime(value = "") {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "Schedule not set";
-  return date.toLocaleString("en-IN", {
-    day: "numeric",
-    month: "short",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  });
-}
-
-function extractEditorContent() {
-  return String(contentEditor?.innerText || "")
     .replace(/\r/g, "")
     .split(/\n{2,}/)
-    .map((entry) => normalizeEditorParagraph(entry))
+    .map((entry) => cleanText(entry))
     .filter(Boolean)
-    .join("\n\n");
+    .length;
 }
 
-function validateForm() {
-  const errors = [];
-  if (!cleanText(headlineInput.value)) errors.push("Headline is required.");
-  if (!cleanText(sourceInput.value)) errors.push("Source is required.");
-  if (!cleanText(placementInput.value)) errors.push("Placement is required.");
-  if (!cleanText(categoryInput.value)) errors.push("Category is required.");
-  if (!extractEditorContent() || extractEditorContent().length < 80) errors.push("Article content must be at least 80 characters.");
-  if (!uploadedImageUrl) errors.push("Upload an image before publishing.");
-
-  const durationMinutes = Number(durationMinutesInput.value || 0);
-  const featuredUntil = cleanText(featuredUntilInput.value || "");
-  if (!(durationMinutes > 0) && !featuredUntil) {
-    errors.push("Set either duration minutes or a featured-until date.");
-  }
-
-  return errors;
+function setStatus(message, isError = false) {
+  if (!dom.formStatus) return;
+  dom.formStatus.textContent = message;
+  dom.formStatus.classList.toggle("text-red-600", Boolean(isError));
+  dom.formStatus.classList.toggle("text-slate-500", !isError);
 }
 
-function renderFeaturedCard(article = null) {
-  if (!article) {
-    featuredStatusEl.textContent = "No active featured article.";
-    featuredMetaEl.textContent = "The homepage will use normal ordering until you push one.";
-    featuredPreviewCategory.textContent = "Awaiting publish";
-    featuredPreviewHeadline.textContent = "No featured story is live right now.";
-    featuredPreviewSource.textContent = "The next pushed story will appear here and move to the top of the homepage.";
-    featuredPreviewImage.src = uploadedImageUrl || "/social-card.svg";
-    featuredPreviewCard.classList.remove("ring-2", "ring-amber-300");
-    if (featuredRemoveButton) {
-      featuredRemoveButton.hidden = true;
-      delete featuredRemoveButton.dataset.articleId;
-      delete featuredRemoveButton.dataset.articleTitle;
-    }
-    return;
-  }
-
-  const featuredUntilValue = article?.featured_until || article?.featuredUntil || "";
-
-  featuredStatusEl.textContent = cleanText(article.title || "Active featured article");
-  featuredMetaEl.textContent = `Live until ${formatDateTime(featuredUntilValue)} - ${cleanText(article.source || "Sunwire")}`;
-  featuredPreviewCategory.textContent = cleanText(article.category || "featured");
-  featuredPreviewHeadline.textContent = cleanText(article.title || "Active featured article");
-  featuredPreviewSource.textContent = `${cleanText(article.source || "Sunwire")} - Live until ${formatDateTime(featuredUntilValue)}`;
-  featuredPreviewImage.src = cleanText(article.image_url || uploadedImageUrl || "/social-card.svg");
-  featuredPreviewCard.classList.add("ring-2", "ring-amber-300");
-  if (featuredRemoveButton) {
-    const removable = Boolean(article.manual_upload && article.id);
-    featuredRemoveButton.hidden = !removable;
-    if (removable) {
-      featuredRemoveButton.dataset.articleId = String(article.id);
-      featuredRemoveButton.dataset.articleTitle = cleanText(article.title || "this story");
-    } else {
-      delete featuredRemoveButton.dataset.articleId;
-      delete featuredRemoveButton.dataset.articleTitle;
-    }
-  }
+function showToast(message) {
+  if (!dom.toast || !dom.toastMessage) return;
+  dom.toastMessage.textContent = message;
+  dom.toast.classList.remove("translate-y-4", "opacity-0");
+  dom.toast.classList.add("translate-y-0", "opacity-100");
+  window.clearTimeout(state.toastTimer);
+  state.toastTimer = window.setTimeout(() => {
+    dom.toast.classList.add("translate-y-4", "opacity-0");
+    dom.toast.classList.remove("translate-y-0", "opacity-100");
+  }, 2200);
 }
 
-function renderRecentList(items = []) {
-  if (!Array.isArray(items) || !items.length) {
-    recentManualList.innerHTML = '<p class="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">No manual uploads yet.</p>';
-    return;
-  }
-
-  recentManualList.innerHTML = items.map((item) => `
-    <article class="rounded-[24px] border border-slate-200 bg-white px-4 py-4 shadow-sm">
-      <div class="flex items-start justify-between gap-3">
-        <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">${escapeHtml(cleanText(item.category || "news"))}</p>
-        <button class="rounded-full border border-red-200 px-3 py-1 text-xs font-semibold text-red-600 transition hover:border-red-400 hover:bg-red-50" type="button" data-remove-id="${escapeHtml(String(item.id || ""))}" data-remove-title="${escapeHtml(cleanText(item.title || "this story"))}">Remove</button>
-      </div>
-      <h3 class="mt-2 text-base font-semibold leading-6 text-slate-950">${escapeHtml(cleanText(item.title || "Untitled"))}</h3>
-      <p class="mt-2 text-sm text-slate-500">${escapeHtml(cleanText(item.source || "Sunwire"))} - ${escapeHtml(formatDateTime(item.created_at || item.published_at))}</p>
-      ${item.is_featured ? '<p class="mt-2 text-xs font-semibold uppercase tracking-[0.18em] text-amber-600">Currently live on homepage</p>' : ""}
-    </article>
-  `).join("");
-}
-
-async function removeManualArticle(articleId = "", articleTitle = "this story") {
-  const id = cleanText(articleId);
-  if (!id) return;
-  const confirmed = window.confirm(`Remove "${cleanText(articleTitle || "this story")}" from Sunwire?`);
-  if (!confirmed) return;
-
-  setFormBusyState(true, "Removing manual news...");
-
-  try {
-    const response = await fetch(`/api/admin/news?id=${encodeURIComponent(id)}`, {
-      method: "DELETE",
-      credentials: "include",
-      headers: {
-        "Cache-Control": "no-store",
-      },
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.error || "Manual news could not be removed.");
-    }
-
-    showToast("Manual news removed.");
-    await loadAdminData();
-  } catch (error) {
-    formStatus.textContent = cleanText(error.message || "Manual news could not be removed.");
-    showToast(error.message || "Manual news could not be removed.", "error");
-  } finally {
-    setFormBusyState(false);
-  }
-}
-
-async function loadAdminData() {
-  const response = await fetch("/api/admin/news", {
-    credentials: "include",
+async function fetchJson(url, options = {}) {
+  const response = await fetch(url, {
+    credentials: "same-origin",
     headers: {
-      "Cache-Control": "no-store",
+      "Content-Type": "application/json",
+      ...(options.headers || {}),
     },
+    ...options,
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(cleanText(data.error || data.message || "Request failed."));
+  }
+  return data;
+}
+
+function setImagePreview(url = "") {
+  const nextUrl = cleanText(url || "");
+  state.imageUrl = nextUrl;
+  if (dom.imagePreview) dom.imagePreview.src = nextUrl || "/social-card.svg";
+  if (dom.imageUploadStatus) {
+    dom.imageUploadStatus.textContent = nextUrl ? "Image uploaded and ready." : "No image uploaded yet.";
+  }
+  syncFeaturedPreview();
+}
+
+function toLocalDateTimeValue(value = "") {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+  return local.toISOString().slice(0, 16);
+}
+
+function buildArticleHref(article = {}) {
+  const slug = cleanText(article.slug || "story");
+  const params = new URLSearchParams();
+  if (article.id) params.set("id", cleanText(article.id));
+  if (article.category) params.set("c", cleanText(article.category));
+  if (article.title) params.set("t", cleanText(article.title));
+  params.set("sw", "2");
+  return `/article/${encodeURIComponent(slug)}?${params.toString()}`;
+}
+
+function setButtonBusy(button, busy, busyLabel) {
+  if (!button) return;
+  if (!button.dataset.label) button.dataset.label = button.textContent || "";
+  button.disabled = busy;
+  button.textContent = busy ? busyLabel : button.dataset.label;
+}
+
+function createRemoveButton(onClick) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-red-500 hover:text-red-600";
+  button.textContent = "Remove";
+  button.addEventListener("click", onClick);
+  return button;
+}
+
+function createKeyPointRow(value = "") {
+  const row = document.createElement("div");
+  row.className = "flex items-center gap-3";
+
+  const input = document.createElement("input");
+  input.type = "text";
+  input.value = cleanText(value);
+  input.placeholder = "Write a crisp key point readers should understand quickly";
+  input.className = "h-12 flex-1 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  input.dataset.role = "key-point";
+  input.addEventListener("input", syncFeaturedPreview);
+
+  row.append(input, createRemoveButton(() => {
+    row.remove();
+    ensureMinimumRows();
+  }));
+  return row;
+}
+
+function createFactSheetRow(rowData = {}) {
+  const row = document.createElement("div");
+  row.className = "grid gap-3 md:grid-cols-[0.42fr_0.58fr_auto]";
+
+  const label = document.createElement("input");
+  label.type = "text";
+  label.value = cleanText(rowData.label);
+  label.placeholder = "Label";
+  label.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  label.dataset.role = "fact-label";
+
+  const value = document.createElement("input");
+  value.type = "text";
+  value.value = cleanText(rowData.value);
+  value.placeholder = "Verified value";
+  value.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  value.dataset.role = "fact-value";
+
+  row.append(label, value, createRemoveButton(() => {
+    row.remove();
+    ensureMinimumRows();
+  }));
+  return row;
+}
+
+function createBackgroundRow(item = {}) {
+  const row = document.createElement("div");
+  row.className = "rounded-[24px] border border-slate-200 bg-slate-50 p-4";
+
+  const fields = document.createElement("div");
+  fields.className = "grid gap-3";
+
+  const title = document.createElement("input");
+  title.type = "text";
+  title.value = cleanText(item.title);
+  title.placeholder = "Background title";
+  title.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  title.dataset.role = "background-title";
+
+  const context = document.createElement("textarea");
+  context.value = cleanText(item.context);
+  context.placeholder = "Add context readers should know before or after this update.";
+  context.className = "min-h-[110px] rounded-[20px] border border-slate-300 bg-white px-4 py-3 text-sm leading-7 outline-none transition focus:border-slate-950";
+  context.dataset.role = "background-context";
+
+  const meta = document.createElement("div");
+  meta.className = "grid gap-3 md:grid-cols-[0.4fr_0.6fr]";
+
+  const source = document.createElement("input");
+  source.type = "text";
+  source.value = cleanText(item.source);
+  source.placeholder = "Source name (optional)";
+  source.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  source.dataset.role = "background-source";
+
+  const url = document.createElement("input");
+  url.type = "url";
+  url.value = cleanText(item.url);
+  url.placeholder = "https://...";
+  url.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
+  url.dataset.role = "background-url";
+
+  const actions = document.createElement("div");
+  actions.className = "mt-3 flex justify-end";
+
+  meta.append(source, url);
+  fields.append(title, context, meta);
+  actions.append(createRemoveButton(() => {
+    row.remove();
+    ensureMinimumRows();
+  }));
+  row.append(fields, actions);
+  return row;
+}
+
+function ensureMinimumRows() {
+  if (dom.keyPointsList) {
+    while (dom.keyPointsList.children.length < MIN_KEY_POINTS) {
+      dom.keyPointsList.append(createKeyPointRow());
+    }
+  }
+
+  if (dom.factSheetRows) {
+    while (dom.factSheetRows.children.length < MIN_FACT_ROWS) {
+      dom.factSheetRows.append(createFactSheetRow());
+    }
+  }
+
+  if (dom.backgroundRows) {
+    while (dom.backgroundRows.children.length < MIN_BACKGROUND) {
+      dom.backgroundRows.append(createBackgroundRow());
+    }
+  }
+}
+
+function resetStructuredInputs() {
+  if (dom.keyPointsList) dom.keyPointsList.replaceChildren();
+  if (dom.factSheetRows) dom.factSheetRows.replaceChildren();
+  if (dom.backgroundRows) dom.backgroundRows.replaceChildren();
+  ensureMinimumRows();
+}
+
+function extractTags() {
+  return cleanText(dom.tagsInput?.value || "")
+    .split(",")
+    .map((entry) => cleanText(entry))
+    .filter(Boolean)
+    .slice(0, 8);
+}
+
+function extractKeyPoints() {
+  return [...(dom.keyPointsList?.querySelectorAll('[data-role="key-point"]') || [])]
+    .map((input) => cleanText(input.value))
+    .filter(Boolean)
+    .slice(0, 6);
+}
+
+function extractFactSheet() {
+  return [...(dom.factSheetRows?.children || [])]
+    .map((row) => ({
+      label: cleanText(row.querySelector('[data-role="fact-label"]')?.value || ""),
+      value: cleanText(row.querySelector('[data-role="fact-value"]')?.value || ""),
+    }))
+    .filter((row) => row.label && row.value)
+    .slice(0, 8);
+}
+
+function extractBackground() {
+  return [...(dom.backgroundRows?.children || [])]
+    .map((row) => ({
+      title: cleanText(row.querySelector('[data-role="background-title"]')?.value || ""),
+      context: cleanText(row.querySelector('[data-role="background-context"]')?.value || ""),
+      source: cleanText(row.querySelector('[data-role="background-source"]')?.value || ""),
+      url: cleanText(row.querySelector('[data-role="background-url"]')?.value || ""),
+    }))
+    .filter((item) => item.title && item.context)
+    .slice(0, 6);
+}
+
+function getFormPayload() {
+  return {
+    headline: cleanText(dom.headlineInput?.value || ""),
+    subheadline: cleanText(dom.subheadlineInput?.value || ""),
+    authorName: cleanText(dom.authorNameInput?.value || ""),
+    source: cleanText(dom.sourceInput?.value || ""),
+    primarySourceName: cleanText(dom.primarySourceNameInput?.value || ""),
+    primarySourceUrl: cleanText(dom.primarySourceUrlInput?.value || ""),
+    category: cleanText(dom.categoryInput?.value || ""),
+    image_url: state.imageUrl,
+    content: String(dom.contentEditor?.value || "").replace(/\r/g, "").trim(),
+    tags: extractTags(),
+    keyPoints: extractKeyPoints(),
+    factSheet: extractFactSheet(),
+    background: extractBackground(),
+    indiaPulse: cleanText(dom.indiaPulseInput?.value || ""),
+    metaTitle: cleanText(dom.metaTitleInput?.value || ""),
+    metaDescription: cleanText(dom.metaDescriptionInput?.value || ""),
+    showOnHero: Boolean(dom.showOnHeroInput?.checked),
+    durationMinutes: Math.max(0, Number(dom.durationMinutesInput?.value || 0) || 0),
+    featuredUntil: cleanText(dom.featuredUntilInput?.value || ""),
+  };
+}
+
+function validatePayload(payload) {
+  if (!payload.headline) return "Headline is required.";
+  if (!payload.subheadline) return "Under-headline is required.";
+  if (wordCount(payload.subheadline) < MIN_SUMMARY_WORDS) return `Under-headline should be at least ${MIN_SUMMARY_WORDS} words.`;
+  if (!payload.authorName) return "Author name is required.";
+  if (!payload.source) return "Source label is required.";
+  if (!payload.primarySourceName) return "Primary source name is required.";
+  if (!/^https?:\/\//i.test(payload.primarySourceUrl)) return "Primary source URL must be a valid link.";
+  if (!payload.category) return "Category is required.";
+  if (!payload.image_url) return "Cover image is required.";
+  if (!payload.metaTitle) return "SEO title is required.";
+  if (!payload.metaDescription) return "SEO description is required.";
+  if (!payload.content) return "Article body is required.";
+  if (wordCount(payload.content) < MIN_BODY_WORDS) return `Article body should be at least ${MIN_BODY_WORDS} words.`;
+  if (paragraphCount(payload.content) < MIN_PARAGRAPHS) return `Article body should have at least ${MIN_PARAGRAPHS} paragraphs.`;
+  if (payload.keyPoints.length < MIN_KEY_POINTS) return `Add at least ${MIN_KEY_POINTS} key points.`;
+  if (payload.factSheet.length < MIN_FACT_ROWS) return `Add at least ${MIN_FACT_ROWS} fact sheet rows.`;
+  if (payload.background.length < MIN_BACKGROUND) return `Add at least ${MIN_BACKGROUND} background blocks.`;
+  if (wordCount(payload.indiaPulse) < 18) return "Add a stronger Why it matters section.";
+  if (payload.showOnHero && !(payload.durationMinutes > 0 || payload.featuredUntil)) {
+    return "Choose hero duration in minutes or set a hero end time.";
+  }
+  return "";
+}
+
+function syncEditorMode() {
+  const editing = Boolean(state.currentEditingArticleId);
+  if (dom.editorModeLabel) dom.editorModeLabel.textContent = editing ? "Edit News" : "Create News";
+  if (dom.editorHeading) dom.editorHeading.textContent = editing ? "Update manual story" : "Create article-ready story";
+  if (dom.currentEditMeta) {
+    dom.currentEditMeta.textContent = editing
+      ? "You are editing an existing pushed article. Save again to update homepage and article data."
+      : "Fill every field needed for homepage, category, and article page quality.";
+  }
+  if (dom.cancelEditButton) dom.cancelEditButton.hidden = !editing;
+  if (dom.pushNewsButton) {
+    dom.pushNewsButton.textContent = editing ? "Update News" : "Push News";
+    dom.pushNewsButton.dataset.label = dom.pushNewsButton.textContent;
+  }
+}
+
+function applyPageHeader() {
+  const archiveMode = state.mode === "watch-all-news";
+  if (dom.adminPageEyebrow) dom.adminPageEyebrow.textContent = archiveMode ? "Archive Desk" : "CMS Panel";
+  if (dom.adminPageTitle) {
+    dom.adminPageTitle.textContent = archiveMode
+      ? "Watch every pushed story day by day."
+      : "Edit and publish article-ready news.";
+  }
+  if (dom.adminPageDescription) {
+    dom.adminPageDescription.textContent = archiveMode
+      ? "See all manually pushed stories grouped by day. Today appears first, then yesterday, then older days with newest pushed articles first inside each group."
+      : "Fill the homepage, category page, and article page in one workflow. This editor is built for richer article structure, stronger SEO, and cleaner reading on laptop and mobile.";
+  }
+}
+
+function styleNavLink(link, active) {
+  if (!link) return;
+  link.classList.toggle("bg-slate-950", active);
+  link.classList.toggle("text-white", active);
+  link.classList.toggle("border-slate-950", active);
+  link.classList.toggle("bg-white", !active);
+  link.classList.toggle("text-slate-950", !active);
+}
+
+function setViewMode(mode) {
+  state.mode = mode === "watch-all-news" ? "watch-all-news" : "edit-news";
+  if (dom.editDashboardSection) dom.editDashboardSection.hidden = state.mode !== "edit-news";
+  if (dom.watchAllDashboardSection) dom.watchAllDashboardSection.hidden = state.mode !== "watch-all-news";
+  styleNavLink(dom.navEditNews, state.mode === "edit-news");
+  styleNavLink(dom.navWatchAllNews, state.mode === "watch-all-news");
+  applyPageHeader();
+}
+
+function draftPreviewArticle() {
+  return {
+    title: cleanText(dom.headlineInput?.value || ""),
+    source: cleanText(dom.sourceInput?.value || ""),
+    category: cleanText(dom.categoryInput?.value || ""),
+    image_url: state.imageUrl,
+    featured_until: cleanText(dom.featuredUntilInput?.value || ""),
+  };
+}
+
+function renderFeaturedStatus(article) {
+  state.featuredArticle = article || null;
+  if (!article) {
+    if (dom.featuredStatus) dom.featuredStatus.textContent = "No live hero article.";
+    if (dom.featuredMeta) dom.featuredMeta.textContent = "Push a story with hero enabled to reserve the homepage top slot.";
+    if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = true;
+    syncFeaturedPreview();
+    return;
+  }
+
+  if (dom.featuredStatus) dom.featuredStatus.textContent = cleanText(article.title || "Hero article");
+  if (dom.featuredMeta) {
+    const expiry = article.featured_until ? `Hero until ${fmtDate(article.featured_until)}` : "Hero timing not set";
+    dom.featuredMeta.textContent = `${toTitleCase(article.category || "news")} | ${expiry}`;
+  }
+  if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = false;
+  syncFeaturedPreview();
+}
+
+function syncFeaturedPreview() {
+  const sourceArticle = dom.showOnHeroInput?.checked ? draftPreviewArticle() : (state.featuredArticle || draftPreviewArticle());
+  const hasPreview = Boolean(cleanText(sourceArticle.title || "") || cleanText(sourceArticle.source || "") || cleanText(sourceArticle.image_url || ""));
+
+  if (!hasPreview) {
+    if (dom.featuredPreviewImage) dom.featuredPreviewImage.src = "/social-card.svg";
+    if (dom.featuredPreviewCategory) dom.featuredPreviewCategory.textContent = "Awaiting publish";
+    if (dom.featuredPreviewHeadline) dom.featuredPreviewHeadline.textContent = "No hero story is live right now.";
+    if (dom.featuredPreviewSource) dom.featuredPreviewSource.textContent = "Switch hero on when you want this article to take the top slot on the homepage.";
+    return;
+  }
+
+  if (dom.featuredPreviewImage) dom.featuredPreviewImage.src = cleanText(sourceArticle.image_url || sourceArticle.image || "") || "/social-card.svg";
+  if (dom.featuredPreviewCategory) dom.featuredPreviewCategory.textContent = toTitleCase(sourceArticle.category || "news");
+  if (dom.featuredPreviewHeadline) dom.featuredPreviewHeadline.textContent = cleanText(sourceArticle.title || "Headline preview");
+
+  const previewMeta = [
+    cleanText(sourceArticle.source || ""),
+    sourceArticle.featured_until ? `Until ${fmtDate(sourceArticle.featured_until)}` : (dom.showOnHeroInput?.checked ? "Ready for hero priority" : ""),
+  ].filter(Boolean).join(" | ");
+  if (dom.featuredPreviewSource) {
+    dom.featuredPreviewSource.textContent = previewMeta || "This article is ready for homepage hero placement.";
+  }
+}
+
+function renderRecentManualList(items = []) {
+  state.recentArticles = Array.isArray(items) ? items : [];
+  if (dom.recentManualCount) dom.recentManualCount.textContent = String(state.recentArticles.length);
+  if (!dom.recentManualList) return;
+  dom.recentManualList.replaceChildren();
+
+  if (!state.recentArticles.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "No manual stories pushed yet.";
+    dom.recentManualList.append(empty);
+    return;
+  }
+
+  state.recentArticles.forEach((article) => {
+    const card = document.createElement("article");
+    card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
+
+    const title = document.createElement("p");
+    title.className = "text-sm font-semibold leading-6 text-slate-950";
+    title.textContent = cleanText(article.title || "Untitled story");
+
+    const meta = document.createElement("p");
+    meta.className = "mt-2 text-xs text-slate-500";
+    meta.textContent = [
+      toTitleCase(article.category || "news"),
+      fmtDate(article.created_at || article.published_at || new Date().toISOString()),
+      article.is_featured ? "Hero live" : "",
+    ].filter(Boolean).join(" | ");
+
+    const actions = document.createElement("div");
+    actions.className = "mt-4 flex flex-wrap gap-2";
+
+    const editButton = document.createElement("button");
+    editButton.type = "button";
+    editButton.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
+    editButton.textContent = "Edit";
+    editButton.addEventListener("click", async () => {
+      try {
+        await loadArticleForEdit(article.id);
+      } catch (error) {
+        setStatus(error.message || "Failed to load article.", true);
+        showToast(error.message || "Failed to load article.");
+      }
+    });
+
+    const viewLink = document.createElement("a");
+    viewLink.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
+    viewLink.href = buildArticleHref(article);
+    viewLink.target = "_blank";
+    viewLink.rel = "noopener noreferrer";
+    viewLink.textContent = "Open";
+
+    const deleteButton = document.createElement("button");
+    deleteButton.type = "button";
+    deleteButton.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-red-500 hover:text-red-600";
+    deleteButton.textContent = "Delete";
+    deleteButton.addEventListener("click", () => handleDeleteArticle(article.id, article.title));
+
+    actions.append(editButton, viewLink, deleteButton);
+    card.append(title, meta, actions);
+    dom.recentManualList.append(card);
+  });
+}
+
+function archiveDateKey(value = "") {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "unknown";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: DISPLAY_TIMEZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const map = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${map.year}-${map.month}-${map.day}`;
+}
+
+function archiveDateLabel(key = "") {
+  if (!key || key === "unknown") return "Unknown day";
+  const nowKey = archiveDateKey(new Date().toISOString());
+  const yesterday = new Date();
+  yesterday.setDate(yesterday.getDate() - 1);
+  const yesterdayKey = archiveDateKey(yesterday.toISOString());
+  if (key === nowKey) return "Today";
+  if (key === yesterdayKey) return "Yesterday";
+
+  const date = new Date(`${key}T12:00:00+05:30`);
+  return date.toLocaleDateString("en-IN", {
+    timeZone: DISPLAY_TIMEZONE,
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function renderArchive(items = []) {
+  state.archiveArticles = Array.isArray(items) ? items : [];
+  if (dom.manualTotalCount) dom.manualTotalCount.textContent = `${state.archiveArticles.length} articles`;
+  if (dom.archiveUpdatedAt) dom.archiveUpdatedAt.textContent = `Updated ${fmtDate(new Date().toISOString())}`;
+  if (!dom.archiveGroups) return;
+  dom.archiveGroups.replaceChildren();
+
+  if (!state.archiveArticles.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "No pushed articles yet.";
+    dom.archiveGroups.append(empty);
+    return;
+  }
+
+  const groups = new Map();
+  state.archiveArticles.forEach((article) => {
+    const key = archiveDateKey(article.created_at || article.published_at || "");
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(article);
   });
 
-  if (!response.ok) {
-    if (response.status === 403) {
-      window.location.assign("/");
-      return;
-    }
+  groups.forEach((articles, key) => {
+    const section = document.createElement("section");
+    section.className = "archive-group";
 
-    const payload = await response.json().catch(() => ({}));
-    throw new Error(payload.error || "Failed to load admin data.");
-  }
+    const header = document.createElement("div");
+    header.className = "mb-4 flex items-center justify-between gap-3";
 
-  const payload = await response.json();
-  renderFeaturedCard(payload.featured || null);
-  renderRecentList(payload.recent || []);
+    const title = document.createElement("h3");
+    title.className = "font-display text-2xl font-bold tracking-tight text-slate-950";
+    title.textContent = archiveDateLabel(key);
+
+    const count = document.createElement("span");
+    count.className = "rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900";
+    count.textContent = `${articles.length} pushed`;
+
+    header.append(title, count);
+    section.append(header);
+
+    const list = document.createElement("div");
+    list.className = "grid gap-4";
+
+    articles.forEach((article) => {
+      const card = document.createElement("article");
+      card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
+
+      const headline = document.createElement("p");
+      headline.className = "text-base font-semibold leading-7 text-slate-950";
+      headline.textContent = cleanText(article.title || "Untitled story");
+
+      const meta = document.createElement("p");
+      meta.className = "mt-2 text-xs text-slate-500";
+      meta.textContent = [
+        fmtDate(article.created_at || article.published_at || ""),
+        toTitleCase(article.category || "news"),
+        cleanText(article.source || ""),
+        article.is_featured ? "Hero live" : "",
+      ].filter(Boolean).join(" | ");
+
+      const actions = document.createElement("div");
+      actions.className = "mt-4 flex flex-wrap gap-2";
+
+      const editLink = document.createElement("a");
+      editLink.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
+      editLink.href = `/admin/news?edit=${encodeURIComponent(article.id)}`;
+      editLink.textContent = "Edit";
+
+      const openLink = document.createElement("a");
+      openLink.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
+      openLink.href = buildArticleHref(article);
+      openLink.target = "_blank";
+      openLink.rel = "noopener noreferrer";
+      openLink.textContent = "Open";
+
+      actions.append(editLink, openLink);
+      card.append(headline, meta, actions);
+      list.append(card);
+    });
+
+    section.append(list);
+    dom.archiveGroups.append(section);
+  });
 }
 
-async function uploadSelectedImage(file) {
-  if (!file) return;
-  if (!/^image\//i.test(file.type)) {
-    throw new Error("Select a valid image file.");
+function applyArticleToForm(article = {}) {
+  state.currentEditingArticleId = cleanText(article.id || "");
+  if (dom.headlineInput) dom.headlineInput.value = cleanText(article.headline || "");
+  if (dom.subheadlineInput) dom.subheadlineInput.value = cleanText(article.subheadline || "");
+  if (dom.authorNameInput) dom.authorNameInput.value = cleanText(article.authorName || "Sunwire News Desk");
+  if (dom.sourceInput) dom.sourceInput.value = cleanText(article.source || "");
+  if (dom.primarySourceNameInput) dom.primarySourceNameInput.value = cleanText(article.primarySourceName || article.source || "");
+  if (dom.primarySourceUrlInput) dom.primarySourceUrlInput.value = cleanText(article.primarySourceUrl || "");
+  if (dom.categoryInput) dom.categoryInput.value = cleanText(article.category || "ai") || "ai";
+  if (dom.showOnHeroInput) dom.showOnHeroInput.checked = Boolean(article.showOnHero);
+  if (dom.durationMinutesInput) dom.durationMinutesInput.value = "";
+  if (dom.featuredUntilInput) dom.featuredUntilInput.value = toLocalDateTimeValue(article.featuredUntil || "");
+  if (dom.tagsInput) dom.tagsInput.value = Array.isArray(article.tags) ? article.tags.join(", ") : "";
+  if (dom.metaTitleInput) dom.metaTitleInput.value = cleanText(article.metaTitle || "");
+  if (dom.metaDescriptionInput) dom.metaDescriptionInput.value = cleanText(article.metaDescription || "");
+  if (dom.contentEditor) dom.contentEditor.value = String(article.content || "").replace(/\r/g, "").trim();
+  if (dom.indiaPulseInput) dom.indiaPulseInput.value = cleanText(article.indiaPulse || "");
+
+  resetStructuredInputs();
+  if (dom.keyPointsList) {
+    dom.keyPointsList.replaceChildren(...((article.keyPoints || []).slice(0, 6).map((item) => createKeyPointRow(item))));
   }
+  if (dom.factSheetRows) {
+    dom.factSheetRows.replaceChildren(...((article.factSheet || []).slice(0, 8).map((item) => createFactSheetRow(item))));
+  }
+  if (dom.backgroundRows) {
+    dom.backgroundRows.replaceChildren(...((article.background || []).slice(0, 6).map((item) => createBackgroundRow(item))));
+  }
+  ensureMinimumRows();
+  setImagePreview(article.image_url || "");
+  syncEditorMode();
+  syncFeaturedPreview();
+}
+
+function clearEditQueryParam() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("edit");
+  window.history.replaceState({}, "", url.pathname + (url.search ? url.search : ""));
+}
+
+function resetForm({ keepStatus = false } = {}) {
+  state.currentEditingArticleId = "";
+  dom.newsForm?.reset();
+  resetStructuredInputs();
+  setImagePreview("");
+  syncEditorMode();
+  clearEditQueryParam();
+  if (!keepStatus) setStatus("Ready to publish.");
+}
+
+async function loadArticleForEdit(articleId) {
+  if (!articleId) return;
+  setViewMode("edit-news");
+  const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(articleId)}`);
+  applyArticleToForm(data.article || {});
+  const url = new URL(window.location.href);
+  url.pathname = "/admin/news";
+  url.searchParams.set("edit", articleId);
+  window.history.replaceState({}, "", url.pathname + url.search);
+  window.scrollTo({ top: 0, behavior: "smooth" });
+  showToast("Loaded story into Edit News.");
+}
+
+async function loadAdminSummary() {
+  const data = await fetchJson("/api/admin?view=news");
+  renderFeaturedStatus(data.featured || null);
+  renderRecentManualList(data.recent || []);
+}
+
+async function loadArchiveData() {
+  const data = await fetchJson("/api/admin?view=news&scope=all");
+  renderArchive(data.items || []);
+}
+
+async function loadPageData() {
+  const tasks = [loadAdminSummary()];
+  if (state.mode === "watch-all-news") tasks.push(loadArchiveData());
+  await Promise.all(tasks);
+}
+
+async function handleDeleteArticle(articleId, title = "") {
+  if (!articleId) return;
+  if (!window.confirm(`Delete "${cleanText(title || "this article")}"? This cannot be undone.`)) return;
+  await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(articleId)}`, { method: "DELETE" });
+  if (state.currentEditingArticleId === articleId) resetForm({ keepStatus: true });
+  showToast("Article deleted.");
+  await loadPageData();
+  if (state.mode === "watch-all-news") await loadArchiveData();
+}
+
+async function handleRemoveHero() {
+  if (!state.featuredArticle?.id) return;
+  await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(state.featuredArticle.id)}&action=remove-hero`, {
+    method: "PATCH",
+  });
+  showToast("Hero slot cleared.");
+  await loadPageData();
+}
+
+async function handleImageUpload(file) {
+  if (!file) return;
   if (file.size > 4 * 1024 * 1024) {
-    throw new Error("Image size must be under 4 MB.");
+    throw new Error("Image should be 4 MB or smaller.");
   }
 
-  pendingUploadName = file.name || "image";
-  imageUploadStatus.textContent = `Uploading ${pendingUploadName}...`;
-  const dataUrl = await new Promise((resolve, reject) => {
+  const imageData = await new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error("Image could not be read."));
+    reader.onerror = () => reject(new Error("Image upload failed."));
     reader.readAsDataURL(file);
   });
 
-  imagePreview.src = dataUrl;
-
-  const response = await fetch("/api/admin/upload-image", {
-    method: "POST",
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      headline: cleanText(headlineInput.value || file.name || "manual-image"),
-      imageData: dataUrl,
-    }),
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload.error || "Image upload failed.");
+  setButtonBusy(dom.imageUploadButtonLabel, true, "Uploading...");
+  if (dom.imageUploadStatus) dom.imageUploadStatus.textContent = "Uploading image...";
+  try {
+    const data = await fetchJson("/api/admin?view=upload", {
+      method: "POST",
+      body: JSON.stringify({
+        imageData,
+        headline: cleanText(dom.headlineInput?.value || file.name || "manual-story"),
+      }),
+    });
+    setImagePreview(data.image_url || "");
+    showToast("Image uploaded.");
+  } finally {
+    setButtonBusy(dom.imageUploadButtonLabel, false, "Uploading...");
   }
-
-  uploadedImageUrl = cleanText(payload.image_url || "");
-  imagePreview.src = uploadedImageUrl || dataUrl;
-  if (imageUploadButtonLabel) imageUploadButtonLabel.textContent = "Replace Cover Image";
-  imageUploadStatus.textContent = uploadedImageUrl
-    ? "Image uploaded and ready for publish."
-    : "Image uploaded.";
 }
 
-function resetForm() {
-  newsForm.reset();
-  contentEditor.innerHTML = "";
-  uploadedImageUrl = "";
-  pendingUploadName = "";
-  imagePreview.src = "/social-card.svg";
-  if (imageUploadButtonLabel) imageUploadButtonLabel.textContent = "Choose Cover Image";
-  imageUploadStatus.textContent = "No image uploaded yet.";
-  formStatus.textContent = "Ready to publish.";
-}
-
-async function submitNewsForm(event) {
+async function handleSubmit(event) {
   event.preventDefault();
-  const errors = validateForm();
-  if (errors.length) {
-    formStatus.textContent = errors[0];
-    showToast(errors[0], "error");
+  if (state.formBusy) return;
+
+  const payload = getFormPayload();
+  const error = validatePayload(payload);
+  if (error) {
+    setStatus(error, true);
+    showToast(error);
     return;
   }
 
-  setFormBusyState(true, "Publishing to Sunwire...");
+  state.formBusy = true;
+  setButtonBusy(dom.pushNewsButton, true, state.currentEditingArticleId ? "Updating..." : "Pushing...");
+  setStatus(state.currentEditingArticleId ? "Updating story..." : "Pushing story...");
 
   try {
-    const response = await fetch("/api/admin/news", {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        headline: cleanText(headlineInput.value),
-        subheadline: cleanText(subheadlineInput?.value || ""),
-        source: cleanText(sourceInput.value),
-        placement: cleanText(placementInput.value),
-        category: cleanText(categoryInput.value),
-        content: extractEditorContent(),
-        image_url: uploadedImageUrl,
-        durationMinutes: Number(durationMinutesInput.value || 0),
-        featuredUntil: cleanText(featuredUntilInput.value),
-      }),
+    const isUpdate = Boolean(state.currentEditingArticleId);
+    const url = isUpdate
+      ? `/api/admin?view=news&id=${encodeURIComponent(state.currentEditingArticleId)}`
+      : "/api/admin?view=news";
+    const data = await fetchJson(url, {
+      method: isUpdate ? "PUT" : "POST",
+      body: JSON.stringify(payload),
     });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok) {
-      throw new Error(payload.error || "News push failed.");
-    }
 
-    renderFeaturedCard(payload.article || null);
-    showToast("News pushed successfully \uD83D\uDE80");
-    resetForm();
-    await loadAdminData();
-  } catch (error) {
-    formStatus.textContent = cleanText(error.message || "News push failed.");
-    showToast(error.message || "News push failed.", "error");
+    applyArticleToForm(data.adminArticle || {});
+    setStatus(isUpdate ? "Story updated." : "Story pushed.");
+    showToast(isUpdate ? "Story updated." : "Story pushed.");
+    await loadPageData();
+    if (state.mode === "watch-all-news") await loadArchiveData();
+  } catch (errorResponse) {
+    setStatus(errorResponse.message || "Publish failed.", true);
+    throw errorResponse;
   } finally {
-    setFormBusyState(false);
+    state.formBusy = false;
+    setButtonBusy(dom.pushNewsButton, false, state.currentEditingArticleId ? "Updating..." : "Pushing...");
   }
 }
 
-async function logoutAdmin() {
-  await fetch("/api/admin/session", {
-    method: "DELETE",
-    credentials: "include",
-  }).catch(() => null);
-  window.location.assign("/");
-}
-
-adminUserEmailEl.textContent = cleanText(adminUser?.email || window.__SUNWIRE_ADMIN_EMAIL__ || "Admin");
-
-imageInput?.addEventListener("change", async (event) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-
-  try {
-    await uploadSelectedImage(file);
-    showToast("Image uploaded.");
-  } catch (error) {
-    imageUploadStatus.textContent = cleanText(error.message || "Image upload failed.");
-    showToast(error.message || "Image upload failed.", "error");
-  }
-});
-
-quickDurationButtons.forEach((button) => {
-  button.addEventListener("click", () => {
-    durationMinutesInput.value = String(button.dataset.durationMinutes || "");
-    featuredUntilInput.value = "";
+function attachDraftPreviewListeners() {
+  [
+    dom.headlineInput,
+    dom.sourceInput,
+    dom.categoryInput,
+    dom.showOnHeroInput,
+    dom.featuredUntilInput,
+  ].forEach((element) => {
+    element?.addEventListener("input", syncFeaturedPreview);
+    element?.addEventListener("change", syncFeaturedPreview);
   });
-});
+  dom.showOnHeroInput?.addEventListener("change", syncFeaturedPreview);
+}
 
-featuredUntilInput?.addEventListener("input", () => {
-  if (cleanText(featuredUntilInput.value)) durationMinutesInput.value = "";
-});
+function attachQuickDurationButtons() {
+  document.querySelectorAll("[data-duration-minutes]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (dom.durationMinutesInput) dom.durationMinutesInput.value = button.dataset.durationMinutes || "";
+      if (dom.featuredUntilInput) dom.featuredUntilInput.value = "";
+      if (dom.showOnHeroInput) dom.showOnHeroInput.checked = true;
+      syncFeaturedPreview();
+      showToast(`Hero duration set to ${button.dataset.durationMinutes} minutes.`);
+    });
+  });
+}
 
-durationMinutesInput?.addEventListener("input", () => {
-  if (Number(durationMinutesInput.value || 0) > 0) featuredUntilInput.value = "";
-});
-
-newsForm?.addEventListener("submit", submitNewsForm);
-resetFormButton?.addEventListener("click", resetForm);
-refreshAdminDataButton?.addEventListener("click", async () => {
-  try {
-    await loadAdminData();
-    showToast("Dashboard refreshed.");
-  } catch (error) {
-    showToast(error.message || "Dashboard refresh failed.", "error");
+async function init() {
+  if (dom.adminUserEmail) {
+    dom.adminUserEmail.textContent = cleanText(window.__SUNWIRE_ADMIN_USER__?.email || window.__SUNWIRE_ADMIN_EMAIL__ || "Admin");
   }
-});
-featuredRemoveButton?.addEventListener("click", () => removeManualArticle(
-  featuredRemoveButton.dataset.articleId || "",
-  featuredRemoveButton.dataset.articleTitle || "this story",
-));
-recentManualList?.addEventListener("click", (event) => {
-  const button = event.target instanceof Element ? event.target.closest("[data-remove-id]") : null;
-  if (!button) return;
-  removeManualArticle(button.getAttribute("data-remove-id") || "", button.getAttribute("data-remove-title") || "this story");
-});
-logoutAdminButton?.addEventListener("click", logoutAdmin);
 
-loadAdminData().catch((error) => {
-  featuredStatusEl.textContent = cleanText(error.message || "Failed to load admin dashboard.");
-  featuredMetaEl.textContent = "Reload the page or sign in again.";
-});
+  setViewMode(state.mode);
+  resetStructuredInputs();
+  syncEditorMode();
+  attachDraftPreviewListeners();
+  attachQuickDurationButtons();
+
+  dom.addKeyPointButton?.addEventListener("click", () => dom.keyPointsList?.append(createKeyPointRow()));
+  dom.addFactSheetRowButton?.addEventListener("click", () => dom.factSheetRows?.append(createFactSheetRow()));
+  dom.addBackgroundItemButton?.addEventListener("click", () => dom.backgroundRows?.append(createBackgroundRow()));
+  dom.imageInput?.addEventListener("change", async (event) => {
+    const [file] = event.target.files || [];
+    try {
+      await handleImageUpload(file);
+    } catch (error) {
+      setStatus(error.message || "Image upload failed.", true);
+      showToast(error.message || "Image upload failed.");
+    } finally {
+      event.target.value = "";
+    }
+  });
+  dom.newsForm?.addEventListener("submit", async (event) => {
+    try {
+      await handleSubmit(event);
+    } catch (error) {
+      showToast(error.message || "Publish failed.");
+    }
+  });
+  dom.resetFormButton?.addEventListener("click", () => resetForm());
+  dom.cancelEditButton?.addEventListener("click", () => resetForm());
+  dom.refreshAdminDataButton?.addEventListener("click", async () => {
+    try {
+      setStatus("Refreshing dashboard...");
+      await loadPageData();
+      setStatus("Dashboard refreshed.");
+      showToast("Dashboard refreshed.");
+    } catch (error) {
+      setStatus(error.message || "Refresh failed.", true);
+      showToast(error.message || "Refresh failed.");
+    }
+  });
+  dom.featuredRemoveButton?.addEventListener("click", async () => {
+    try {
+      await handleRemoveHero();
+    } catch (error) {
+      setStatus(error.message || "Failed to remove hero.", true);
+      showToast(error.message || "Failed to remove hero.");
+    }
+  });
+  dom.logoutAdminButton?.addEventListener("click", async () => {
+    await fetchJson("/api/admin?view=session", { method: "DELETE" });
+    window.location.href = "/";
+  });
+
+  try {
+    await loadPageData();
+    const editId = new URL(window.location.href).searchParams.get("edit");
+    if (editId) await loadArticleForEdit(editId);
+  } catch (error) {
+    setStatus(error.message || "Admin dashboard failed to load.", true);
+    showToast(error.message || "Admin dashboard failed to load.");
+  }
+}
+
+init();

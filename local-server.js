@@ -107,6 +107,14 @@ function resolveRoute(pathname = "", searchParams = new URLSearchParams()) {
   if (pathname === "/admin/news") {
     const params = Object.fromEntries(searchParams.entries());
     params.view = params.view || "page";
+    params.mode = params.mode || "edit-news";
+    return appendQuery("/api/admin", params);
+  }
+
+  if (pathname === "/admin/all-news") {
+    const params = Object.fromEntries(searchParams.entries());
+    params.view = params.view || "page";
+    params.mode = params.mode || "watch-all-news";
     return appendQuery("/api/admin", params);
   }
 

@@ -86,7 +86,11 @@
     },
     {
       "source": "/admin/news",
-      "destination": "/api/admin?view=page"
+      "destination": "/api/admin?view=page&mode=edit-news"
+    },
+    {
+      "source": "/admin/all-news",
+      "destination": "/api/admin?view=page&mode=watch-all-news"
     },
     {
       "source": "/page/:page",
