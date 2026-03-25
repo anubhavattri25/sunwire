@@ -568,6 +568,7 @@ function applyArticleData(article = {}, fallback = {}) {
       preserveManualParagraphs,
     );
   const publishedAt = article.published_at || article.publishedAt || fallback.publishedAt || "";
+  const authorName = article.authorName || fallback.authorName || article.source || fallback.source || "Sunwire News Desk";
   const sourceName = article.source || fallback.source || "SunWire Desk";
   const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
   const imageUrl = storyImage({ image: article.image || fallback.image || "" }, deskFilter);
@@ -576,7 +577,7 @@ function applyArticleData(article = {}, fallback = {}) {
 
   dom.articleTitle.textContent = headline;
   dom.breadcrumbCurrent.textContent = headline;
-  dom.articleAuthor.textContent = sourceName;
+  dom.articleAuthor.textContent = authorName;
   dom.articleMeta.textContent = publishedAt ? `${fmtDate(publishedAt)} · ${timeAgo(publishedAt)}` : "Live now";
   dom.articleSummary.textContent = summary || "No verified summary available.";
   if (dom.primarySourceBlock) dom.primarySourceBlock.hidden = !sourceUrl;
@@ -830,7 +831,7 @@ function renderInitialStoryState(story) {
   dom.breadcrumbCurrent.textContent = cleanText(story.title);
   dom.articleCategory.textContent = deskLabel;
   dom.articleTitle.textContent = cleanText(story.title);
-  dom.articleAuthor.textContent = story.source || "SunWire Desk";
+  dom.articleAuthor.textContent = story.authorName || story.source || "Sunwire News Desk";
   dom.articleMeta.textContent = story.publishedAt ? `${fmtDate(story.publishedAt)} · ${timeAgo(story.publishedAt)}` : "Live now";
   dom.articleSummary.textContent = initialSummary;
   if (dom.primarySourceBlock) dom.primarySourceBlock.hidden = !story.url;
