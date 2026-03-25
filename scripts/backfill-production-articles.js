@@ -192,6 +192,10 @@ async function processArticle(row = {}, mode = "all") {
   rebuilt.image_url = imageUrl || rebuilt.image_url || "";
 
   const saved = await saveArticle(rebuilt);
+  if (!saved) {
+    console.log("SKIP:", row.title, "saveArticle returned null");
+    return { updated: false, reason: "save_rejected" };
+  }
   const metadata = parseRawMetadata(saved.raw_content);
   console.log(
     "UPDATED:",

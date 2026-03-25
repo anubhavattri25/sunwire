@@ -98,7 +98,7 @@ function buildRuntimeOverrides(req) {
   const categories = readCsvValue(readOptionalString(req, "categories"));
   const sourceNames = readCsvValue(readOptionalString(req, "sourceNames"));
   const rssLimit = readOptionalNumber(req, "rssLimit");
-  const fastMode = readOptionalBoolean(req, "fast", true);
+  const fastMode = readOptionalBoolean(req, "fast", false);
 
   return {
     SUNWIRE_SOURCE_CATEGORIES: categories,

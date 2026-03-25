@@ -392,7 +392,7 @@ module.exports = async (req, res) => {
       manual_upload: Boolean(story?.manual_upload || article?.manual_upload),
     });
 
-    if (!publisherReview.eligibleForPublisherNetwork) {
+    if (!publisherReview.allowArticleAccess) {
       sendNotFound(res);
       return;
     }
@@ -417,6 +417,7 @@ module.exports = async (req, res) => {
         : baseHeadState.jsonLd,
       type: "article",
       enableAdsense: publisherReview.allowAds && process.env.SUNWIRE_ENABLE_ADSENSE === "1",
+      robots: publisherReview.shouldIndex ? "index, follow, max-image-preview:large" : "noindex, follow",
     });
     const finalHtml = minifyHtml(html);
     const etag = `W/"${Buffer.byteLength(finalHtml).toString(16)}-${createHash("sha1").update(finalHtml).digest("base64url")}"`;

@@ -6,9 +6,13 @@ const {
 } = require('../../lib/article/shared');
 
 const DEFAULT_AI_PROVIDER = 'ollama';
+const OPENAI_AI_PROVIDER = 'openai';
 const DEFAULT_OLLAMA_BASE_URL = 'http://localhost:11434';
 const DEFAULT_OLLAMA_MODEL = 'llama3.1:8b';
+const DEFAULT_OPENAI_BASE_URL = 'https://api.openai.com/v1';
+const DEFAULT_OPENAI_MODEL = 'gpt-4.1-mini';
 const OLLAMA_CHAT_PATH = '/api/chat';
+const OPENAI_CHAT_PATH = '/chat/completions';
 const OLLAMA_TIMEOUT_MS = 300000;
 const MAX_REWRITE_INPUT_CHARS = 18000;
 const MAX_OLLAMA_INPUT_CHARS = 4200;
@@ -44,20 +48,27 @@ const ASSISTANT_JUNK_PATTERNS = [
 ];
 
 function getLocalAiConfig() {
-  const provider = String(process.env.AI_PROVIDER || DEFAULT_AI_PROVIDER).trim().toLowerCase() || DEFAULT_AI_PROVIDER;
+  const explicitProvider = String(process.env.AI_PROVIDER || '').trim().toLowerCase();
+  const provider = explicitProvider
+    || (String(process.env.OPENAI_API_KEY || '').trim() ? OPENAI_AI_PROVIDER : DEFAULT_AI_PROVIDER);
   const baseUrl = String(process.env.OLLAMA_BASE_URL || DEFAULT_OLLAMA_BASE_URL).trim().replace(/\/+$/, '') || DEFAULT_OLLAMA_BASE_URL;
   const model = String(process.env.OLLAMA_MODEL || DEFAULT_OLLAMA_MODEL).trim() || DEFAULT_OLLAMA_MODEL;
+  const openAiBaseUrl = String(process.env.OPENAI_BASE_URL || DEFAULT_OPENAI_BASE_URL).trim().replace(/\/+$/, '') || DEFAULT_OPENAI_BASE_URL;
+  const openAiModel = String(process.env.OPENAI_MODEL || DEFAULT_OPENAI_MODEL).trim() || DEFAULT_OPENAI_MODEL;
+  const openAiApiKey = String(process.env.OPENAI_API_KEY || '').trim();
 
   return {
     provider,
-    baseUrl,
-    model,
+    baseUrl: provider === OPENAI_AI_PROVIDER ? openAiBaseUrl : baseUrl,
+    model: provider === OPENAI_AI_PROVIDER ? openAiModel : model,
+    apiKey: provider === OPENAI_AI_PROVIDER ? openAiApiKey : '',
     chatUrl: `${baseUrl}${OLLAMA_CHAT_PATH}`,
+    openAiChatUrl: `${openAiBaseUrl}${OPENAI_CHAT_PATH}`,
   };
 }
 
 function isLocalAiRewriteEnabled() {
-  return getLocalAiConfig().provider === DEFAULT_AI_PROVIDER;
+  return [DEFAULT_AI_PROVIDER, OPENAI_AI_PROVIDER].includes(getLocalAiConfig().provider);
 }
 
 function parsePositiveInt(value, fallback) {
@@ -287,6 +298,19 @@ function logOllamaRequestFailure(error, config) {
   });
 }
 
+function logOpenAiRequestFailure(error, config) {
+  console.error('openai_request_failed', {
+    requestUrl: config.openAiChatUrl,
+    modelName: config.model,
+    timeout: config.timeoutMs || OLLAMA_TIMEOUT_MS,
+    axiosMessage: axios.isAxiosError(error)
+      ? error.message
+      : String(error?.message || error || 'Unknown OpenAI request error'),
+    responseStatus: error?.response?.status ?? null,
+    responseBody: stringifyForLog(error?.response?.data),
+  });
+}
+
 async function requestOllamaRewrite(config, prompt, runtime) {
   const response = await axios.post(
     config.chatUrl,
@@ -317,9 +341,55 @@ async function requestOllamaRewrite(config, prompt, runtime) {
   );
 }
 
+async function requestOpenAiRewrite(config, prompt, runtime) {
+  const response = await axios.post(
+    config.openAiChatUrl,
+    {
+      model: config.model,
+      messages: [
+        {
+          role: 'system',
+          content: prompt.system,
+        },
+        {
+          role: 'user',
+          content: prompt.user,
+        },
+      ],
+      temperature: runtime.temperature,
+      max_tokens: Math.max(256, Number(runtime.numPredict || OLLAMA_NUM_PREDICT) || OLLAMA_NUM_PREDICT),
+    },
+    {
+      timeout: runtime.timeoutMs,
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  const content = response?.data?.choices?.[0]?.message?.content;
+  if (Array.isArray(content)) {
+    return content.map((item) => item?.text || '').join('').trim();
+  }
+
+  return typeof content === 'string' ? content : '';
+}
+
+async function requestAiRewrite(config, prompt, runtime) {
+  if (config.provider === OPENAI_AI_PROVIDER) {
+    if (!config.apiKey) {
+      throw new Error('Missing OPENAI_API_KEY');
+    }
+    return requestOpenAiRewrite(config, prompt, runtime);
+  }
+
+  return requestOllamaRewrite(config, prompt, runtime);
+}
+
 async function classifyArticleCategoryLocally(sourceContent = '', options = {}) {
   const config = getLocalAiConfig();
-  if (config.provider !== DEFAULT_AI_PROVIDER) {
+  if (![DEFAULT_AI_PROVIDER, OPENAI_AI_PROVIDER].includes(config.provider)) {
     return fallbackDeskCategoryClassifier(sourceContent, options);
   }
 
@@ -333,7 +403,7 @@ async function classifyArticleCategoryLocally(sourceContent = '', options = {}) 
   }
 
   try {
-    const response = await requestOllamaRewrite(
+    const response = await requestAiRewrite(
       config,
       buildCategoryPrompt(importantContent, options),
       {
@@ -352,7 +422,7 @@ async function classifyArticleCategoryLocally(sourceContent = '', options = {}) 
 async function rewriteArticleLocally(sourceContent = '', options = {}) {
   const config = getLocalAiConfig();
   const runtime = getOllamaRuntimeConfig(config.model);
-  if (config.provider !== DEFAULT_AI_PROVIDER) {
+  if (![DEFAULT_AI_PROVIDER, OPENAI_AI_PROVIDER].includes(config.provider)) {
     logFallbackTriggered();
     return null;
   }
@@ -372,6 +442,7 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
   console.log('ollama_request_content_lengths', {
     originalLength: cleanedArticle.length,
     trimmedLength: importantContent.length,
+    provider: config.provider,
   });
 
   try {
@@ -379,7 +450,7 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
     let validation = null;
     try {
       const prompt = buildRewritePrompt(importantContent, options, runtime);
-      aiText = await requestOllamaRewrite(config, prompt, runtime);
+      aiText = await requestAiRewrite(config, prompt, runtime);
     } catch (error) {
       if (!runtime.retry || !axios.isAxiosError(error) || !/timeout/i.test(error.message || '')) {
         throw error;
@@ -392,7 +463,7 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
       }
 
       const retryPrompt = buildRewritePrompt(importantContent, options, runtime.retry);
-      aiText = await requestOllamaRewrite(config, retryPrompt, runtime.retry);
+      aiText = await requestAiRewrite(config, retryPrompt, runtime.retry);
     }
 
     console.log('AI RAW OUTPUT:\n', aiText);
@@ -407,7 +478,7 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
         ...runtime.retry,
         preferredMinWords: parsePositiveInt(runtime.preferredMinWords, PREFERRED_REWRITE_WORDS),
       });
-      const retryText = await requestOllamaRewrite(config, longerPrompt, runtime.retry);
+      const retryText = await requestAiRewrite(config, longerPrompt, runtime.retry);
       console.log('AI RAW OUTPUT (LENGTH RETRY):\n', retryText);
       console.log('WORD COUNT (LENGTH RETRY):', countWords(retryText));
 
@@ -426,7 +497,11 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
 
     return validation.content;
   } catch (error) {
-    logOllamaRequestFailure(error, { ...config, timeoutMs: runtime.timeoutMs });
+    if (config.provider === OPENAI_AI_PROVIDER) {
+      logOpenAiRequestFailure(error, { ...config, timeoutMs: runtime.timeoutMs });
+    } else {
+      logOllamaRequestFailure(error, { ...config, timeoutMs: runtime.timeoutMs });
+    }
     logFallbackTriggered();
     return null;
   }
@@ -434,6 +509,7 @@ async function rewriteArticleLocally(sourceContent = '', options = {}) {
 
 module.exports = {
   DEFAULT_AI_PROVIDER,
+  OPENAI_AI_PROVIDER,
   DEFAULT_OLLAMA_BASE_URL,
   DEFAULT_OLLAMA_MODEL,
   DESK_CATEGORY_CHOICES,

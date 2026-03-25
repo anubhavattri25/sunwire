@@ -42,7 +42,7 @@ jobs:
               -H "Cache-Control: no-cache" \
               -H "x-ingest-key: ${INGEST_SECRET}" \
               -H "User-Agent: SunwireBot/1.0" \
-              "https://sunwire.in/api/ingest?categories=${CATEGORY}&rssLimit=1")
+              "https://sunwire.in/api/ingest?categories=${CATEGORY}&rssLimit=1&fast=0")
 
             echo "Category: ${CATEGORY}"
             echo "HTTP Status: ${STATUS}"
