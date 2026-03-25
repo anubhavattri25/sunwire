@@ -138,27 +138,10 @@
             </div>
           </div>
         </div>
-
-        <!-- TRENDING (under hero) -->
-        <section class="trending-strip" aria-labelledby="trendingSectionTitle">
-          <div class="section-head">
-            <div>
-              <p class="section-caption">Live momentum</p>
-              <h2 class="section-title" id="trendingSectionTitle">Trending Now</h2>
-            </div>
-            <div class="section-head__actions">
-              <div class="section-switcher" aria-label="Trending feed mode">
-                <button class="section-tab is-active" type="button" data-trending-mode="trending">Trending</button>
-                <button class="section-tab" type="button" data-trending-mode="just-in">Just In</button>
-              </div>
-              <span class="section-head__meta" id="trendingUpdatedAt">Updated just now</span>
-            </div>
-          </div>
-          <div class="trending-strip__cards" id="trendingGrid" aria-live="polite"></div>
-        </section>
       </div>
 
       <!-- RIGHT: SIDEBAR CARDS -->
+
       <aside class="right-sidebar" id="homepageSidebar" aria-label="SunWire insights">
         <!-- AI TOOL CARD -->
         <article class="sidebar-card sidebar-card--tool">
@@ -175,7 +158,7 @@
         <article class="sidebar-card sidebar-card--prices">
           <div class="sidebar-card__header">
             <span class="price-icon">📈</span> Price Moves
-            <span class="live-badge">LIVE</span>
+            <span class="price-moves-date">Mar 25, 2026</span>
           </div>
           <div class="price-board">
             <p class="price-board__meta" id="priceBoardMeta">Loading latest prices…</p>
@@ -197,6 +180,24 @@
         </article>
       </aside>
     </div>
+
+    <!-- TRENDING (under hero and sidebar) -->
+    <section class="trending-strip" aria-labelledby="trendingSectionTitle">
+      <div class="section-head">
+        <div>
+          <p class="section-caption">Live momentum</p>
+          <h2 class="section-title" id="trendingSectionTitle">Trending Now</h2>
+        </div>
+        <div class="section-head__actions">
+          <div class="section-switcher" aria-label="Trending feed mode">
+            <button class="section-tab is-active" type="button" data-trending-mode="trending">Trending</button>
+            <button class="section-tab" type="button" data-trending-mode="just-in">Just In</button>
+          </div>
+          <span class="section-head__meta" id="trendingUpdatedAt">Updated just now</span>
+        </div>
+      </div>
+      <div class="trending-strip__cards" id="trendingGrid" aria-live="polite"></div>
+    </section>
 
     <div class="home-primary">
       <section class="category-zone" aria-labelledby="categoryNewsTitle">

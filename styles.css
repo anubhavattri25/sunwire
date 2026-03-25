@@ -602,7 +602,7 @@ body[data-home-mode="archive"] .category-zone {
 
 .trending-strip__cards {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
   align-items: start;
 }
@@ -752,6 +752,11 @@ body[data-home-mode="archive"] .category-zone {
   height: 100%;
   object-fit: cover;
   object-position: center center;
+  transition: transform 0.4s ease;
+}
+
+.news-card:hover .news-card__image {
+  transform: scale(1.04);
 }
 
 .news-card__tag {
@@ -1860,7 +1865,8 @@ body[data-home-mode="archive"] .category-zone {
   border-radius: 24px;
   overflow: hidden;
   background: #111;
-  min-height: 520px;
+  height: 100%;
+  min-height: 480px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
 }
 
@@ -1868,7 +1874,7 @@ body[data-home-mode="archive"] .category-zone {
   display: block;
   width: 100%;
   height: 100%;
-  min-height: 520px;
+  min-height: 480px;
   object-fit: cover;
   object-position: center top;
   mask-image: none;
@@ -2068,11 +2074,13 @@ body[data-home-mode="archive"] .category-zone {
 
 /* Upgrade base sidebar-card */
 .sidebar-card {
-  border-radius: 20px;
-  border: 1px solid rgba(17, 17, 17, 0.09);
-  background: rgba(255, 253, 247, 0.96);
-  box-shadow: 0 10px 32px rgba(17, 17, 17, 0.08);
+  border-radius: 24px;
+  border: 1px solid rgba(0, 0, 0, 0.04);
+  background: rgba(255, 250, 240, 0.92);
+  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 1), 0 12px 32px rgba(0, 0, 0, 0.06);
   transition: box-shadow 0.22s, transform 0.22s;
+  position: relative;
+  overflow: hidden;
 }
 
 .sidebar-card:hover {
@@ -2326,3 +2334,123 @@ body[data-home-mode="archive"] .category-zone {
 .auth-feedback.is-success { background: rgba(43, 138, 62, 0.08); border-color: rgba(43, 138, 62, 0.2); color: #2b8a3e; }
 .text-button.is-authenticated { color: #2b8a3e; font-weight: 800; }
 .text-button.is-busy { opacity: 0.6; pointer-events: none; }
+/* RIGHT SIDEBAR TWEAKS applied to exactly match spec */
+.sidebar-card {
+  border-radius: 24px !important;
+  background: #FFFDF7 !important;
+  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 1), 0 8px 32px rgba(17, 17, 17, 0.05) !important;
+  overflow: hidden;
+  position: relative;
+}
+
+.sidebar-card--tool::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: url('/brain-bg.png') no-repeat right center;
+  background-size: cover;
+  opacity: 0.8;
+  z-index: 0;
+  pointer-events: none;
+}
+.sidebar-card--tool > * {
+  position: relative;
+  z-index: 2;
+}
+.sidebar-card--tool h3 {
+  font-family: Arial, sans-serif !important;
+  font-size: 2.2rem !important;
+  font-weight: 900 !important;
+  color: #111 !important;
+  letter-spacing: -0.05em !important;
+  margin-bottom: 8px !important;
+}
+.sidebar-card--tool p:not(.tool-no-cc) {
+  font-size: 1rem !important;
+  color: #555 !important;
+  max-width: 90% !important;
+}
+.sidebar-button {
+  background: #fcc23a !important;
+  font-weight: 900 !important;
+  font-size: 1.05rem !important;
+  width: auto !important;
+  display: inline-flex !important;
+  padding: 14px 24px !important;
+  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.1) !important;
+  margin-top: 10px !important;
+}
+.eyebrow-icon { color: #fcc23a !important; }
+
+.sidebar-card--prices::after {
+  content: '';
+  position: absolute;
+  right: -20px; bottom: -20px;
+  width: 140%; height: 180px;
+  background: url('/price-bg.png') no-repeat right bottom;
+  background-size: contain;
+  opacity: 0.6;
+  z-index: 0;
+  pointer-events: none;
+}
+.sidebar-card--prices > * {
+  position: relative;
+  z-index: 2;
+}
+/* TRENDING ROW FIX: 4 COLUMNS SINGLE ROW */
+@media (min-width: 1025px) {
+  .trending-strip__cards {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr) !important;
+    grid-template-rows: auto !important;
+    gap: 16px !important;
+    overflow: visible !important;
+  }
+}
+
+/* SIDEBAR LATEST UPDATES DOTS */
+.sidebar-card--updates .event-list li {
+  position: relative !important;
+  padding-left: 24px !important;
+  margin-bottom: 16px !important;
+}
+.sidebar-card--updates .event-list li::before {
+  content: "" !important;
+  position: absolute !important;
+  left: 0 !important;
+  top: 7px !important;
+  width: 10px !important;
+  height: 10px !important;
+  background: #e02020 !important;
+  border-radius: 50% !important;
+}
+.sidebar-card--updates .event-list li strong {
+  display: block !important;
+  font-size: 1.15rem !important;
+  font-weight: 900 !important;
+  color: #111 !important;
+  margin-bottom: 2px !important;
+}
+.sidebar-card--updates .event-list li span {
+  display: block !important;
+  font-size: 0.96rem !important;
+  color: #666 !important;
+  line-height: 1.4 !important;
+}
+
+/* PRICE MOVES DATE */
+.price-moves-date {
+  float: right !important;
+  font-size: 0.82rem !important;
+  color: #999 !important;
+  font-weight: 500 !important;
+  margin-top: 2px !important;
+}
+
+/* HOVER ZOOM ON TRENDING */
+.news-card__image {
+  transition: transform 0.4s ease !important;
+}
+.news-card:hover .news-card__image {
+  transform: scale(1.06) !important;
+}

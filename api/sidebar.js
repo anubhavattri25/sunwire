@@ -37,39 +37,14 @@ async function fetchTextNoCache(url) {
 
 const NICHE_TOOLS = [
   {
-    tool: "Continue.dev",
-    use: "Open-source coding assistant you run inside your IDE.",
-    link: "https://www.continue.dev/",
-  },
-  {
-    tool: "LlamaIndex",
-    use: "Framework for building retrieval and agent workflows on your own data.",
-    link: "https://www.llamaindex.ai/",
-  },
-  {
-    tool: "OpenDevin",
-    use: "Open-source autonomous coding agent project for dev workflows.",
-    link: "https://github.com/OpenDevin/OpenDevin",
-  },
-  {
-    tool: "BionicGPT",
-    use: "Self-hosted private GenAI stack for teams and compliance-heavy orgs.",
-    link: "https://github.com/bionic-gpt/bionic-gpt",
-  },
-  {
-    tool: "Khoj",
-    use: "Personal AI assistant for notes, docs, and local knowledge search.",
-    link: "https://github.com/khoj-ai/khoj",
-  },
-  {
-    tool: "AnythingLLM",
-    use: "Run local/private document chat and workspace copilots quickly.",
-    link: "https://github.com/Mintplex-Labs/anything-llm",
-  },
-  {
     tool: "Langflow",
     use: "Visual builder for LLM chains and agent pipelines.",
     link: "https://www.langflow.org/",
+  },
+  {
+    tool: "Continue.dev",
+    use: "Open-source coding assistant you run inside your IDE.",
+    link: "https://www.continue.dev/",
   },
 ];
 
@@ -86,47 +61,43 @@ const STARTUP_FALLBACKS = [
 ];
 
 const EVENTS_FALLBACKS = [
+  { name: "Web Summit", date: "Nov 11", about: "Startup, product, and market trends in global tech.", link: "https://websummit.com/" },
   { name: "Nvidia GTC", date: "Mar 20", about: "GPU, AI infrastructure, and model performance updates.", link: "https://www.nvidia.com/gtc/" },
   { name: "OpenAI Dev Day", date: "Apr 3", about: "New model APIs, product launches, and developer tools.", link: "https://openai.com" },
-  { name: "Google I/O", date: "May 10", about: "AI features across Android, Search, and cloud platform.", link: "https://io.google/" },
-  { name: "Microsoft Build", date: "May 21", about: "Copilot, Azure AI, and enterprise engineering workflows.", link: "https://build.microsoft.com/" },
-  { name: "AWS re:Invent", date: "Dec 2", about: "Cloud AI services, data stack changes, and architecture patterns.", link: "https://reinvent.awsevents.com/" },
-  { name: "Web Summit", date: "Nov 11", about: "Startup, product, and market trends in global tech.", link: "https://websummit.com/" },
 ];
 
 const MARKET_BOARD_FALLBACK = {
-  asOf: "2026-03-12T19:00:00+05:30",
-  meta: "Mar 11 vs Mar 12, 2026. Gold and silver are India retail rates. LPG is New Delhi domestic 14.2 kg.",
+  asOf: "2026-03-25T19:00:00+05:30",
+  meta: "Mar 25, 2026",
   items: [
     {
       name: "Gold",
       market: "India, 24K / 10g",
-      today: "Rs. 1,63,310",
-      yesterday: "Rs. 1,62,380",
-      change: "+Rs. 930",
+      today: "Rs. 1,46,670",
+      yesterday: "Rs. 1,42,910",
+      change: "+3,760",
       deltaDirection: "up",
     },
     {
       name: "Silver",
       market: "India / kg",
-      today: "Rs. 2,89,900",
-      yesterday: "Rs. 2,90,000",
-      change: "-Rs. 100",
-      deltaDirection: "down",
+      today: "Rs. 2,50,000",
+      yesterday: "Rs. 2,35,000",
+      change: "+15,000",
+      deltaDirection: "up",
     },
     {
-      name: "LPG",
-      market: "New Delhi, 14.2 kg",
-      today: "Rs. 913.00",
-      yesterday: "Rs. 913.00",
-      change: "Rs. 0.00",
-      deltaDirection: "flat",
+      name: "NIFTY",
+      market: "NSE Index",
+      today: "Rs. 22,590",
+      yesterday: "Rs. 22,380",
+      change: "+210",
+      deltaDirection: "up",
     },
   ],
   sources: [
-    { label: "Gold", url: "https://www.goodreturns.in/gold-rates/" },
-    { label: "Silver", url: "https://www.goodreturns.in/silver-rates/" },
-    { label: "LPG", url: "https://www.goodreturns.in/lpg-price-in-delhi-s10.html" },
+    { label: "GoodReturns", url: "https://www.goodreturns.in/" },
+    { label: "NSE India", url: "https://www.nseindia.com/" },
   ],
 };
 
