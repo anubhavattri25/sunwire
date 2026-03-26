@@ -68,6 +68,11 @@
       margin-top: 2rem;
     }
 
+    .request-item.is-active {
+      border-color: #101826;
+      box-shadow: 0 12px 30px rgba(16, 24, 38, 0.12);
+    }
+
     @media (max-width: 768px) {
       .mobile-stack {
         flex-direction: column;
@@ -97,12 +102,13 @@
     <aside class="glass-panel w-full overflow-hidden rounded-[32px] border border-white/70 shadow-panel lg:sticky lg:top-4 lg:h-[calc(100vh-2rem)] lg:w-[310px]">
       <div class="border-b border-slate-200/80 bg-slate-950 px-6 py-6 text-white">
         <p class="font-display text-3xl font-bold tracking-tight">SUNWIRE</p>
-        <p class="mt-2 text-sm text-white/70">Admin publishing desk</p>
+        <p class="mt-2 text-sm text-white/70" id="sidebarSubtitle">Newsroom dashboard</p>
       </div>
       <div class="space-y-6 px-6 py-6">
         <div class="rounded-3xl bg-amber-100/70 p-4">
           <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-700">Signed in</p>
           <p class="mt-2 text-sm font-semibold" id="adminUserEmail">Loading...</p>
+          <p class="mt-2 text-xs uppercase tracking-[0.18em] text-slate-500" id="adminRoleBadge">Loading role...</p>
         </div>
 
         <nav class="space-y-2 text-sm font-semibold">
@@ -110,13 +116,25 @@
             <span>Home Page</span>
             <span class="text-white/60">/</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news" id="navEditNews">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=news-requests" id="navRequests">
+            <span>News Requests</span>
+            <span class="text-accent" id="navRequestsCount">Queue</span>
+          </a>
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=edit-news" id="navEditNews">
             <span>Edit News</span>
             <span class="text-accent">Desk</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/all-news" id="navWatchAllNews">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=watch-all-news" id="navWatchAllNews">
             <span>Watch All News</span>
             <span class="text-steel">Archive</span>
+          </a>
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=access-control" id="navAccessControl">
+            <span>Access Control</span>
+            <span class="text-pine" id="navAccessCount">Emails</span>
+          </a>
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=submit-request" id="navSubmitRequest">
+            <span>Submit Request</span>
+            <span class="text-accent">Draft</span>
           </a>
         </nav>
 
@@ -164,7 +182,145 @@
         </div>
       </section>
 
-      <section class="dashboard-view" id="editDashboardSection">
+      <section class="dashboard-view" id="requestDashboardSection" hidden>
+        <div class="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
+          <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel lg:p-8">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Request Queue</p>
+                <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950">Contributor submissions</h2>
+                <p class="mt-2 text-sm text-slate-500">Every approved email can draft a story here, but only you can approve and publish it.</p>
+              </div>
+              <button class="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-950 hover:bg-slate-50" id="refreshRequestsButton" type="button">
+                Refresh Requests
+              </button>
+            </div>
+
+            <div class="mt-6 grid gap-4 md:grid-cols-3">
+              <div class="rounded-[24px] border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Pending</p>
+                <p class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950" id="requestSummaryPending">0</p>
+              </div>
+              <div class="rounded-[24px] border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Approved</p>
+                <p class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950" id="requestSummaryApproved">0</p>
+              </div>
+              <div class="rounded-[24px] border border-slate-200 bg-white p-4">
+                <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Rejected</p>
+                <p class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950" id="requestSummaryRejected">0</p>
+              </div>
+            </div>
+
+            <div class="mt-6 flex flex-wrap items-center justify-between gap-3">
+              <p class="text-sm text-slate-500" id="requestListMeta">Loading newsroom requests...</p>
+              <span class="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900" id="requestTotalCount">0 items</span>
+            </div>
+
+            <div class="mt-5 space-y-3" id="requestList">
+              <p class="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500" id="requestEmptyState">Loading requests...</p>
+            </div>
+          </section>
+
+          <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel lg:p-8">
+            <div id="requestDetailEmpty" class="rounded-[28px] border border-dashed border-slate-300 bg-slate-50/80 px-6 py-12 text-center">
+              <p class="font-display text-2xl font-bold tracking-tight text-slate-950">Choose a request</p>
+              <p class="mt-3 text-sm leading-6 text-slate-500">Select a contributor submission from the queue to review every field before you approve or reject it.</p>
+            </div>
+
+            <article id="requestDetailCard" hidden>
+              <div class="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Request Detail</p>
+                  <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950" id="requestDetailHeadline">Headline</h2>
+                  <p class="mt-2 text-sm text-slate-500" id="requestDetailMeta"></p>
+                </div>
+                <div class="flex flex-wrap gap-2">
+                  <span class="rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em]" id="requestDetailStatus">Pending</span>
+                  <button class="rounded-full bg-pine px-5 py-3 text-sm font-semibold text-white transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60" id="approveRequestButton" type="button">Accept & Publish</button>
+                  <button class="rounded-full border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:border-red-500 hover:text-red-600 disabled:cursor-not-allowed disabled:opacity-60" id="rejectRequestButton" type="button">Reject</button>
+                </div>
+              </div>
+
+              <div class="mt-6 overflow-hidden rounded-[28px] border border-slate-200 bg-slate-950">
+                <img class="aspect-[16/10] w-full object-cover" id="requestDetailImage" src="/social-card.svg" alt="Request preview" />
+              </div>
+
+              <div class="mt-6 grid gap-4 md:grid-cols-2">
+                <div class="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Submitted By</p>
+                  <p class="mt-2 text-sm font-semibold text-slate-950" id="requestDetailRequester">Requester</p>
+                  <p class="mt-2 text-sm text-slate-500" id="requestDetailRequesterMeta"></p>
+                </div>
+                <div class="rounded-[24px] border border-slate-200 bg-white p-4">
+                  <p class="text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">Publishing Setup</p>
+                  <p class="mt-2 text-sm font-semibold text-slate-950" id="requestDetailSetup">Category and hero setup</p>
+                  <p class="mt-2 text-sm text-slate-500" id="requestDetailReviewMeta"></p>
+                </div>
+              </div>
+
+              <div class="mt-6 grid gap-6 xl:grid-cols-[1.05fr_0.95fr]">
+                <div class="space-y-6">
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Under-headline</p>
+                    <p class="mt-3 text-sm leading-7 text-slate-800" id="requestDetailSummary"></p>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Article body</p>
+                    <div class="mt-3 space-y-4 text-sm leading-7 text-slate-800" id="requestDetailBody"></div>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Why it matters</p>
+                    <p class="mt-3 text-sm leading-7 text-slate-800" id="requestDetailWhyMatters"></p>
+                  </section>
+                </div>
+
+                <div class="space-y-6">
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Source Trail</p>
+                    <p class="mt-3 text-sm font-semibold text-slate-950" id="requestDetailSource"></p>
+                    <a class="mt-3 inline-flex text-sm font-semibold text-accent underline-offset-4 hover:underline" id="requestDetailPrimarySourceLink" href="#" target="_blank" rel="noopener noreferrer">Open primary source</a>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">SEO</p>
+                    <p class="mt-3 text-sm font-semibold text-slate-950" id="requestDetailMetaTitle"></p>
+                    <p class="mt-3 text-sm leading-7 text-slate-800" id="requestDetailMetaDescription"></p>
+                    <p class="mt-4 text-sm text-slate-500" id="requestDetailTags"></p>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Key points</p>
+                      <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-900" id="requestDetailKeyPointCount">0</span>
+                    </div>
+                    <div class="mt-4 space-y-3" id="requestDetailKeyPoints"></div>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Fact sheet</p>
+                      <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-900" id="requestDetailFactCount">0</span>
+                    </div>
+                    <div class="mt-4 space-y-3" id="requestDetailFactSheet"></div>
+                  </section>
+
+                  <section class="rounded-[28px] border border-slate-200 bg-white p-5">
+                    <div class="flex items-center justify-between gap-3">
+                      <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Background blocks</p>
+                      <span class="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em] text-slate-900" id="requestDetailBackgroundCount">0</span>
+                    </div>
+                    <div class="mt-4 space-y-4" id="requestDetailBackground"></div>
+                  </section>
+                </div>
+              </div>
+            </article>
+          </section>
+        </div>
+      </section>
+
+      <section class="dashboard-view" id="editDashboardSection" hidden>
         <div class="grid gap-6 2xl:grid-cols-[1.35fr_0.65fr]">
           <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel lg:p-8">
             <div class="flex flex-wrap items-start justify-between gap-4">
@@ -395,8 +551,8 @@
             <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel">
               <div class="flex items-center justify-between gap-4">
                 <div>
-                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Recent Manual News</p>
-                  <h2 class="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950">Latest pushes</h2>
+                  <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500" id="sidePanelEyebrow">Recent Manual News</p>
+                  <h2 class="mt-2 font-display text-2xl font-bold tracking-tight text-slate-950" id="sidePanelTitle">Latest pushes</h2>
                 </div>
                 <span class="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900" id="recentManualCount">0</span>
               </div>
@@ -426,6 +582,45 @@
           </div>
         </section>
       </section>
+
+      <section class="dashboard-view" id="accessDashboardSection" hidden>
+        <div class="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
+          <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel lg:p-8">
+            <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Access Control</p>
+            <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950">Approve who can submit news</h2>
+            <p class="mt-2 text-sm text-slate-500">Added emails can open the newsroom dashboard and submit stories for review, but they cannot publish directly.</p>
+
+            <form class="mt-8 space-y-4" id="accessForm">
+              <label class="grid gap-2">
+                <span class="text-sm font-semibold text-slate-900">Contributor email</span>
+                <input class="h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950" id="accessEmailInput" type="email" placeholder="reporter@example.com" />
+              </label>
+              <div class="flex flex-wrap gap-3 mobile-stack">
+                <button class="rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" id="grantAccessButton" type="submit">
+                  Give Access
+                </button>
+                <button class="rounded-full border border-slate-300 bg-white px-6 py-3 text-sm font-semibold text-slate-900 transition hover:border-slate-950 hover:bg-slate-50" id="refreshAccessButton" type="button">
+                  Refresh List
+                </button>
+              </div>
+              <p class="text-sm text-slate-500" id="accessStatus">Add an email to allow request-based publishing access.</p>
+            </form>
+          </section>
+
+          <section class="glass-panel rounded-[32px] border border-white/70 p-6 shadow-panel lg:p-8">
+            <div class="flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Authorized Emails</p>
+                <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950">Current submitter access</h2>
+              </div>
+              <span class="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900" id="accessCount">0 emails</span>
+            </div>
+            <div class="mt-6 space-y-3" id="accessList">
+              <p class="rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500">Loading access list...</p>
+            </div>
+          </section>
+        </div>
+      </section>
     </main>
   </div>
 
@@ -433,6 +628,6 @@
     <div class="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-2xl" id="toastMessage">Saved</div>
   </div>
 
-  <script type="module" src="/admin/news.js?v=20260326-4"></script>
+  <script type="module" src="/admin/news.js?v=20260326-5"></script>
 </body>
 </html>

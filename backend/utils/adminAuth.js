@@ -1,8 +1,18 @@
 const { createHash, createHmac, timingSafeEqual } = require('node:crypto');
+const prisma = require('../config/database');
+const {
+  ensureNewsroomTables,
+  hasSubmitterAccess,
+  normalizeEmail,
+} = require('./newsroomAccess');
 
 const ADMIN_EMAIL = 'anubhavattri07@gmail.com';
 const ADMIN_COOKIE_NAME = 'sunwire_admin_session';
 const ADMIN_SESSION_MAX_AGE_SECONDS = 60 * 60 * 24 * 7;
+const NEWSROOM_ROLES = {
+  ADMIN: 'admin',
+  SUBMITTER: 'submitter',
+};
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -26,9 +36,10 @@ function getCookieSigningSecret() {
 
 function buildCookiePayload(session = {}) {
   return {
-    email: cleanText(session.email).toLowerCase(),
+    email: normalizeEmail(session.email),
     name: cleanText(session.name || ''),
     picture: cleanText(session.picture || ''),
+    role: cleanText(session.role || ''),
     exp: Number(session.exp || 0),
   };
 }
@@ -103,7 +114,7 @@ function clearAdminSessionCookie(res) {
   }));
 }
 
-function readAdminSession(req) {
+function parseSignedAdminSession(req) {
   try {
     const cookies = parseCookieHeader(req?.headers?.cookie || '');
     const rawToken = cleanText(cookies[ADMIN_COOKIE_NAME] || '');
@@ -122,20 +133,44 @@ function readAdminSession(req) {
     if (!timingSafeEqual(providedBuffer, expectedBuffer)) return null;
 
     const payload = JSON.parse(Buffer.from(encodedPayload, 'base64url').toString('utf8'));
-    const email = cleanText(payload?.email || '').toLowerCase();
+    const email = normalizeEmail(payload?.email || '');
     const exp = Number(payload?.exp || 0);
+    const role = cleanText(payload?.role || '');
     if (!email || exp <= Math.floor(Date.now() / 1000)) return null;
-    if (email !== ADMIN_EMAIL) return null;
 
     return {
       email,
       name: cleanText(payload?.name || ''),
       picture: cleanText(payload?.picture || ''),
+      role,
       exp,
     };
   } catch (_) {
     return null;
   }
+}
+
+async function resolveNewsroomRole(email = '') {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return '';
+  if (normalizedEmail === ADMIN_EMAIL) return NEWSROOM_ROLES.ADMIN;
+  await ensureNewsroomTables(prisma);
+  if (await hasSubmitterAccess(prisma, normalizedEmail)) return NEWSROOM_ROLES.SUBMITTER;
+  return '';
+}
+
+async function readAdminSession(req) {
+  const session = parseSignedAdminSession(req);
+  if (!session?.email) return null;
+
+  const resolvedRole = await resolveNewsroomRole(session.email);
+  if (!resolvedRole) return null;
+  if (session.role && session.role !== resolvedRole) return null;
+
+  return {
+    ...session,
+    role: resolvedRole,
+  };
 }
 
 async function verifyGoogleIdToken(idToken = '') {
@@ -188,9 +223,13 @@ function sendUnauthorized(res, statusCode = 403) {
   res.status(statusCode).json({ error: 'Admin access denied.' });
 }
 
-async function requireAdminSession(req, res, options = {}) {
-  const session = readAdminSession(req);
-  if (session?.email === ADMIN_EMAIL) {
+async function requireNewsroomSession(req, res, options = {}) {
+  const session = await readAdminSession(req);
+  const allowedRoles = Array.isArray(options.roles) && options.roles.length
+    ? options.roles
+    : [NEWSROOM_ROLES.ADMIN];
+
+  if (session?.email && allowedRoles.includes(session.role)) {
     req.user = session;
     return session;
   }
@@ -208,13 +247,31 @@ async function requireAdminSession(req, res, options = {}) {
   return null;
 }
 
+async function requireAdminSession(req, res, options = {}) {
+  return requireNewsroomSession(req, res, {
+    ...options,
+    roles: [NEWSROOM_ROLES.ADMIN],
+  });
+}
+
+async function requireSubmitterSession(req, res, options = {}) {
+  return requireNewsroomSession(req, res, {
+    ...options,
+    roles: [NEWSROOM_ROLES.ADMIN, NEWSROOM_ROLES.SUBMITTER],
+  });
+}
+
 module.exports = {
   ADMIN_COOKIE_NAME,
   ADMIN_EMAIL,
   ADMIN_SESSION_MAX_AGE_SECONDS,
+  NEWSROOM_ROLES,
   clearAdminSessionCookie,
   readAdminSession,
   requireAdminSession,
+  requireNewsroomSession,
+  requireSubmitterSession,
+  resolveNewsroomRole,
   setAdminSessionCookie,
   verifyGoogleIdToken,
 };

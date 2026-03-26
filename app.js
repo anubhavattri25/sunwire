@@ -283,6 +283,7 @@ let currentStories = [];
 let currentCategoryMap = {};
 let googleAuthSession = readGoogleAuthSession();
 let googleAuthIdToken = readGoogleAuthIdToken();
+let newsroomRole = "";
 let isAuthBusy = false;
 let authBusyLabel = "";
 let currentPage = 1;
@@ -388,8 +389,16 @@ function saveGoogleAuthIdToken(token = "") {
   window.localStorage.setItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY, normalized);
 }
 
+function setNewsroomRole(role = "") {
+  newsroomRole = cleanText(role).toLowerCase();
+}
+
 function isAdminUserEmail(email = "") {
   return cleanText(email).toLowerCase() === ADMIN_EMAIL;
+}
+
+function hasNewsroomAccess() {
+  return newsroomRole === "admin" || newsroomRole === "submitter";
 }
 
 function setAuthStatus(message = "") {
@@ -435,10 +444,10 @@ function syncAuthButton() {
 
 function syncAdminMenu() {
   if (!adminMenu || !adminMenuButton) return;
-  const isAdmin = isAdminUserEmail(googleAuthSession?.email || "");
-  adminMenu.hidden = !isAdmin;
-  adminMenuButton.classList.toggle("is-admin", isAdmin);
-  if (!isAdmin || !adminMenu.classList.contains("is-open")) {
+  const canOpenDashboard = hasNewsroomAccess();
+  adminMenu.hidden = !canOpenDashboard;
+  adminMenuButton.classList.toggle("is-admin", canOpenDashboard);
+  if (!canOpenDashboard || !adminMenu.classList.contains("is-open")) {
     setAdminMenuOpenState(false);
   }
 }
@@ -583,9 +592,7 @@ function consumeGoogleRedirectResponse() {
     setAuthStatus(`Logged in as ${profile.email}`);
     showAuthFeedback(`Logged in as ${profile.email}`, "success");
     syncAdminMenu();
-    if (isAdminUserEmail(profile.email)) {
-      void syncAdminSession(idToken, { quiet: true });
-    }
+    void syncAdminSession(idToken, { quiet: true });
   } catch (error) {
     console.error(error);
     const message = formatAuthErrorMessage(error);
@@ -620,6 +627,7 @@ async function logoutGoogleUser() {
 
   try {
     googleAuthSession = null;
+    setNewsroomRole("");
     saveGoogleAuthSession(null);
     saveGoogleAuthIdToken("");
     await clearAdminSession();
@@ -634,6 +642,7 @@ async function logoutGoogleUser() {
 async function syncAdminSession(idToken = "", options = {}) {
   const token = cleanText(idToken || googleAuthIdToken || "");
   if (!token) {
+    setNewsroomRole("");
     if (!options.quiet) showAuthFeedback("Please log in again to verify admin access.", "error");
     return false;
   }
@@ -649,14 +658,20 @@ async function syncAdminSession(idToken = "", options = {}) {
     });
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
+      setNewsroomRole("");
+      syncAdminMenu();
       if (!options.quiet) {
-        showAuthFeedback(payload.error || "Admin access could not be verified.", "error");
+        showAuthFeedback(payload.error || "Dashboard access could not be verified.", "error");
       }
       return false;
     }
+    setNewsroomRole(payload.role || "");
+    syncAdminMenu();
     return true;
   } catch (_) {
-    if (!options.quiet) showAuthFeedback("Admin access could not be verified right now.", "error");
+    setNewsroomRole("");
+    syncAdminMenu();
+    if (!options.quiet) showAuthFeedback("Dashboard access could not be verified right now.", "error");
     return false;
   }
 }
@@ -685,11 +700,6 @@ async function openAdminDashboard() {
   if (!email) {
     showAuthFeedback("Login with Google to access the admin dashboard.", "error");
     loginWithGoogle();
-    return;
-  }
-
-  if (!isAdminUserEmail(email)) {
-    showAuthFeedback(`Dashboard access is restricted to ${ADMIN_EMAIL}.`, "error");
     return;
   }
 
@@ -2823,6 +2833,9 @@ syncActiveControls();
 consumeGoogleRedirectResponse();
 syncAuthButton();
 syncAdminMenu();
+if (googleAuthSession?.email && googleAuthIdToken) {
+  void syncAdminSession("", { quiet: true });
+}
 syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();
 const preloadedHomeData = readPreloadedHomeData();
@@ -2857,8 +2870,12 @@ window.addEventListener("storage", (event) => {
   if (event.key !== GOOGLE_AUTH_SESSION_STORAGE_KEY && event.key !== GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY) return;
   googleAuthSession = readGoogleAuthSession();
   googleAuthIdToken = readGoogleAuthIdToken();
+  if (!googleAuthSession?.email || !googleAuthIdToken) setNewsroomRole("");
   syncAuthButton();
   syncAdminMenu();
+  if (googleAuthSession?.email && googleAuthIdToken) {
+    void syncAdminSession("", { quiet: true });
+  }
 });
 window.addEventListener("popstate", async () => {
   const route = parseHomeRoute(window.location);

@@ -6,9 +6,12 @@ const { countWords } = require('../backend/services/contentQuality');
 const { invalidateCache } = require('../backend/utils/cache');
 const {
   ADMIN_EMAIL,
+  NEWSROOM_ROLES,
   clearAdminSessionCookie,
   readAdminSession,
   requireAdminSession,
+  requireSubmitterSession,
+  resolveNewsroomRole,
   setAdminSessionCookie,
   verifyGoogleIdToken,
 } = require('../backend/utils/adminAuth');
@@ -19,6 +22,18 @@ const {
   normalizeAdminCategory,
   toAdminArticleInput,
 } = require('../backend/utils/adminArticle');
+const {
+  addAuthorizedSubmitter,
+  createNewsRequest,
+  ensureNewsroomTables,
+  getNewsRequestById,
+  listAuthorizedSubmitters,
+  listNewsRequests,
+  mapNewsRequestRecord,
+  normalizeEmail,
+  removeAuthorizedSubmitter,
+  updateNewsRequest,
+} = require('../backend/utils/newsroomAccess');
 const { uploadImageToCloudinary } = require('../backend/utils/adminImageUpload');
 const { readJsonBody } = require('../backend/utils/requestBody');
 const { slugify } = require('../lib/seo');
@@ -29,7 +44,7 @@ const MIN_PARAGRAPHS = 4;
 const MIN_KEY_POINTS = 3;
 const MIN_FACT_SHEET_ROWS = 4;
 const MIN_BACKGROUND_ITEMS = 2;
-const ADMIN_PAGE_MODES = new Set(['edit-news', 'watch-all-news']);
+const ADMIN_PAGE_MODES = new Set(['news-requests', 'edit-news', 'watch-all-news', 'submit-request', 'access-control']);
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -45,9 +60,25 @@ function resolveGoogleClientId() {
   ).trim();
 }
 
-function normalizePageMode(value = '') {
-  const normalized = cleanText(value || 'edit-news').toLowerCase();
-  return ADMIN_PAGE_MODES.has(normalized) ? normalized : 'edit-news';
+function allowedModesForRole(role = '') {
+  if (role === NEWSROOM_ROLES.ADMIN) {
+    return ['news-requests', 'edit-news', 'watch-all-news', 'access-control'];
+  }
+  if (role === NEWSROOM_ROLES.SUBMITTER) {
+    return ['submit-request'];
+  }
+  return [];
+}
+
+function defaultModeForRole(role = '') {
+  return role === NEWSROOM_ROLES.ADMIN ? 'news-requests' : 'submit-request';
+}
+
+function normalizePageMode(value = '', role = '') {
+  const normalized = cleanText(value).toLowerCase();
+  const allowed = allowedModesForRole(role);
+  if (allowed.includes(normalized) && ADMIN_PAGE_MODES.has(normalized)) return normalized;
+  return defaultModeForRole(role);
 }
 
 function normalizeStringArray(values = [], maxItems = 8) {
@@ -178,26 +209,101 @@ function validateAdminPayload(payload = {}) {
   return errors;
 }
 
+async function saveManualArticle(tx, payload = {}, options = {}) {
+  const existing = options.existing || null;
+  const createdAt = existing?.created_at || new Date();
+  const publishedAt = options.publishedAt || existing?.published_at || new Date();
+  const slug = slugify(payload.title || `manual-${publishedAt.getTime()}`);
+  const rawContent = buildManualRawContent({
+    title: payload.title,
+    subheadline: payload.subheadline,
+    content: payload.content,
+    source: payload.source,
+    authorName: payload.authorName,
+    primarySourceName: payload.primarySourceName,
+    primarySourceUrl: payload.primarySourceUrl,
+    imageUrl: payload.imageUrl,
+    category: payload.category,
+    tags: payload.tags,
+    keyPoints: payload.keyPoints,
+    factSheet: payload.factSheet,
+    background: payload.background,
+    indiaPulse: payload.indiaPulse,
+    metaTitle: payload.metaTitle,
+    metaDescription: payload.metaDescription,
+    publishedAt: publishedAt.toISOString(),
+  });
+  const sourceUrl = buildManualSourceUrl({ slug, createdAt });
+  const wordCount = Number(rawContent.wordCount || 0) || null;
+
+  if (payload.showOnHero) {
+    const featuredWhere = { is_featured: true };
+    if (existing?.id) featuredWhere.NOT = { id: existing.id };
+    await tx.article.updateMany({
+      where: featuredWhere,
+      data: {
+        is_featured: false,
+        featured_until: null,
+      },
+    });
+  }
+
+  const data = {
+    title: payload.title,
+    slug,
+    summary: cleanText(rawContent.summary || '').slice(0, 500) || payload.content.slice(0, 240),
+    content: payload.content,
+    image_url: payload.imageUrl,
+    image_storage_url: payload.imageUrl,
+    source: payload.source,
+    source_url: sourceUrl,
+    category: payload.category,
+    published_at: publishedAt,
+    word_count: wordCount,
+    ai_summary: cleanText(rawContent.subheadline || rawContent.summary || '').slice(0, 280) || null,
+    raw_content: JSON.stringify(rawContent),
+    ai_rewritten: true,
+    is_featured: payload.showOnHero,
+    featured_until: payload.showOnHero ? payload.featuredUntil : null,
+    trending_score: payload.showOnHero ? 0 : 999,
+    manual_upload: true,
+  };
+
+  if (existing?.id) {
+    return tx.article.update({
+      where: { id: existing.id },
+      data,
+      select: articleSelect,
+    });
+  }
+
+  return tx.article.create({
+    data,
+    select: articleSelect,
+  });
+}
+
 async function renderAdminPage(req, res) {
   if (req.method !== 'GET') {
     res.status(405).send('Method not allowed');
     return;
   }
 
-  const session = await requireAdminSession(req, res, { redirectTo: '/' });
+  const session = await requireSubmitterSession(req, res, { redirectTo: '/' });
   if (!session) return;
 
   const templatePath = path.join(process.cwd(), 'templates', 'admin-news.html');
   const template = await fs.readFile(templatePath, 'utf8');
-  const mode = normalizePageMode(req.query?.mode || 'edit-news');
+  const mode = normalizePageMode(req.query?.mode || '', session.role);
   const runtimeScript = [
     '<script>',
     `window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(resolveGoogleClientId())};`,
     `window.__SUNWIRE_ADMIN_EMAIL__=${JSON.stringify(ADMIN_EMAIL)};`,
     `window.__SUNWIRE_ADMIN_USER__=${JSON.stringify(session)};`,
+    `window.__SUNWIRE_ADMIN_ROLE__=${JSON.stringify(session.role)};`,
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260326-2"></script>',
+    '<script type="module" src="/admin/news.js?v=20260326-5"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -212,12 +318,14 @@ async function renderAdminPage(req, res) {
 
 async function handleSession(req, res) {
   res.setHeader('Cache-Control', 'no-store');
+  await ensureNewsroomTables(prisma);
 
   if (req.method === 'GET') {
-    const session = readAdminSession(req);
+    const session = await readAdminSession(req);
     return res.status(200).json({
-      authenticated: Boolean(session?.email === ADMIN_EMAIL),
+      authenticated: Boolean(session?.email),
       adminEmail: ADMIN_EMAIL,
+      role: cleanText(session?.role || ''),
       user: session || null,
     });
   }
@@ -233,27 +341,31 @@ async function handleSession(req, res) {
 
   const body = await readJsonBody(req);
   const profile = await verifyGoogleIdToken(body?.idToken || '');
-  if (profile.email !== ADMIN_EMAIL) {
+  const role = await resolveNewsroomRole(profile.email);
+  if (!role) {
     clearAdminSessionCookie(res);
-    return res.status(403).json({ error: 'Admin access denied.' });
+    return res.status(403).json({ error: 'News dashboard access denied.' });
   }
 
-  const expiresAt = setAdminSessionCookie(res, profile);
+  const expiresAt = setAdminSessionCookie(res, { ...profile, role });
   return res.status(200).json({
     ok: true,
     expiresAt,
     adminEmail: ADMIN_EMAIL,
+    role,
     user: {
       email: profile.email,
       name: profile.name,
       picture: profile.picture,
+      role,
     },
   });
 }
 
 async function fetchAdminSummary() {
+  await ensureNewsroomTables(prisma);
   await expireFeaturedArticles(prisma);
-  const [featured, recentManual, totalManual] = await Promise.all([
+  const [featured, recentManual, totalManual, pendingRequests, submitters] = await Promise.all([
     prisma.article.findFirst({
       where: {
         manual_upload: true,
@@ -273,6 +385,8 @@ async function fetchAdminSummary() {
       take: 12,
     }),
     prisma.article.count({ where: { manual_upload: true } }),
+    listNewsRequests(prisma, { status: 'pending', limit: 100 }),
+    listAuthorizedSubmitters(prisma),
   ]);
 
   return {
@@ -280,6 +394,8 @@ async function fetchAdminSummary() {
     featured: featured ? toApiArticle(featured) : null,
     recent: recentManual.map(toApiArticle),
     totalManual,
+    pendingRequests: pendingRequests.length,
+    submitterCount: submitters.length,
   };
 }
 
@@ -353,82 +469,9 @@ async function upsertManualArticle(req, res, method = 'POST') {
     }
   }
 
-  const createdAt = existing?.created_at || new Date();
-  const publishedAt = existing?.published_at || new Date();
-  const slug = slugify(payload.title || `manual-${publishedAt.getTime()}`);
-  const rawContent = buildManualRawContent({
-    title: payload.title,
-    subheadline: payload.subheadline,
-    content: payload.content,
-    source: payload.source,
-    authorName: payload.authorName,
-    primarySourceName: payload.primarySourceName,
-    primarySourceUrl: payload.primarySourceUrl,
-    imageUrl: payload.imageUrl,
-    category: payload.category,
-    tags: payload.tags,
-    keyPoints: payload.keyPoints,
-    factSheet: payload.factSheet,
-    background: payload.background,
-    indiaPulse: payload.indiaPulse,
-    metaTitle: payload.metaTitle,
-    metaDescription: payload.metaDescription,
-    publishedAt: publishedAt.toISOString(),
-  });
-  const sourceUrl = buildManualSourceUrl({ slug, createdAt });
-  const wordCount = Number(rawContent.wordCount || 0) || null;
-
   const saved = await prisma.$transaction(async (tx) => {
     await expireFeaturedArticles(tx);
-
-    if (payload.showOnHero) {
-      const featuredWhere = {
-        is_featured: true,
-      };
-      if (articleId) featuredWhere.NOT = { id: articleId };
-
-      await tx.article.updateMany({
-        where: featuredWhere,
-        data: {
-          is_featured: false,
-          featured_until: null,
-        },
-      });
-    }
-
-    const data = {
-      title: payload.title,
-      slug,
-      summary: cleanText(rawContent.summary || '').slice(0, 500) || payload.content.slice(0, 240),
-      content: payload.content,
-      image_url: payload.imageUrl,
-      image_storage_url: payload.imageUrl,
-      source: payload.source,
-      source_url: sourceUrl,
-      category: payload.category,
-      published_at: publishedAt,
-      word_count: wordCount,
-      ai_summary: cleanText(rawContent.subheadline || rawContent.summary || '').slice(0, 280) || null,
-      raw_content: JSON.stringify(rawContent),
-      ai_rewritten: true,
-      is_featured: payload.showOnHero,
-      featured_until: payload.showOnHero ? payload.featuredUntil : null,
-      trending_score: payload.showOnHero ? 0 : 999,
-      manual_upload: true,
-    };
-
-    if (existing) {
-      return tx.article.update({
-        where: { id: existing.id },
-        data,
-        select: articleSelect,
-      });
-    }
-
-    return tx.article.create({
-      data,
-      select: articleSelect,
-    });
+    return saveManualArticle(tx, payload, { existing });
   });
 
   await invalidateCache();
@@ -549,6 +592,182 @@ async function handleNews(req, res) {
   return res.status(405).json({ error: 'Method not allowed.' });
 }
 
+async function handleRequests(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+
+  if (req.method === 'GET') {
+    const session = await requireSubmitterSession(req, res);
+    if (!session) return;
+
+    const requestId = cleanText(req.query?.id || '');
+    if (requestId) {
+      const request = await getNewsRequestById(prisma, requestId);
+      const mapped = request ? mapNewsRequestRecord(request) : null;
+      if (!mapped) return res.status(404).json({ error: 'News request not found.' });
+      if (session.role !== NEWSROOM_ROLES.ADMIN && mapped.requesterEmail !== normalizeEmail(session.email)) {
+        return res.status(403).json({ error: 'News request access denied.' });
+      }
+      return res.status(200).json({ ok: true, request: mapped });
+    }
+
+    const items = await listNewsRequests(prisma, {
+      status: cleanText(req.query?.status || ''),
+      requesterEmail: session.role === NEWSROOM_ROLES.ADMIN ? '' : session.email,
+      limit: 200,
+    });
+    return res.status(200).json({
+      ok: true,
+      items: items.map(mapNewsRequestRecord),
+    });
+  }
+
+  if (req.method === 'POST') {
+    const session = await requireSubmitterSession(req, res);
+    if (!session) return;
+
+    const body = await readJsonBody(req);
+    const payload = normalizeAdminPayload(body);
+    const errors = validateAdminPayload(payload);
+    if (errors.length) {
+      return res.status(400).json({ error: errors[0], errors });
+    }
+
+    const created = await createNewsRequest(prisma, session, {
+      headline: payload.title,
+      subheadline: payload.subheadline,
+      authorName: payload.authorName,
+      source: payload.source,
+      primarySourceName: payload.primarySourceName,
+      primarySourceUrl: payload.primarySourceUrl,
+      category: payload.category,
+      image_url: payload.imageUrl,
+      content: payload.content,
+      tags: payload.tags,
+      keyPoints: payload.keyPoints,
+      factSheet: payload.factSheet,
+      background: payload.background,
+      indiaPulse: payload.indiaPulse,
+      metaTitle: payload.metaTitle,
+      metaDescription: payload.metaDescription,
+      showOnHero: payload.showOnHero,
+      durationMinutes: 0,
+      featuredUntil: payload.featuredUntil ? new Date(payload.featuredUntil).toISOString() : '',
+    });
+
+    return res.status(201).json({
+      ok: true,
+      request: mapNewsRequestRecord(created),
+    });
+  }
+
+  if (req.method === 'PATCH') {
+    const session = await requireAdminSession(req, res);
+    if (!session) return;
+
+    const requestId = cleanText(req.query?.id || '');
+    const action = cleanText(req.query?.action || '').toLowerCase();
+    if (!requestId) return res.status(400).json({ error: 'News request id is required.' });
+    if (!['approve', 'reject'].includes(action)) {
+      return res.status(400).json({ error: 'Unsupported request action.' });
+    }
+
+    const existing = await getNewsRequestById(prisma, requestId);
+    const mapped = existing ? mapNewsRequestRecord(existing) : null;
+    if (!mapped) return res.status(404).json({ error: 'News request not found.' });
+    if (mapped.status !== 'pending') return res.status(400).json({ error: 'Only pending requests can be reviewed.' });
+
+    if (action === 'reject') {
+      const updated = await updateNewsRequest(prisma, requestId, {
+        status: 'rejected',
+        reviewer_note: cleanText((await readJsonBody(req))?.reviewerNote || ''),
+        reviewed_by_email: normalizeEmail(session.email),
+        reviewed_at: new Date(),
+      });
+      return res.status(200).json({ ok: true, request: mapNewsRequestRecord(updated) });
+    }
+
+    const payload = normalizeAdminPayload(mapped.payload || {});
+    const errors = validateAdminPayload(payload);
+    if (errors.length) {
+      return res.status(400).json({ error: errors[0], errors });
+    }
+
+    const saved = await prisma.$transaction(async (tx) => {
+      await expireFeaturedArticles(tx);
+      const article = await saveManualArticle(tx, payload, {});
+      await updateNewsRequest(tx, requestId, {
+        status: 'approved',
+        reviewer_note: '',
+        reviewed_by_email: normalizeEmail(session.email),
+        reviewed_at: new Date(),
+        published_article_id: article.id,
+      });
+      return article;
+    });
+
+    await invalidateCache();
+    const updated = await getNewsRequestById(prisma, requestId);
+    return res.status(200).json({
+      ok: true,
+      request: mapNewsRequestRecord(updated),
+      article: toApiArticle(saved),
+      adminArticle: toAdminArticleInput(saved),
+    });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed.' });
+}
+
+async function handleAccess(req, res) {
+  res.setHeader('Cache-Control', 'no-store');
+  const session = await requireAdminSession(req, res);
+  if (!session) return;
+
+  if (req.method === 'GET') {
+    const items = await listAuthorizedSubmitters(prisma);
+    return res.status(200).json({
+      ok: true,
+      items: items.map((item) => ({
+        email: normalizeEmail(item.email),
+        createdByEmail: normalizeEmail(item.created_by_email),
+        createdAt: item.created_at,
+        updatedAt: item.updated_at,
+      })),
+    });
+  }
+
+  if (req.method === 'POST') {
+    const body = await readJsonBody(req);
+    const email = normalizeEmail(body?.email || '');
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+    if (email === ADMIN_EMAIL) {
+      return res.status(400).json({ error: 'Primary admin already has access.' });
+    }
+
+    const added = await addAuthorizedSubmitter(prisma, email, session.email);
+    return res.status(201).json({
+      ok: true,
+      item: {
+        email: normalizeEmail(added.email),
+        createdByEmail: normalizeEmail(added.created_by_email),
+        createdAt: added.created_at,
+        updatedAt: added.updated_at,
+      },
+    });
+  }
+
+  if (req.method === 'DELETE') {
+    const email = normalizeEmail(req.query?.email || '');
+    if (!email) return res.status(400).json({ error: 'Email is required.' });
+    await removeAuthorizedSubmitter(prisma, email);
+    return res.status(200).json({ ok: true, removedEmail: email });
+  }
+
+  return res.status(405).json({ error: 'Method not allowed.' });
+}
+
 async function handleUpload(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
@@ -556,7 +775,7 @@ async function handleUpload(req, res) {
     return res.status(405).json({ error: 'Method not allowed.' });
   }
 
-  const session = await requireAdminSession(req, res);
+  const session = await requireSubmitterSession(req, res);
   if (!session) return;
 
   const body = await readJsonBody(req);
@@ -576,9 +795,12 @@ module.exports = async function handler(req, res) {
   const view = cleanText(req.query?.view || '');
 
   try {
+    await ensureNewsroomTables(prisma);
     if (view === 'page') return await renderAdminPage(req, res);
     if (view === 'session') return await handleSession(req, res);
     if (view === 'news') return await handleNews(req, res);
+    if (view === 'requests') return await handleRequests(req, res);
+    if (view === 'access') return await handleAccess(req, res);
     if (view === 'upload') return await handleUpload(req, res);
     return res.status(404).json({ error: 'Admin route not found.' });
   } catch (error) {

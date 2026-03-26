@@ -24,8 +24,8 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
-function requireExpressAdmin(req, res, next) {
-  const session = readAdminSession(req);
+async function requireExpressAdmin(req, res, next) {
+  const session = await readAdminSession(req);
   if (session?.email === ADMIN_EMAIL) {
     req.user = session;
     return next();
@@ -45,9 +45,9 @@ function parseFeaturedUntil(body = {}) {
   return parsed;
 }
 
-router.get('/admin/session', (req, res) => {
+router.get('/admin/session', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
-  const session = readAdminSession(req);
+  const session = await readAdminSession(req);
   return res.json({
     authenticated: Boolean(session?.email === ADMIN_EMAIL),
     adminEmail: ADMIN_EMAIL,

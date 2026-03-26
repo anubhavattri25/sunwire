@@ -7,24 +7,76 @@ const MIN_PARAGRAPHS = 4;
 const MIN_KEY_POINTS = 3;
 const MIN_FACT_ROWS = 4;
 const MIN_BACKGROUND = 2;
-const PAGE_MODE = String(window.__SUNWIRE_ADMIN_PAGE_MODE__ || "edit-news").trim() || "edit-news";
+const ADMIN_ROLE = "admin";
+const SUBMITTER_ROLE = "submitter";
+const ROLE = String(window.__SUNWIRE_ADMIN_ROLE__ || "").trim().toLowerCase();
+const PAGE_MODE = String(window.__SUNWIRE_ADMIN_PAGE_MODE__ || "").trim() || (ROLE === ADMIN_ROLE ? "news-requests" : "submit-request");
+const ALLOWED_MODES = {
+  [ADMIN_ROLE]: ["news-requests", "edit-news", "watch-all-news", "access-control"],
+  [SUBMITTER_ROLE]: ["submit-request"],
+};
 
 const dom = {
   adminUserEmail: document.getElementById("adminUserEmail"),
+  adminRoleBadge: document.getElementById("adminRoleBadge"),
+  sidebarSubtitle: document.getElementById("sidebarSubtitle"),
   adminPageEyebrow: document.getElementById("adminPageEyebrow"),
   adminPageTitle: document.getElementById("adminPageTitle"),
   adminPageDescription: document.getElementById("adminPageDescription"),
+  navRequests: document.getElementById("navRequests"),
+  navRequestsCount: document.getElementById("navRequestsCount"),
   navEditNews: document.getElementById("navEditNews"),
   navWatchAllNews: document.getElementById("navWatchAllNews"),
+  navAccessControl: document.getElementById("navAccessControl"),
+  navAccessCount: document.getElementById("navAccessCount"),
+  navSubmitRequest: document.getElementById("navSubmitRequest"),
+  requestDashboardSection: document.getElementById("requestDashboardSection"),
   editDashboardSection: document.getElementById("editDashboardSection"),
   watchAllDashboardSection: document.getElementById("watchAllDashboardSection"),
+  accessDashboardSection: document.getElementById("accessDashboardSection"),
   featuredStatus: document.getElementById("featuredStatus"),
   featuredMeta: document.getElementById("featuredMeta"),
   featuredRemoveButton: document.getElementById("featuredRemoveButton"),
+  requestSummaryPending: document.getElementById("requestSummaryPending"),
+  requestSummaryApproved: document.getElementById("requestSummaryApproved"),
+  requestSummaryRejected: document.getElementById("requestSummaryRejected"),
+  requestListMeta: document.getElementById("requestListMeta"),
+  requestTotalCount: document.getElementById("requestTotalCount"),
+  requestList: document.getElementById("requestList"),
+  requestEmptyState: document.getElementById("requestEmptyState"),
+  requestDetailEmpty: document.getElementById("requestDetailEmpty"),
+  requestDetailCard: document.getElementById("requestDetailCard"),
+  requestDetailHeadline: document.getElementById("requestDetailHeadline"),
+  requestDetailMeta: document.getElementById("requestDetailMeta"),
+  requestDetailStatus: document.getElementById("requestDetailStatus"),
+  approveRequestButton: document.getElementById("approveRequestButton"),
+  rejectRequestButton: document.getElementById("rejectRequestButton"),
+  requestDetailImage: document.getElementById("requestDetailImage"),
+  requestDetailRequester: document.getElementById("requestDetailRequester"),
+  requestDetailRequesterMeta: document.getElementById("requestDetailRequesterMeta"),
+  requestDetailSetup: document.getElementById("requestDetailSetup"),
+  requestDetailReviewMeta: document.getElementById("requestDetailReviewMeta"),
+  requestDetailSummary: document.getElementById("requestDetailSummary"),
+  requestDetailBody: document.getElementById("requestDetailBody"),
+  requestDetailWhyMatters: document.getElementById("requestDetailWhyMatters"),
+  requestDetailSource: document.getElementById("requestDetailSource"),
+  requestDetailPrimarySourceLink: document.getElementById("requestDetailPrimarySourceLink"),
+  requestDetailMetaTitle: document.getElementById("requestDetailMetaTitle"),
+  requestDetailMetaDescription: document.getElementById("requestDetailMetaDescription"),
+  requestDetailTags: document.getElementById("requestDetailTags"),
+  requestDetailKeyPointCount: document.getElementById("requestDetailKeyPointCount"),
+  requestDetailKeyPoints: document.getElementById("requestDetailKeyPoints"),
+  requestDetailFactCount: document.getElementById("requestDetailFactCount"),
+  requestDetailFactSheet: document.getElementById("requestDetailFactSheet"),
+  requestDetailBackgroundCount: document.getElementById("requestDetailBackgroundCount"),
+  requestDetailBackground: document.getElementById("requestDetailBackground"),
+  refreshRequestsButton: document.getElementById("refreshRequestsButton"),
   featuredPreviewImage: document.getElementById("featuredPreviewImage"),
   featuredPreviewCategory: document.getElementById("featuredPreviewCategory"),
   featuredPreviewHeadline: document.getElementById("featuredPreviewHeadline"),
   featuredPreviewSource: document.getElementById("featuredPreviewSource"),
+  sidePanelEyebrow: document.getElementById("sidePanelEyebrow"),
+  sidePanelTitle: document.getElementById("sidePanelTitle"),
   imagePreview: document.getElementById("imagePreview"),
   imageInput: document.getElementById("imageInput"),
   imageUploadButtonLabel: document.getElementById("imageUploadButtonLabel"),
@@ -65,20 +117,33 @@ const dom = {
   archiveUpdatedAt: document.getElementById("archiveUpdatedAt"),
   archiveGroups: document.getElementById("archiveGroups"),
   archiveEmptyState: document.getElementById("archiveEmptyState"),
+  accessForm: document.getElementById("accessForm"),
+  accessEmailInput: document.getElementById("accessEmailInput"),
+  grantAccessButton: document.getElementById("grantAccessButton"),
+  refreshAccessButton: document.getElementById("refreshAccessButton"),
+  accessStatus: document.getElementById("accessStatus"),
+  accessCount: document.getElementById("accessCount"),
+  accessList: document.getElementById("accessList"),
   logoutAdminButton: document.getElementById("logoutAdminButton"),
   toast: document.getElementById("toast"),
   toastMessage: document.getElementById("toastMessage"),
 };
 
 const state = {
-  mode: PAGE_MODE === "watch-all-news" ? "watch-all-news" : "edit-news",
+  role: ROLE === ADMIN_ROLE ? ADMIN_ROLE : SUBMITTER_ROLE,
+  mode: PAGE_MODE,
   currentEditingArticleId: "",
   featuredArticle: null,
   recentArticles: [],
   archiveArticles: [],
+  requests: [],
+  selectedRequestId: "",
+  accessList: [],
   imageUrl: "",
   toastTimer: null,
   formBusy: false,
+  requestBusy: false,
+  accessBusy: false,
 };
 
 function wordCount(value = "") {
@@ -127,6 +192,43 @@ async function fetchJson(url, options = {}) {
     throw new Error(cleanText(data.error || data.message || "Request failed."));
   }
   return data;
+}
+
+function isAdminRole() {
+  return state.role === ADMIN_ROLE;
+}
+
+function defaultModeForRole(role = state.role) {
+  return role === ADMIN_ROLE ? "news-requests" : "submit-request";
+}
+
+function normalizeMode(mode = "") {
+  const normalized = cleanText(mode);
+  const allowed = ALLOWED_MODES[state.role] || [defaultModeForRole()];
+  return allowed.includes(normalized) ? normalized : defaultModeForRole();
+}
+
+function setAccessStatus(message, isError = false) {
+  if (!dom.accessStatus) return;
+  dom.accessStatus.textContent = cleanText(message);
+  dom.accessStatus.classList.toggle("text-red-600", Boolean(isError));
+  dom.accessStatus.classList.toggle("text-slate-500", !isError);
+}
+
+function setRequestButtonState(button, busy, busyLabel) {
+  setButtonBusy(button, busy, busyLabel);
+}
+
+function statusBadgeClass(status = "") {
+  const normalized = cleanText(status).toLowerCase();
+  if (normalized === "approved") return ["bg-emerald-100", "text-emerald-700"];
+  if (normalized === "rejected") return ["bg-red-100", "text-red-700"];
+  return ["bg-amber-100", "text-slate-900"];
+}
+
+function formatListDate(value = "") {
+  if (!value) return "";
+  return fmtDate(value);
 }
 
 function setImagePreview(url = "") {
@@ -361,32 +463,80 @@ function validatePayload(payload) {
 
 function syncEditorMode() {
   const editing = Boolean(state.currentEditingArticleId);
-  if (dom.editorModeLabel) dom.editorModeLabel.textContent = editing ? "Edit News" : "Create News";
-  if (dom.editorHeading) dom.editorHeading.textContent = editing ? "Update manual story" : "Create article-ready story";
-  if (dom.currentEditMeta) {
-    dom.currentEditMeta.textContent = editing
-      ? "You are editing an existing pushed article. Save again to update homepage and article data."
-      : "Fill every field needed for homepage, category, and article page quality.";
+  const requestMode = state.mode === "submit-request";
+  if (dom.editorModeLabel) {
+    dom.editorModeLabel.textContent = requestMode
+      ? (editing ? "Review Request Draft" : "Submit Request")
+      : (editing ? "Edit News" : "Create News");
   }
-  if (dom.cancelEditButton) dom.cancelEditButton.hidden = !editing;
+  if (dom.editorHeading) {
+    dom.editorHeading.textContent = requestMode
+      ? (editing ? "Update request draft" : "Create approval-ready story")
+      : (editing ? "Update manual story" : "Create article-ready story");
+  }
+  if (dom.currentEditMeta) {
+    dom.currentEditMeta.textContent = requestMode
+      ? "This story will stay pending until an admin accepts it and publishes it."
+      : (editing
+        ? "You are editing an existing pushed article. Save again to update homepage and article data."
+        : "Fill every field needed for homepage, category, and article page quality.");
+  }
+  if (dom.cancelEditButton) dom.cancelEditButton.hidden = !editing || requestMode;
   if (dom.pushNewsButton) {
-    dom.pushNewsButton.textContent = editing ? "Update News" : "Push News";
+    dom.pushNewsButton.textContent = requestMode
+      ? "Submit Request"
+      : (editing ? "Update News" : "Push News");
     dom.pushNewsButton.dataset.label = dom.pushNewsButton.textContent;
   }
 }
 
 function applyPageHeader() {
-  const archiveMode = state.mode === "watch-all-news";
-  if (dom.adminPageEyebrow) dom.adminPageEyebrow.textContent = archiveMode ? "Archive Desk" : "CMS Panel";
-  if (dom.adminPageTitle) {
-    dom.adminPageTitle.textContent = archiveMode
-      ? "Watch every pushed story day by day."
-      : "Edit and publish article-ready news.";
+  const copy = {
+    "news-requests": {
+      eyebrow: "News Requests",
+      title: "Review contributor news requests.",
+      description: "Approved emails can draft stories, but only admin approval pushes them live on the homepage and selected category.",
+    },
+    "edit-news": {
+      eyebrow: "CMS Panel",
+      title: "Edit and publish article-ready news.",
+      description: "Fill the homepage, category page, and article page in one workflow. This editor is built for richer article structure, stronger SEO, and cleaner reading on laptop and mobile.",
+    },
+    "watch-all-news": {
+      eyebrow: "Archive Desk",
+      title: "Watch every pushed story day by day.",
+      description: "See all manually pushed stories grouped by day. Today appears first, then yesterday, then older days with newest pushed articles first inside each group.",
+    },
+    "access-control": {
+      eyebrow: "Access Control",
+      title: "Manage contributor newsroom access.",
+      description: "Grant or remove email access for people who can submit stories into the approval queue without direct publish rights.",
+    },
+    "submit-request": {
+      eyebrow: "Submit Request",
+      title: "Create a story for admin approval.",
+      description: "Use the same structured form as the admin desk. Your story will stay pending until it is reviewed and accepted.",
+    },
+  }[state.mode] || {
+    eyebrow: "Newsroom",
+    title: "Manage the newsroom.",
+    description: "Keep publishing quality and approval flow in one place.",
+  };
+
+  if (dom.adminPageEyebrow) dom.adminPageEyebrow.textContent = copy.eyebrow;
+  if (dom.adminPageTitle) dom.adminPageTitle.textContent = copy.title;
+  if (dom.adminPageDescription) dom.adminPageDescription.textContent = copy.description;
+  if (dom.sidebarSubtitle) {
+    dom.sidebarSubtitle.textContent = isAdminRole() ? "Newsroom dashboard" : "Contributor request desk";
   }
-  if (dom.adminPageDescription) {
-    dom.adminPageDescription.textContent = archiveMode
-      ? "See all manually pushed stories grouped by day. Today appears first, then yesterday, then older days with newest pushed articles first inside each group."
-      : "Fill the homepage, category page, and article page in one workflow. This editor is built for richer article structure, stronger SEO, and cleaner reading on laptop and mobile.";
+  if (dom.adminRoleBadge) {
+    dom.adminRoleBadge.textContent = isAdminRole() ? "Admin access" : "Contributor access";
+  }
+  if (dom.sidePanelEyebrow) {
+    dom.sidePanelEyebrow.textContent = isAdminRole() ? "Recent Manual News" : "My Requests";
+  }
+  if (dom.sidePanelTitle) {
+    dom.sidePanelTitle.textContent = isAdminRole() ? "Latest pushes" : "My submission history";
   }
 }
 
@@ -399,13 +549,44 @@ function styleNavLink(link, active) {
   link.classList.toggle("text-slate-950", !active);
 }
 
-function setViewMode(mode) {
-  state.mode = mode === "watch-all-news" ? "watch-all-news" : "edit-news";
-  if (dom.editDashboardSection) dom.editDashboardSection.hidden = state.mode !== "edit-news";
+function syncRoleVisibility() {
+  const adminOnlyHidden = !isAdminRole();
+  if (dom.navRequests) dom.navRequests.hidden = adminOnlyHidden;
+  if (dom.navEditNews) dom.navEditNews.hidden = adminOnlyHidden;
+  if (dom.navWatchAllNews) dom.navWatchAllNews.hidden = adminOnlyHidden;
+  if (dom.navAccessControl) dom.navAccessControl.hidden = adminOnlyHidden;
+  if (dom.navSubmitRequest) dom.navSubmitRequest.hidden = isAdminRole();
+  if (dom.featuredRemoveButton && !state.featuredArticle?.id) {
+    dom.featuredRemoveButton.hidden = true;
+  } else if (dom.featuredRemoveButton) {
+    dom.featuredRemoveButton.hidden = !isAdminRole();
+  }
+}
+
+function syncModeInUrl() {
+  const url = new URL(window.location.href);
+  const defaultMode = defaultModeForRole();
+  if (state.mode === defaultMode) url.searchParams.delete("mode");
+  else url.searchParams.set("mode", state.mode);
+  if (state.mode !== "edit-news" && !state.currentEditingArticleId) url.searchParams.delete("edit");
+  window.history.replaceState({}, "", `${url.pathname}${url.search}`);
+}
+
+function setViewMode(mode, options = {}) {
+  state.mode = normalizeMode(mode);
+  if (dom.requestDashboardSection) dom.requestDashboardSection.hidden = state.mode !== "news-requests";
+  if (dom.editDashboardSection) dom.editDashboardSection.hidden = !["edit-news", "submit-request"].includes(state.mode);
   if (dom.watchAllDashboardSection) dom.watchAllDashboardSection.hidden = state.mode !== "watch-all-news";
+  if (dom.accessDashboardSection) dom.accessDashboardSection.hidden = state.mode !== "access-control";
+  styleNavLink(dom.navRequests, state.mode === "news-requests");
   styleNavLink(dom.navEditNews, state.mode === "edit-news");
   styleNavLink(dom.navWatchAllNews, state.mode === "watch-all-news");
+  styleNavLink(dom.navAccessControl, state.mode === "access-control");
+  styleNavLink(dom.navSubmitRequest, state.mode === "submit-request");
   applyPageHeader();
+  syncEditorMode();
+  syncRoleVisibility();
+  if (!options.skipUrl) syncModeInUrl();
 }
 
 function draftPreviewArticle() {
@@ -433,7 +614,7 @@ function renderFeaturedStatus(article) {
     const expiry = article.featured_until ? `Hero until ${fmtDate(article.featured_until)}` : "Hero timing not set";
     dom.featuredMeta.textContent = `${toTitleCase(article.category || "news")} | ${expiry}`;
   }
-  if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = false;
+  if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = !isAdminRole();
   syncFeaturedPreview();
 }
 
@@ -524,6 +705,329 @@ function renderRecentManualList(items = []) {
     actions.append(editButton, viewLink, deleteButton);
     card.append(title, meta, actions);
     dom.recentManualList.append(card);
+  });
+}
+
+function renderContributorRequestPanel(items = []) {
+  if (dom.recentManualCount) dom.recentManualCount.textContent = String(items.length);
+  if (!dom.recentManualList) return;
+  dom.recentManualList.replaceChildren();
+
+  if (!items.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "No requests submitted yet.";
+    dom.recentManualList.append(empty);
+    return;
+  }
+
+  items.forEach((request) => {
+    const card = document.createElement("article");
+    card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
+
+    const title = document.createElement("p");
+    title.className = "text-sm font-semibold leading-6 text-slate-950";
+    title.textContent = cleanText(request.requestedHeadline || request.payload?.headline || "Untitled request");
+
+    const meta = document.createElement("p");
+    meta.className = "mt-2 text-xs text-slate-500";
+    meta.textContent = [
+      toTitleCase(request.requestedCategory || request.payload?.category || "news"),
+      toTitleCase(request.status || "pending"),
+      formatListDate(request.createdAt || ""),
+    ].filter(Boolean).join(" | ");
+
+    const note = document.createElement("p");
+    note.className = "mt-3 text-sm leading-6 text-slate-600";
+    note.textContent = request.reviewerNote
+      ? `Review note: ${request.reviewerNote}`
+      : (request.status === "approved"
+        ? "This request was accepted and published."
+        : (request.status === "rejected" ? "This request was rejected." : "Waiting for admin review."));
+
+    card.append(title, meta, note);
+    dom.recentManualList.append(card);
+  });
+}
+
+function renderRequestSummary(items = []) {
+  const counts = items.reduce((acc, item) => {
+    const key = cleanText(item.status || "pending").toLowerCase() || "pending";
+    acc[key] = (acc[key] || 0) + 1;
+    return acc;
+  }, {});
+  if (dom.requestSummaryPending) dom.requestSummaryPending.textContent = String(counts.pending || 0);
+  if (dom.requestSummaryApproved) dom.requestSummaryApproved.textContent = String(counts.approved || 0);
+  if (dom.requestSummaryRejected) dom.requestSummaryRejected.textContent = String(counts.rejected || 0);
+  if (dom.requestTotalCount) dom.requestTotalCount.textContent = `${items.length} items`;
+  if (dom.requestListMeta) {
+    dom.requestListMeta.textContent = items.length
+      ? (isAdminRole()
+        ? "Review pending requests first, then scan approved and rejected history."
+        : "Your newest pending request appears first.")
+      : (isAdminRole()
+        ? "No newsroom requests yet."
+        : "You have not submitted any requests yet.");
+  }
+  if (dom.navRequestsCount) dom.navRequestsCount.textContent = String(counts.pending || 0);
+}
+
+function renderRequestDetail(request = null) {
+  if (!request) {
+    state.selectedRequestId = "";
+    if (dom.requestDetailEmpty) dom.requestDetailEmpty.hidden = false;
+    if (dom.requestDetailCard) dom.requestDetailCard.hidden = true;
+    return;
+  }
+
+  state.selectedRequestId = cleanText(request.id || "");
+  const payload = request.payload || {};
+  const bodyParagraphs = String(payload.content || "")
+    .replace(/\r/g, "")
+    .split(/\n{2,}/)
+    .map((entry) => cleanText(entry))
+    .filter(Boolean);
+  const badgeClasses = statusBadgeClass(request.status || "pending");
+
+  if (dom.requestDetailEmpty) dom.requestDetailEmpty.hidden = true;
+  if (dom.requestDetailCard) dom.requestDetailCard.hidden = false;
+  if (dom.requestDetailHeadline) dom.requestDetailHeadline.textContent = cleanText(payload.headline || request.requestedHeadline || "Untitled request");
+  if (dom.requestDetailMeta) {
+    dom.requestDetailMeta.textContent = [
+      toTitleCase(payload.category || request.requestedCategory || "news"),
+      formatListDate(request.createdAt || ""),
+      payload.showOnHero ? "Requested hero placement" : "Standard placement",
+    ].filter(Boolean).join(" | ");
+  }
+  if (dom.requestDetailStatus) {
+    dom.requestDetailStatus.textContent = toTitleCase(request.status || "pending");
+    dom.requestDetailStatus.className = `rounded-full px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] ${badgeClasses.join(" ")}`;
+  }
+  if (dom.approveRequestButton) dom.approveRequestButton.hidden = !isAdminRole() || request.status !== "pending";
+  if (dom.rejectRequestButton) dom.rejectRequestButton.hidden = !isAdminRole() || request.status !== "pending";
+  if (dom.requestDetailImage) dom.requestDetailImage.src = cleanText(payload.image_url || "") || "/social-card.svg";
+  if (dom.requestDetailRequester) dom.requestDetailRequester.textContent = cleanText(request.requesterName || request.requesterEmail || "Unknown requester");
+  if (dom.requestDetailRequesterMeta) {
+    dom.requestDetailRequesterMeta.textContent = [
+      cleanText(request.requesterEmail || ""),
+      request.updatedAt && request.updatedAt !== request.createdAt ? `Updated ${formatListDate(request.updatedAt)}` : "",
+    ].filter(Boolean).join(" | ");
+  }
+  if (dom.requestDetailSetup) {
+    dom.requestDetailSetup.textContent = [
+      toTitleCase(payload.category || request.requestedCategory || "news"),
+      payload.showOnHero ? "Hero requested" : "No hero request",
+    ].join(" | ");
+  }
+  if (dom.requestDetailReviewMeta) {
+    dom.requestDetailReviewMeta.textContent = request.reviewedByEmail
+      ? `${toTitleCase(request.status || "")} by ${request.reviewedByEmail}${request.reviewedAt ? ` on ${formatListDate(request.reviewedAt)}` : ""}`
+      : "Not reviewed yet.";
+  }
+  if (dom.requestDetailSummary) dom.requestDetailSummary.textContent = cleanText(payload.subheadline || "");
+  if (dom.requestDetailWhyMatters) dom.requestDetailWhyMatters.textContent = cleanText(payload.indiaPulse || "");
+  if (dom.requestDetailSource) {
+    dom.requestDetailSource.textContent = [
+      cleanText(payload.source || ""),
+      cleanText(payload.primarySourceName || ""),
+      cleanText(payload.authorName || ""),
+    ].filter(Boolean).join(" | ");
+  }
+  if (dom.requestDetailPrimarySourceLink) {
+    const href = cleanText(payload.primarySourceUrl || "");
+    dom.requestDetailPrimarySourceLink.hidden = !href;
+    dom.requestDetailPrimarySourceLink.href = href || "#";
+  }
+  if (dom.requestDetailMetaTitle) dom.requestDetailMetaTitle.textContent = cleanText(payload.metaTitle || "");
+  if (dom.requestDetailMetaDescription) dom.requestDetailMetaDescription.textContent = cleanText(payload.metaDescription || "");
+  if (dom.requestDetailTags) {
+    const tags = Array.isArray(payload.tags) ? payload.tags.filter(Boolean) : [];
+    dom.requestDetailTags.textContent = tags.length ? `Tags: ${tags.join(", ")}` : "Tags: None";
+  }
+
+  if (dom.requestDetailBody) {
+    dom.requestDetailBody.replaceChildren();
+    if (!bodyParagraphs.length) {
+      const empty = document.createElement("p");
+      empty.textContent = "No article body provided.";
+      dom.requestDetailBody.append(empty);
+    } else {
+      bodyParagraphs.forEach((paragraph) => {
+        const node = document.createElement("p");
+        node.textContent = paragraph;
+        dom.requestDetailBody.append(node);
+      });
+    }
+  }
+
+  if (dom.requestDetailKeyPoints) {
+    const keyPoints = Array.isArray(payload.keyPoints) ? payload.keyPoints.filter(Boolean) : [];
+    dom.requestDetailKeyPoints.replaceChildren();
+    keyPoints.forEach((item) => {
+      const row = document.createElement("p");
+      row.className = "rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-800";
+      row.textContent = item;
+      dom.requestDetailKeyPoints.append(row);
+    });
+    if (!keyPoints.length) {
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-slate-500";
+      empty.textContent = "No key points added.";
+      dom.requestDetailKeyPoints.append(empty);
+    }
+    if (dom.requestDetailKeyPointCount) dom.requestDetailKeyPointCount.textContent = String(keyPoints.length);
+  }
+
+  if (dom.requestDetailFactSheet) {
+    const facts = Array.isArray(payload.factSheet) ? payload.factSheet.filter((item) => cleanText(item?.label || "") && cleanText(item?.value || "")) : [];
+    dom.requestDetailFactSheet.replaceChildren();
+    facts.forEach((item) => {
+      const row = document.createElement("div");
+      row.className = "grid gap-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 sm:grid-cols-[0.38fr_0.62fr]";
+      const label = document.createElement("p");
+      label.className = "text-xs font-semibold uppercase tracking-[0.16em] text-slate-500";
+      label.textContent = cleanText(item.label);
+      const value = document.createElement("p");
+      value.className = "text-sm leading-6 text-slate-800";
+      value.textContent = cleanText(item.value);
+      row.append(label, value);
+      dom.requestDetailFactSheet.append(row);
+    });
+    if (!facts.length) {
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-slate-500";
+      empty.textContent = "No fact sheet rows added.";
+      dom.requestDetailFactSheet.append(empty);
+    }
+    if (dom.requestDetailFactCount) dom.requestDetailFactCount.textContent = String(facts.length);
+  }
+
+  if (dom.requestDetailBackground) {
+    const background = Array.isArray(payload.background) ? payload.background.filter((item) => cleanText(item?.title || "") && cleanText(item?.context || "")) : [];
+    dom.requestDetailBackground.replaceChildren();
+    background.forEach((item) => {
+      const card = document.createElement("div");
+      card.className = "rounded-[24px] border border-slate-200 bg-slate-50 px-4 py-4";
+      const title = document.createElement("p");
+      title.className = "text-sm font-semibold text-slate-950";
+      title.textContent = cleanText(item.title);
+      const context = document.createElement("p");
+      context.className = "mt-2 text-sm leading-6 text-slate-700";
+      context.textContent = cleanText(item.context);
+      card.append(title, context);
+      dom.requestDetailBackground.append(card);
+    });
+    if (!background.length) {
+      const empty = document.createElement("p");
+      empty.className = "text-sm text-slate-500";
+      empty.textContent = "No background blocks added.";
+      dom.requestDetailBackground.append(empty);
+    }
+    if (dom.requestDetailBackgroundCount) dom.requestDetailBackgroundCount.textContent = String(background.length);
+  }
+}
+
+function renderRequestList(items = []) {
+  state.requests = Array.isArray(items) ? items : [];
+  renderRequestSummary(state.requests);
+  if (!dom.requestList) return;
+  dom.requestList.replaceChildren();
+
+  if (!state.requests.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = isAdminRole() ? "No contributor requests yet." : "You have not submitted any requests yet.";
+    dom.requestList.append(empty);
+    renderRequestDetail(null);
+    renderContributorRequestPanel(state.requests);
+    return;
+  }
+
+  state.requests.forEach((request) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "request-item w-full rounded-[24px] border border-slate-200 bg-white p-4 text-left transition hover:border-slate-950";
+    if (cleanText(request.id) === state.selectedRequestId) item.classList.add("is-active");
+
+    const top = document.createElement("div");
+    top.className = "flex items-center justify-between gap-3";
+
+    const title = document.createElement("p");
+    title.className = "text-sm font-semibold leading-6 text-slate-950";
+    title.textContent = cleanText(request.requestedHeadline || request.payload?.headline || "Untitled request");
+
+    const status = document.createElement("span");
+    const badgeClasses = statusBadgeClass(request.status || "pending");
+    status.className = `rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] ${badgeClasses.join(" ")}`;
+    status.textContent = cleanText(request.status || "pending");
+
+    const meta = document.createElement("p");
+    meta.className = "mt-2 text-xs text-slate-500";
+    meta.textContent = isAdminRole()
+      ? [cleanText(request.requesterEmail || ""), toTitleCase(request.requestedCategory || request.payload?.category || "news"), formatListDate(request.createdAt || "")]
+        .filter(Boolean)
+        .join(" | ")
+      : [toTitleCase(request.requestedCategory || request.payload?.category || "news"), formatListDate(request.createdAt || "")]
+        .filter(Boolean)
+        .join(" | ");
+
+    const summary = document.createElement("p");
+    summary.className = "mt-3 text-sm leading-6 text-slate-600";
+    summary.textContent = cleanText(request.payload?.subheadline || "No under-headline provided.");
+
+    top.append(title, status);
+    item.append(top, meta, summary);
+    item.addEventListener("click", () => {
+      state.selectedRequestId = cleanText(request.id);
+      renderRequestList(state.requests);
+      renderRequestDetail(request);
+    });
+    dom.requestList.append(item);
+  });
+
+  const selected = state.requests.find((item) => cleanText(item.id) === state.selectedRequestId) || state.requests[0];
+  renderRequestDetail(selected);
+  renderContributorRequestPanel(state.requests);
+}
+
+function renderAccessList(items = []) {
+  state.accessList = Array.isArray(items) ? items : [];
+  if (dom.accessCount) dom.accessCount.textContent = `${state.accessList.length} emails`;
+  if (dom.navAccessCount) dom.navAccessCount.textContent = String(state.accessList.length);
+  if (!dom.accessList) return;
+  dom.accessList.replaceChildren();
+
+  if (!state.accessList.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "No contributor emails have access right now.";
+    dom.accessList.append(empty);
+    return;
+  }
+
+  state.accessList.forEach((item) => {
+    const card = document.createElement("article");
+    card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
+
+    const title = document.createElement("p");
+    title.className = "text-sm font-semibold text-slate-950";
+    title.textContent = cleanText(item.email || "");
+
+    const meta = document.createElement("p");
+    meta.className = "mt-2 text-xs text-slate-500";
+    meta.textContent = [
+      cleanText(item.createdByEmail || ""),
+      item.createdAt ? `Added ${formatListDate(item.createdAt)}` : "",
+    ].filter(Boolean).join(" | ");
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "mt-4 rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-red-500 hover:text-red-600";
+    remove.textContent = "Remove Access";
+    remove.addEventListener("click", () => handleRemoveAccess(item.email));
+
+    card.append(title, meta, remove);
+    dom.accessList.append(card);
   });
 }
 
@@ -695,11 +1199,11 @@ function resetForm({ keepStatus = false } = {}) {
   setImagePreview("");
   syncEditorMode();
   clearEditQueryParam();
-  if (!keepStatus) setStatus("Ready to publish.");
+  if (!keepStatus) setStatus(state.mode === "submit-request" ? "Ready to submit request." : "Ready to publish.");
 }
 
 async function loadArticleForEdit(articleId) {
-  if (!articleId) return;
+  if (!articleId || !isAdminRole()) return;
   setViewMode("edit-news");
   const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(articleId)}`);
   applyArticleToForm(data.article || {});
@@ -712,19 +1216,43 @@ async function loadArticleForEdit(articleId) {
 }
 
 async function loadAdminSummary() {
+  if (!isAdminRole()) return;
   const data = await fetchJson("/api/admin?view=news");
   renderFeaturedStatus(data.featured || null);
   renderRecentManualList(data.recent || []);
+  if (dom.navRequestsCount) dom.navRequestsCount.textContent = String(Number(data.pendingRequests || 0));
+  if (dom.navAccessCount) dom.navAccessCount.textContent = String(Number(data.submitterCount || 0));
 }
 
 async function loadArchiveData() {
+  if (!isAdminRole()) return;
   const data = await fetchJson("/api/admin?view=news&scope=all");
   renderArchive(data.items || []);
 }
 
+async function loadRequests() {
+  const data = await fetchJson("/api/admin?view=requests");
+  renderRequestList(data.items || []);
+}
+
+async function loadAccessList() {
+  if (!isAdminRole()) return;
+  const data = await fetchJson("/api/admin?view=access");
+  renderAccessList(data.items || []);
+}
+
 async function loadPageData() {
-  const tasks = [loadAdminSummary()];
-  if (state.mode === "watch-all-news") tasks.push(loadArchiveData());
+  const tasks = [];
+
+  if (isAdminRole()) {
+    tasks.push(loadAdminSummary());
+    if (state.mode === "watch-all-news") tasks.push(loadArchiveData());
+    if (state.mode === "news-requests") tasks.push(loadRequests());
+    if (state.mode === "access-control") tasks.push(loadAccessList());
+  } else {
+    tasks.push(loadRequests());
+  }
+
   await Promise.all(tasks);
 }
 
@@ -745,6 +1273,86 @@ async function handleRemoveHero() {
   });
   showToast("Hero slot cleared.");
   await loadPageData();
+}
+
+async function handleApproveRequest() {
+  if (!state.selectedRequestId || state.requestBusy) return;
+  state.requestBusy = true;
+  setRequestButtonState(dom.approveRequestButton, true, "Publishing...");
+  setRequestButtonState(dom.rejectRequestButton, true, "Working...");
+  try {
+    await fetchJson(`/api/admin?view=requests&id=${encodeURIComponent(state.selectedRequestId)}&action=approve`, {
+      method: "PATCH",
+      body: JSON.stringify({}),
+    });
+    showToast("Request approved and published.");
+    await Promise.all([loadRequests(), loadAdminSummary()]);
+  } finally {
+    state.requestBusy = false;
+    setRequestButtonState(dom.approveRequestButton, false, "Publishing...");
+    setRequestButtonState(dom.rejectRequestButton, false, "Working...");
+  }
+}
+
+async function handleRejectRequest() {
+  if (!state.selectedRequestId || state.requestBusy) return;
+  const reviewerNote = cleanText(window.prompt("Optional reject note for the contributor:", "") || "");
+  state.requestBusy = true;
+  setRequestButtonState(dom.approveRequestButton, true, "Working...");
+  setRequestButtonState(dom.rejectRequestButton, true, "Rejecting...");
+  try {
+    await fetchJson(`/api/admin?view=requests&id=${encodeURIComponent(state.selectedRequestId)}&action=reject`, {
+      method: "PATCH",
+      body: JSON.stringify({ reviewerNote }),
+    });
+    showToast("Request rejected.");
+    await loadRequests();
+  } finally {
+    state.requestBusy = false;
+    setRequestButtonState(dom.approveRequestButton, false, "Working...");
+    setRequestButtonState(dom.rejectRequestButton, false, "Rejecting...");
+  }
+}
+
+async function handleGrantAccess(event) {
+  event.preventDefault();
+  if (state.accessBusy) return;
+  const email = cleanText(dom.accessEmailInput?.value || "").toLowerCase();
+  if (!email) {
+    setAccessStatus("Enter an email address first.", true);
+    return;
+  }
+
+  state.accessBusy = true;
+  setButtonBusy(dom.grantAccessButton, true, "Saving...");
+  try {
+    await fetchJson("/api/admin?view=access", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+    if (dom.accessEmailInput) dom.accessEmailInput.value = "";
+    setAccessStatus("Access updated.");
+    showToast("Contributor access saved.");
+    await Promise.all([loadAccessList(), loadAdminSummary()]);
+  } catch (error) {
+    setAccessStatus(error.message || "Access update failed.", true);
+    throw error;
+  } finally {
+    state.accessBusy = false;
+    setButtonBusy(dom.grantAccessButton, false, "Saving...");
+  }
+}
+
+async function handleRemoveAccess(email = "") {
+  const normalized = cleanText(email).toLowerCase();
+  if (!normalized) return;
+  if (!window.confirm(`Remove newsroom access for ${normalized}?`)) return;
+  await fetchJson(`/api/admin?view=access&email=${encodeURIComponent(normalized)}`, {
+    method: "DELETE",
+  });
+  setAccessStatus(`${normalized} removed.`);
+  showToast("Contributor access removed.");
+  await Promise.all([loadAccessList(), loadAdminSummary()]);
 }
 
 async function handleImageUpload(file) {
@@ -790,30 +1398,42 @@ async function handleSubmit(event) {
   }
 
   state.formBusy = true;
-  setButtonBusy(dom.pushNewsButton, true, state.currentEditingArticleId ? "Updating..." : "Pushing...");
-  setStatus(state.currentEditingArticleId ? "Updating story..." : "Pushing story...");
+  const requestMode = state.mode === "submit-request";
+  setButtonBusy(dom.pushNewsButton, true, requestMode ? "Sending..." : (state.currentEditingArticleId ? "Updating..." : "Pushing..."));
+  setStatus(requestMode ? "Submitting request..." : (state.currentEditingArticleId ? "Updating story..." : "Pushing story..."));
 
   try {
-    const isUpdate = Boolean(state.currentEditingArticleId);
-    const url = isUpdate
-      ? `/api/admin?view=news&id=${encodeURIComponent(state.currentEditingArticleId)}`
-      : "/api/admin?view=news";
-    const data = await fetchJson(url, {
-      method: isUpdate ? "PUT" : "POST",
-      body: JSON.stringify(payload),
-    });
+    if (requestMode) {
+      await fetchJson("/api/admin?view=requests", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      resetForm({ keepStatus: true });
+      setStatus("Request sent for admin approval.");
+      showToast("Request submitted.");
+      await loadRequests();
+    } else {
+      const isUpdate = Boolean(state.currentEditingArticleId);
+      const url = isUpdate
+        ? `/api/admin?view=news&id=${encodeURIComponent(state.currentEditingArticleId)}`
+        : "/api/admin?view=news";
+      const data = await fetchJson(url, {
+        method: isUpdate ? "PUT" : "POST",
+        body: JSON.stringify(payload),
+      });
 
-    applyArticleToForm(data.adminArticle || {});
-    setStatus(isUpdate ? "Story updated." : "Story pushed.");
-    showToast(isUpdate ? "Story updated." : "Story pushed.");
-    await loadPageData();
-    if (state.mode === "watch-all-news") await loadArchiveData();
+      applyArticleToForm(data.adminArticle || {});
+      setStatus(isUpdate ? "Story updated." : "Story pushed.");
+      showToast(isUpdate ? "Story updated." : "Story pushed.");
+      await loadPageData();
+      if (state.mode === "watch-all-news") await loadArchiveData();
+    }
   } catch (errorResponse) {
-    setStatus(errorResponse.message || "Publish failed.", true);
+    setStatus(errorResponse.message || (requestMode ? "Request failed." : "Publish failed."), true);
     throw errorResponse;
   } finally {
     state.formBusy = false;
-    setButtonBusy(dom.pushNewsButton, false, state.currentEditingArticleId ? "Updating..." : "Pushing...");
+    setButtonBusy(dom.pushNewsButton, false, requestMode ? "Sending..." : (state.currentEditingArticleId ? "Updating..." : "Pushing..."));
   }
 }
 
@@ -843,16 +1463,41 @@ function attachQuickDurationButtons() {
   });
 }
 
+function attachNavHandlers() {
+  [
+    [dom.navRequests, "news-requests"],
+    [dom.navEditNews, "edit-news"],
+    [dom.navWatchAllNews, "watch-all-news"],
+    [dom.navAccessControl, "access-control"],
+    [dom.navSubmitRequest, "submit-request"],
+  ].forEach(([link, mode]) => {
+    link?.addEventListener("click", async (event) => {
+      event.preventDefault();
+      const nextMode = normalizeMode(mode);
+      if (state.mode === nextMode) return;
+      setViewMode(nextMode);
+      try {
+        await loadPageData();
+      } catch (error) {
+        setStatus(error.message || "Dashboard load failed.", true);
+        showToast(error.message || "Dashboard load failed.");
+      }
+    });
+  });
+}
+
 async function init() {
   if (dom.adminUserEmail) {
     dom.adminUserEmail.textContent = cleanText(window.__SUNWIRE_ADMIN_USER__?.email || window.__SUNWIRE_ADMIN_EMAIL__ || "Admin");
   }
 
-  setViewMode(state.mode);
+  setViewMode(state.mode, { skipUrl: true });
   resetStructuredInputs();
-  syncEditorMode();
+  syncRoleVisibility();
   attachDraftPreviewListeners();
   attachQuickDurationButtons();
+  attachNavHandlers();
+  setAccessStatus("Add an email to allow request-based publishing access.");
 
   dom.addKeyPointButton?.addEventListener("click", () => dom.keyPointsList?.append(createKeyPointRow()));
   dom.addFactSheetRowButton?.addEventListener("click", () => dom.factSheetRows?.append(createFactSheetRow()));
@@ -888,6 +1533,45 @@ async function init() {
       showToast(error.message || "Refresh failed.");
     }
   });
+  dom.refreshRequestsButton?.addEventListener("click", async () => {
+    try {
+      await loadRequests();
+      showToast("Requests refreshed.");
+    } catch (error) {
+      showToast(error.message || "Request refresh failed.");
+    }
+  });
+  dom.approveRequestButton?.addEventListener("click", async () => {
+    try {
+      await handleApproveRequest();
+    } catch (error) {
+      showToast(error.message || "Approval failed.");
+    }
+  });
+  dom.rejectRequestButton?.addEventListener("click", async () => {
+    try {
+      await handleRejectRequest();
+    } catch (error) {
+      showToast(error.message || "Reject failed.");
+    }
+  });
+  dom.accessForm?.addEventListener("submit", async (event) => {
+    try {
+      await handleGrantAccess(event);
+    } catch (error) {
+      showToast(error.message || "Access update failed.");
+    }
+  });
+  dom.refreshAccessButton?.addEventListener("click", async () => {
+    try {
+      await loadAccessList();
+      setAccessStatus("Access list refreshed.");
+      showToast("Access list refreshed.");
+    } catch (error) {
+      setAccessStatus(error.message || "Access refresh failed.", true);
+      showToast(error.message || "Access refresh failed.");
+    }
+  });
   dom.featuredRemoveButton?.addEventListener("click", async () => {
     try {
       await handleRemoveHero();
@@ -902,9 +1586,14 @@ async function init() {
   });
 
   try {
-    await loadPageData();
     const editId = new URL(window.location.href).searchParams.get("edit");
-    if (editId) await loadArticleForEdit(editId);
+    if (editId && isAdminRole()) {
+      setViewMode("edit-news", { skipUrl: true });
+      await loadPageData();
+      await loadArticleForEdit(editId);
+    } else {
+      await loadPageData();
+    }
   } catch (error) {
     setStatus(error.message || "Admin dashboard failed to load.", true);
     showToast(error.message || "Admin dashboard failed to load.");
