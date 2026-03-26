@@ -22,7 +22,14 @@ function getPriceIcon(name = "") {
   const normalized = String(name || "").toLowerCase();
   if (normalized.includes("gold")) return "🥇";
   if (normalized.includes("silver")) return "🥈";
+  if (normalized.includes("nifty")) return "📊";
   return "📈";
+}
+
+function parseSignedAmount(value = "") {
+  const normalized = String(value || "").replace(/,/g, "").replace(/[^\d.+-]/g, "");
+  const amount = Number(normalized);
+  return Number.isFinite(amount) ? amount : 0;
 }
 
 export function renderTopTrendingTopics(listEl, stories = [], options = {}) {
@@ -100,16 +107,17 @@ export function renderSidebarData(elements = {}, data = {}) {
     } else {
       prices.forEach((item) => {
         const li = document.createElement("li");
-        const delta = parseFloat(item.change || "0");
-        const deltaClass = delta > 0 ? "price-item__change--up" : (delta < 0 ? "price-item__change--down" : "");
-        const sign = delta > 0 ? "+" : "";
+        const delta = parseSignedAmount(item.change || "0");
+        const direction = item.deltaDirection || (delta > 0 ? "up" : (delta < 0 ? "down" : "flat"));
+        const deltaClass = direction === "up" ? "price-item__change--up" : (direction === "down" ? "price-item__change--down" : "");
         const label = String(item.name || "Market").trim() || "Market";
+        const changeLabel = String(item.change || "-").trim() || "-";
         li.className = "price-item";
         li.innerHTML = `
           <span class="price-item__icon" aria-hidden="true">${escapeHtml(getPriceIcon(label))}</span>
           <span class="price-item__label">${escapeHtml(label)}</span>
           <span class="price-item__value">${escapeHtml(item.today || item.value || "-")}</span>
-          <span class="price-item__change ${deltaClass}">${sign}${escapeHtml(item.change || "-")}</span>
+          <span class="price-item__change ${deltaClass}">${escapeHtml(changeLabel)}</span>
         `;
         priceBoardListEl.appendChild(li);
       });
@@ -132,7 +140,12 @@ export function renderSidebarData(elements = {}, data = {}) {
 
   events.forEach((event) => {
     const li = document.createElement("li");
-    li.innerHTML = `<div><strong>${escapeHtml(event.name || "AI Event")}</strong><span>${escapeHtml(event.about || "Latest sessions and practical AI insights.")}</span></div>`;
+    const name = escapeHtml(event.name || "AI Event");
+    const about = escapeHtml(event.about || "Latest sessions and practical AI insights.");
+    const href = String(event.link || "").trim();
+    li.innerHTML = href
+      ? `<a class="event-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"><strong>${name}</strong><span>${about}</span></a>`
+      : `<div><strong>${name}</strong><span>${about}</span></div>`;
     eventsListEl.appendChild(li);
   });
 }

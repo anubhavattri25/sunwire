@@ -2097,7 +2097,7 @@ body[data-home-mode="archive"] .category-zone {
 
 /* AI Tool card */
 .sidebar-card--tool {
-  padding: 20px 22px 16px;
+  padding: 16px 18px 12px;
   min-height: 0;
 }
 
@@ -2122,8 +2122,8 @@ body[data-home-mode="archive"] .category-zone {
 .sidebar-card--tool h3 {
   margin: 0 0 8px;
   font-family: "Inter Tight", sans-serif;
-  font-size: 1.72rem;
-  line-height: 0.98;
+  font-size: 1.5rem;
+  line-height: 1;
   letter-spacing: -0.055em;
   font-weight: 900;
   color: var(--ink);
@@ -2132,10 +2132,10 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .sidebar-card--tool p {
-  margin: 0 0 14px;
+  margin: 0 0 10px;
   color: var(--ink-soft);
-  line-height: 1.48;
-  font-size: 0.92rem;
+  line-height: 1.38;
+  font-size: 0.86rem;
   overflow-wrap: anywhere;
   word-break: break-word;
   display: block;
@@ -2322,10 +2322,22 @@ body[data-home-mode="archive"] .category-zone {
   word-break: normal !important;
 }
 
-.sidebar-card--updates .event-list li > div {
+.sidebar-card--updates .event-list li > div,
+.sidebar-card--updates .event-list li > a {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.sidebar-card--updates .event-link {
+  color: inherit;
+  min-width: 0;
+  text-decoration: none;
+}
+
+.sidebar-card--updates .event-link:hover strong,
+.sidebar-card--updates .event-link:focus-visible strong {
+  color: #c0392b;
 }
 
 /* ---- RESPONSIVE ---- */
@@ -2406,38 +2418,40 @@ body[data-home-mode="archive"] .category-zone {
 }
 .sidebar-card--tool h3 {
   font-family: "Inter Tight", sans-serif !important;
-  font-size: clamp(1.6rem, 1.92vw, 2.05rem) !important;
+  font-size: clamp(1.34rem, 1.56vw, 1.7rem) !important;
   font-weight: 900 !important;
   color: #111 !important;
   letter-spacing: -0.05em !important;
-  margin-bottom: 4px !important;
+  margin-bottom: 6px !important;
 }
 .sidebar-card--tool p:not(.tool-no-cc) {
-  font-size: 0.88rem !important;
+  font-size: 0.82rem !important;
   color: #555 !important;
-  max-width: 54% !important;
-  margin-bottom: 12px !important;
-  line-height: 1.42 !important;
+  max-width: 62% !important;
+  margin-bottom: 8px !important;
+  line-height: 1.34 !important;
   display: block !important;
   overflow: visible !important;
 }
 .sidebar-button {
   background: #fcc23a !important;
   font-weight: 900 !important;
-  font-size: 0.94rem !important;
+  font-size: 0.88rem !important;
   width: fit-content !important;
-  min-width: 192px !important;
+  min-width: 164px !important;
   display: inline-flex !important;
   justify-content: center !important;
-  padding: 11px 20px !important;
+  padding: 9px 18px !important;
   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.1) !important;
-  margin-top: 4px !important;
+  margin-top: 0 !important;
 }
 .eyebrow-icon { color: #fcc23a !important; }
 
 .tool-no-cc {
   text-align: left !important;
   color: #5f574d !important;
+  margin-top: 6px !important;
+  font-size: 0.76rem !important;
 }
 
 .sidebar-card--prices::after {
@@ -2538,39 +2552,39 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .sidebar-card--tool {
-    padding: 14px 18px 12px !important;
+    padding: 12px 16px 10px !important;
   }
 
   .sidebar-card--tool .sidebar-card__eyebrow {
-    margin-bottom: 6px !important;
-    font-size: 0.76rem !important;
-    letter-spacing: 0.05em !important;
-    max-width: 58% !important;
+    margin-bottom: 4px !important;
+    font-size: 0.72rem !important;
+    letter-spacing: 0.04em !important;
+    max-width: 62% !important;
   }
 
   .sidebar-card--tool h3 {
-    font-size: clamp(1.24rem, 1.45vw, 1.62rem) !important;
+    font-size: clamp(1.08rem, 1.24vw, 1.38rem) !important;
     line-height: 1 !important;
-    margin-bottom: 6px !important;
+    margin-bottom: 4px !important;
   }
 
   .sidebar-card--tool p:not(.tool-no-cc) {
-    max-width: 56% !important;
-    font-size: 0.82rem !important;
-    line-height: 1.38 !important;
-    margin-bottom: 8px !important;
+    max-width: 66% !important;
+    font-size: 0.76rem !important;
+    line-height: 1.28 !important;
+    margin-bottom: 6px !important;
   }
 
   .sidebar-button {
-    min-width: 172px !important;
-    padding: 9px 18px !important;
-    font-size: 0.88rem !important;
+    min-width: 148px !important;
+    padding: 8px 16px !important;
+    font-size: 0.82rem !important;
     margin-top: 0 !important;
   }
 
   .tool-no-cc {
-    margin-top: 6px !important;
-    font-size: 0.74rem !important;
+    margin-top: 4px !important;
+    font-size: 0.7rem !important;
   }
 
   .sidebar-card--prices {

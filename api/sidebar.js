@@ -118,15 +118,35 @@ function formatInr(amount, decimals = 0) {
   })}`;
 }
 
+function formatNumber(amount, decimals = 2) {
+  return Number(amount || 0).toLocaleString("en-IN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+}
+
 function formatChange(amount, decimals = 0) {
   const prefix = amount > 0 ? "+" : amount < 0 ? "-" : "";
   return `${prefix}${formatInr(Math.abs(amount), decimals)}`;
+}
+
+function formatNumberChange(amount, decimals = 2) {
+  const prefix = amount > 0 ? "+" : amount < 0 ? "-" : "";
+  return `${prefix}${formatNumber(Math.abs(amount), decimals)}`;
 }
 
 function deltaDirection(amount = 0) {
   if (amount > 0) return "up";
   if (amount < 0) return "down";
   return "flat";
+}
+
+function lastFiniteNumber(values = []) {
+  for (let index = values.length - 1; index >= 0; index -= 1) {
+    const amount = Number(values[index]);
+    if (Number.isFinite(amount)) return amount;
+  }
+  return 0;
 }
 
 function toIstDateKey(value = new Date()) {
@@ -252,31 +272,57 @@ function parseLpgBoard(html = "") {
 }
 
 async function fetchMarketBoard() {
-  backfillHistoryFromCachedPayload();
-
-  const [goldHtml, silverHtml, lpgHtml] = await Promise.all([
+  const [goldHtml, silverHtml, niftyPayload] = await Promise.all([
     fetchTextNoCache("https://www.goodreturns.in/gold-rates/"),
     fetchTextNoCache("https://www.goodreturns.in/silver-rates/"),
-    fetchTextNoCache("https://www.goodreturns.in/lpg-price-in-delhi-s10.html"),
+    fetchJsonNoCache("https://query1.finance.yahoo.com/v8/finance/chart/%5ENSEI?interval=1d&range=5d"),
   ]);
 
   const gold = parseGoldBoard(goldHtml);
   const silver = parseSilverBoard(silverHtml);
-  const lpg = parseLpgBoard(lpgHtml);
+  const nifty = parseNiftyBoard(niftyPayload);
   const marketBoard = {
-    asOf: lpg.asOf || new Date().toISOString(),
-    dateKey: lpg.dateKey || toIstDateKey(new Date()),
-    meta: `${gold.yesterdayLabel} vs ${gold.todayLabel}. Gold and silver are India retail rates. LPG is New Delhi domestic 14.2 kg.`,
-    items: [gold.item, silver.item, lpg.item],
+    asOf: nifty.asOf || new Date().toISOString(),
+    dateKey: toIstDateKey(new Date(nifty.asOf || Date.now())),
+    meta: `${gold.yesterdayLabel} vs ${gold.todayLabel}. Gold and silver are India retail rates. Nifty tracks the NSE benchmark index.`,
+    items: [gold.item, silver.item, nifty.item],
     sources: [
       { label: "Gold", url: "https://www.goodreturns.in/gold-rates/" },
       { label: "Silver", url: "https://www.goodreturns.in/silver-rates/" },
-      { label: "LPG", url: "https://www.goodreturns.in/lpg-price-in-delhi-s10.html" },
+      { label: "Nifty 50", url: "https://finance.yahoo.com/quote/%5ENSEI/" },
     ],
   };
-
-  rememberMarketBoard(marketBoard);
   return marketBoard;
+}
+
+function parseNiftyBoard(payload = {}) {
+  const result = payload?.chart?.result?.[0];
+  const meta = result?.meta || {};
+  const closes = Array.isArray(result?.indicators?.quote?.[0]?.close) ? result.indicators.quote[0].close : [];
+  const timestamps = Array.isArray(result?.timestamp) ? result.timestamp : [];
+  const today = Number.isFinite(Number(meta.regularMarketPrice))
+    ? Number(meta.regularMarketPrice)
+    : lastFiniteNumber(closes);
+  const yesterday = Number.isFinite(Number(meta.previousClose)) && Number(meta.previousClose) > 0
+    ? Number(meta.previousClose)
+    : lastFiniteNumber(closes.slice(0, -1)) || today;
+
+  if (!(today > 0)) throw new Error("Unable to parse Nifty rates");
+
+  const change = today - yesterday;
+  const lastTimestamp = lastFiniteNumber(timestamps);
+
+  return {
+    asOf: lastTimestamp ? new Date(lastTimestamp * 1000).toISOString() : new Date().toISOString(),
+    item: {
+      name: "Nifty 50",
+      market: "NSE Index",
+      today: formatNumber(today, 2),
+      yesterday: formatNumber(yesterday, 2),
+      change: formatNumberChange(change, 2),
+      deltaDirection: deltaDirection(change),
+    },
+  };
 }
 
 function parseFunding(title = "") {
@@ -411,7 +457,7 @@ async function fetchUpcomingEvents() {
       name: cleanText(p.title).slice(0, 90),
       date: eventDateFromTitle(p.title, new Date((p.created_utc || 0) * 1000).toISOString()),
       about: inferEventAbout(p.title),
-      link: p.url || "https://www.reddit.com/r/MachineLearning/",
+      link: p.url_overridden_by_dest || p.url || "https://www.reddit.com/r/MachineLearning/",
     }));
 
   if (!events.length) throw new Error("No events");
