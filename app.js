@@ -56,6 +56,7 @@ const categorySectionsGridEl = document.getElementById("categorySectionsGrid");
 const moreNewsGridEl = document.getElementById("moreNewsGrid");
 const categoryZoneSectionEl = categorySectionsGridEl?.closest(".category-zone");
 const moreNewsSectionEl = moreNewsGridEl?.closest(".more-news-shell");
+const moreNewsSectionHeadEl = moreNewsSectionEl?.querySelector(".section-head");
 const categoryNewsTitleEl = document.getElementById("categoryNewsTitle");
 const moreNewsTitleEl = document.getElementById("moreNewsTitle");
 const paginationShellEl = paginationEl?.closest(".pagination-shell");
@@ -73,12 +74,12 @@ const newsCardTemplate = document.getElementById("newsCardTemplate");
 const sectionPanelTemplate = document.getElementById("sectionPanelTemplate");
 
 const DEFAULT_HOME_PAGE_SIZE = 32;
-const DESK_PAGE_SIZE = 20;
+const DESK_PAGE_SIZE = 16;
 const CATEGORY_GRID_STORY_COUNT = 4;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
 const CATEGORY_POOL_FETCH_SIZE = 250;
 const HOME_POOL_PAGE_COVERAGE = Math.ceil(CATEGORY_POOL_FETCH_SIZE / DEFAULT_HOME_PAGE_SIZE);
-const RANDOM_NEWS_COUNT = 8;
+const RANDOM_NEWS_COUNT = 16;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
 const LAST_HERO_STORAGE_KEY = "sunwire:last-hero-story-key";
@@ -1688,36 +1689,33 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     ...sortStoriesForTrending(homepageFallbackPool, activeTrendingMode),
   ]);
   const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, homepageFallbackPool);
-  const topSections = buildHomepageDeskSections(allStoriesPool, categoryMap, latestPool);
-
-  const randomMixStories = takeUnique(
-    deterministicShuffle(
-      homepagePriorityPool.filter((story) => !used.has(storyKey(story))),
-      currentPage
+  const topSections = [];
+  const recentPushStories = takeUnique(
+    sortStoriesForLatest(
+      homepageFallbackPool.filter((story) => !used.has(storyKey(story)))
     ),
     new Set(),
     RANDOM_NEWS_COUNT,
-    deterministicShuffle(
-      homepageFallbackPool.filter((story) => !used.has(storyKey(story))),
-      currentPage + 11
+    sortStoriesForLatest(
+      allStoriesPool.filter((story) => !used.has(storyKey(story)))
     )
   );
   const moreSections = [
     {
-      key: "random-news",
-      title: "More News",
-      eyebrow: "Random mix",
+      key: "recent-pushes",
+      title: "Recent Pushes",
+      eyebrow: "Fresh from the desk",
       hideAction: true,
       layout: "catalog",
       cardVariant: "dense",
-      stories: randomMixStories,
+      stories: recentPushStories,
     },
   ].filter((section) => section.stories.length);
 
   const tickerStories = dedupeStories([
     hero,
     ...trending,
-    ...randomMixStories,
+    ...recentPushStories,
   ].filter(Boolean));
 
   return { hero, trending, topSections, moreSections, tickerStories };
@@ -1736,44 +1734,20 @@ function buildFocusedLayout(stories = [], filter = "all") {
           ? dedupeStories(sortStoriesForTrending(renderableStories.filter(isBusinessFocusStory), "just-in"))
     : latestPool;
   const deskStories = focusedPool.length ? focusedPool : latestPool;
-  const hero = selectHeadlineOfTheDay(deskStories) || deskStories[0] || null;
   const label = filter === "latest" ? "Latest" : activeDeskLabel();
-  const trendingBase = filter === "india-pulse"
-    ? sortStoriesForHomepageFocus(deskStories)
-    : sortStoriesForTrending(deskStories, activeTrendingMode);
-  if (currentPage > 1) {
-    return {
-      hero: null,
-      trending: [],
-      topSections: [],
-      moreSections: [],
-      fullGridStories: deterministicShuffle(deskStories, currentPage).slice(0, getPageSizeForFilter(filter)),
-      hideHero: true,
-      hideTrending: true,
-      pageTitle: `${label} Page ${currentPage}`,
-    };
-  }
-  const trending = trendingBase.slice(0, TRENDING_COUNT);
-  const topSections = [
-    {
-      key: `${filter}-catalog`,
-      title: filter === "india-pulse" ? "India Pulse" : `${label} Desk`,
-      eyebrow: filter === "india-pulse"
-        ? "Most searched and high-impact"
-        : filter === "startups-funding"
-          ? "Capital, founders and deals"
-          : CATEGORY_EYEBROWS[filter] || "Category desk",
-      filter,
-      hideAction: true,
-      layout: "catalog",
-      cardVariant: "dense",
-      stories: deskStories.slice(0, DESK_PAGE_SIZE),
-    },
-  ];
+  const fullGridStories = deskStories.slice(0, getPageSizeForFilter(filter));
 
-  const moreSections = [];
-
-  return { hero, trending, topSections, moreSections };
+  return {
+    hero: null,
+    trending: [],
+    topSections: [],
+    moreSections: [],
+    fullGridStories,
+    hideHero: true,
+    hideTrending: true,
+    hideSectionHead: true,
+    pageTitle: currentPage > 1 ? `${label} Page ${currentPage}` : `${label} News`,
+  };
 }
 
 function createSkeletonCard(variant = "") {
@@ -1791,6 +1765,7 @@ function createSkeletonCard(variant = "") {
 }
 
 function renderLoadingState() {
+  const isFocusedDeskView = !activeSearchQuery && activeFilter !== "all" && activeFilter !== "latest";
   syncHomeModeVisibility();
   pendingTopSections = [];
   if (topSectionsObserver) {
@@ -1798,12 +1773,14 @@ function renderLoadingState() {
     topSectionsObserver = null;
   }
 
-  if (heroSectionEl) heroSectionEl.hidden = currentPage > 1;
-  if (trendingSectionEl) trendingSectionEl.hidden = currentPage > 1;
-  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = currentPage > 1;
+  if (heroSectionEl) heroSectionEl.hidden = currentPage > 1 || isFocusedDeskView;
+  if (trendingSectionEl) trendingSectionEl.hidden = currentPage > 1 || isFocusedDeskView;
+  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = true;
   if (moreNewsSectionEl) moreNewsSectionEl.hidden = false;
-  if (homepageSidebarEl) homepageSidebarEl.hidden = currentPage > 1;
-  if (currentPage <= 1) {
+  if (moreNewsSectionEl) moreNewsSectionEl.classList.toggle("more-news-shell--clean", isFocusedDeskView || currentPage > 1);
+  if (moreNewsSectionHeadEl) moreNewsSectionHeadEl.hidden = isFocusedDeskView || currentPage > 1;
+  if (homepageSidebarEl) homepageSidebarEl.hidden = currentPage > 1 || isFocusedDeskView;
+  if (currentPage <= 1 && !isFocusedDeskView) {
     headlineOfTheDayLink.textContent = "Loading headline...";
     headlineOfTheDayLink.href = "/";
     heroSummaryEl.textContent = "Preparing the latest stories across every SunWire desk.";
@@ -1823,22 +1800,8 @@ function renderLoadingState() {
   if (categorySectionsGridEl) categorySectionsGridEl.innerHTML = "";
   if (moreNewsGridEl) moreNewsGridEl.innerHTML = "";
 
-  if (currentPage <= 1 && trendingGridEl) {
+  if (currentPage <= 1 && !isFocusedDeskView && trendingGridEl) {
     for (let i = 0; i < 4; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
-  }
-
-  if (currentPage <= 1 && categorySectionsGridEl) {
-    for (let i = 0; i < HOMEPAGE_SECTION_DEFINITIONS.length; i += 1) {
-      const panel = sectionPanelTemplate.content.firstElementChild.cloneNode(true);
-      panel.classList.add("content-visibility");
-      panel.querySelector(".desk-panel__eyebrow").textContent = "Loading";
-      panel.querySelector(".desk-panel__title").textContent = "Loading stories";
-      panel.querySelector(".desk-panel__action").hidden = true;
-      const grid = panel.querySelector(".desk-panel__grid");
-      grid.classList.add("desk-panel__grid--rail");
-      for (let j = 0; j < 8; j += 1) grid.appendChild(createSkeletonCard("compact"));
-      categorySectionsGridEl.appendChild(panel);
-    }
   }
 
   if (moreNewsGridEl) {
@@ -1847,7 +1810,10 @@ function renderLoadingState() {
     moreNewsGridEl.classList.toggle("news-card-grid--page", currentPage > 1);
     moreNewsGridEl.classList.toggle("news-card-grid--homepage", currentPage <= 1);
     const loadingGrid = document.createDocumentFragment();
-    for (let i = 0; i < (currentPage > 1 ? DEFAULT_HOME_PAGE_SIZE : RANDOM_NEWS_COUNT); i += 1) {
+    const loadingCount = currentPage > 1 || isFocusedDeskView
+      ? getPageSizeForFilter(activeFilter)
+      : RANDOM_NEWS_COUNT;
+    for (let i = 0; i < loadingCount; i += 1) {
       loadingGrid.appendChild(createSkeletonCard("dense"));
     }
     moreNewsGridEl.appendChild(loadingGrid);
@@ -2396,16 +2362,18 @@ function countVisibleStories(layout = {}) {
 
 function renderHomepageLayout(layout) {
   const hasFullGrid = Array.isArray(layout?.fullGridStories) && layout.fullGridStories.length > 0;
-  const hasTopSections = Array.isArray(layout?.topSections) && layout.topSections.length > 0;
   const hasMoreSections = Array.isArray(layout?.moreSections) && layout.moreSections.length > 0;
   const isFocusedDeskView = activeFilter !== "all" && activeFilter !== "latest";
   const archiveMode = isArchiveRouteState() || hasFullGrid;
+  const hideMoreNewsHeader = Boolean(layout?.hideSectionHead);
 
   if (homeTopLayoutEl) homeTopLayoutEl.hidden = archiveMode;
   if (heroSectionEl) heroSectionEl.hidden = archiveMode;
   if (trendingSectionEl) trendingSectionEl.hidden = archiveMode;
-  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = archiveMode || !hasTopSections;
+  if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = true;
   if (moreNewsSectionEl) moreNewsSectionEl.hidden = !(hasMoreSections || hasFullGrid);
+  if (moreNewsSectionEl) moreNewsSectionEl.classList.toggle("more-news-shell--clean", hideMoreNewsHeader);
+  if (moreNewsSectionHeadEl) moreNewsSectionHeadEl.hidden = hideMoreNewsHeader;
   if (homepageSidebarEl) homepageSidebarEl.hidden = archiveMode;
   if (paginationShellEl) paginationShellEl.hidden = totalPages <= 1;
   if (document.body) {
@@ -2413,24 +2381,22 @@ function renderHomepageLayout(layout) {
   }
   if (categorySectionsGridEl) categorySectionsGridEl.classList.toggle("desk-panels--focused", isFocusedDeskView);
   if (categoryNewsTitleEl) {
-    categoryNewsTitleEl.textContent = activeFilter === "all" || activeFilter === "latest"
-      ? "Category News Grid"
-      : `${activeDeskLabel()} Desk`;
+    categoryNewsTitleEl.textContent = "Category News Grid";
   }
   if (moreNewsTitleEl) {
     moreNewsTitleEl.textContent = hasFullGrid
-      ? (layout.pageTitle || `Page ${currentPage} News Grid`)
-      : "More News";
+      ? (layout.pageTitle || `${activeDeskLabel()} News`)
+      : "Recent Pushes";
   }
 
   if (!hasFullGrid) {
     renderHero(layout.hero);
     renderTrendingSection(layout.trending || []);
     scheduleTopSectionsRender(layout.topSections || [], "dense");
-    const randomStories = Array.isArray(layout.moreSections?.[0]?.stories)
+    const recentStories = Array.isArray(layout.moreSections?.[0]?.stories)
       ? layout.moreSections[0].stories
       : [];
-    if (moreNewsGridEl) renderFlatNewsGrid(moreNewsGridEl, randomStories, "dense");
+    if (moreNewsGridEl) renderFlatNewsGrid(moreNewsGridEl, recentStories, "dense");
   } else {
     scheduleTopSectionsRender([], "dense");
     if (moreNewsGridEl) renderFlatNewsGrid(moreNewsGridEl, layout.fullGridStories || [], "dense");

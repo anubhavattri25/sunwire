@@ -276,6 +276,18 @@ function storyImage(story = {}, category = "latest") {
   return buildFallbackImage(story, category);
 }
 
+function getMountedArticleImageSrc() {
+  const src = decodeHtmlEntities(String(
+    dom.articleImage?.currentSrc
+    || dom.articleImage?.getAttribute("src")
+    || ""
+  ).trim());
+  if (!src) return "";
+  if (/placehold\.co/i.test(src)) return "";
+  if (/social-card\.svg(\?|$)/i.test(src)) return "";
+  return src;
+}
+
 function storyCardImage(story = {}) {
   const imageUrl = decodeHtmlEntities(String(story.image || story.image_url || story.image_storage_url || "").trim());
   if (!/^https?:\/\//i.test(imageUrl)) return "";
@@ -571,7 +583,7 @@ function applyArticleData(article = {}, fallback = {}) {
   const authorName = article.authorName || fallback.authorName || article.source || fallback.source || "Sunwire News Desk";
   const sourceName = article.source || fallback.source || "SunWire Desk";
   const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
-  const imageUrl = storyImage({ image: article.image || fallback.image || "" }, deskFilter);
+  const imageUrl = storyImage({ image: article.image || fallback.image || getMountedArticleImageSrc() || "" }, deskFilter);
   const readingTime = Number(article.estimatedReadingTime || 0) > 0 ? `${Number(article.estimatedReadingTime)} min read` : "4 min read";
   const tags = Array.isArray(article.tags) ? article.tags.slice(0, 5) : [];
 
@@ -592,7 +604,7 @@ function applyArticleData(article = {}, fallback = {}) {
     alt: headline,
     width: 1600,
     height: 900,
-    sizes: "(max-width: 960px) 100vw, 38vw",
+    sizes: "(max-width: 960px) 100vw, 46vw",
     highPriority: true,
   });
 
@@ -760,6 +772,7 @@ function readStoryParams() {
   const pathSlug = pathMatch ? decodeURIComponent(pathMatch[1] || "") : "";
   const preloaded = readPreloadedArticleData();
   if (preloaded?.story) {
+    const mountedArticleImage = getMountedArticleImageSrc();
     return {
       id: preloaded.story.id || "",
       slug: preloaded.story.slug || "",
@@ -771,7 +784,7 @@ function readStoryParams() {
       publishedAt: preloaded.story.source_published_at || preloaded.story.published_at || preloaded.story.publishedAt || "",
       summary: preloaded.story.summary || "",
       subheadline: preloaded.story.subheadline || "",
-      image: preloaded.story.image || "",
+      image: preloaded.story.image || preloaded.article?.image || mountedArticleImage || "",
       content: preloaded.story.content || "",
       body: preloaded.story.body || preloaded.story.content || "",
       canonicalUrl: buildCanonicalArticleUrl({
@@ -790,6 +803,7 @@ function readStoryParams() {
   const publishedAt = params.get("p") || "";
   const summary = decodeHtmlEntities(params.get("m") || "");
   const image = decodeHtmlEntities(params.get("i") || "");
+  const mountedArticleImage = getMountedArticleImageSrc();
 
   return {
     id: params.get("id") || "",
@@ -802,7 +816,7 @@ function readStoryParams() {
     publishedAt,
     summary,
     subheadline: "",
-    image,
+    image: image || mountedArticleImage || "",
     content: "",
     body: "",
     canonicalUrl: buildCanonicalArticleUrl({
@@ -823,7 +837,7 @@ function renderInitialStoryState(story) {
   appliedArticleScore = -1;
   const deskFilter = normalizeDeskFilter(story.category);
   const deskLabel = displayDeskLabel(story.category);
-  const imageUrl = storyImage({ image: story.image }, deskFilter);
+  const imageUrl = storyImage({ image: story.image || getMountedArticleImageSrc() || "" }, deskFilter);
   const initialSummary = sanitizeArticleCopy(story.summary, { maxSentences: 2 }) || "Loading verified details...";
 
   dom.breadcrumbDesk.textContent = deskLabel;
@@ -846,7 +860,7 @@ function renderInitialStoryState(story) {
     alt: cleanText(story.title || "Story image"),
     width: 1600,
     height: 900,
-    sizes: "(max-width: 960px) 100vw, 38vw",
+    sizes: "(max-width: 960px) 100vw, 46vw",
     highPriority: true,
   });
 

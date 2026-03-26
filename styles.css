@@ -1849,7 +1849,7 @@ body[data-home-mode="archive"] .category-zone {
   gap: 18px;
   align-items: stretch;
   width: 100%;
-  min-height: clamp(520px, calc(100vh - 270px), 610px);
+  min-height: clamp(500px, calc(100vh - 310px), 580px);
 }
 
 .home-left-col {
@@ -1867,9 +1867,9 @@ body[data-home-mode="archive"] .category-zone {
   border-radius: 24px;
   overflow: hidden;
   background: #111;
-  height: min(68vh, 720px);
+  height: clamp(480px, 61vh, 620px);
   aspect-ratio: auto;
-  min-height: 520px;
+  min-height: 480px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
 }
 
@@ -2069,10 +2069,10 @@ body[data-home-mode="archive"] .category-zone {
 
 .right-sidebar {
   display: grid;
-  grid-template-rows: auto auto auto;
+  grid-template-rows: minmax(0, 1fr) auto auto;
   gap: 14px;
-  align-self: start;
-  height: auto;
+  align-self: stretch;
+  height: 100%;
   min-width: 0;
 }
 
@@ -2097,7 +2097,8 @@ body[data-home-mode="archive"] .category-zone {
 
 /* AI Tool card */
 .sidebar-card--tool {
-  padding: 22px 24px 18px;
+  padding: 20px 22px 16px;
+  min-height: 0;
 }
 
 .sidebar-card--tool .sidebar-card__eyebrow {
@@ -2118,10 +2119,10 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .sidebar-card--tool h3 {
-  margin: 0 0 10px;
+  margin: 0 0 8px;
   font-family: "Inter Tight", sans-serif;
-  font-size: 1.9rem;
-  line-height: 1;
+  font-size: 1.72rem;
+  line-height: 0.98;
   letter-spacing: -0.055em;
   font-weight: 900;
   color: var(--ink);
@@ -2130,12 +2131,16 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .sidebar-card--tool p {
-  margin: 0 0 16px;
+  margin: 0 0 14px;
   color: var(--ink-soft);
-  line-height: 1.55;
-  font-size: 0.96rem;
+  line-height: 1.48;
+  font-size: 0.92rem;
   overflow-wrap: anywhere;
   word-break: break-word;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .sidebar-button {
@@ -2162,11 +2167,22 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .tool-no-cc {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   text-align: center;
-  font-size: 0.82rem;
+  font-size: 0.8rem;
   color: #2ecc71;
   font-weight: 600;
+}
+
+.more-news-shell--clean {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+}
+
+.more-news-shell--clean .section-head {
+  display: none;
 }
 
 /* Price Moves card */
@@ -2390,29 +2406,34 @@ body[data-home-mode="archive"] .category-zone {
 }
 .sidebar-card--tool h3 {
   font-family: "Inter Tight", sans-serif !important;
-  font-size: clamp(1.85rem, 2.05vw, 2.35rem) !important;
+  font-size: clamp(1.6rem, 1.92vw, 2.05rem) !important;
   font-weight: 900 !important;
   color: #111 !important;
   letter-spacing: -0.05em !important;
-  margin-bottom: 6px !important;
+  margin-bottom: 4px !important;
 }
 .sidebar-card--tool p:not(.tool-no-cc) {
-  font-size: 0.92rem !important;
+  font-size: 0.88rem !important;
   color: #555 !important;
-  max-width: 56% !important;
-  margin-bottom: 14px !important;
+  max-width: 48% !important;
+  margin-bottom: 12px !important;
+  line-height: 1.42 !important;
+  display: -webkit-box !important;
+  -webkit-line-clamp: 3 !important;
+  -webkit-box-orient: vertical !important;
+  overflow: hidden !important;
 }
 .sidebar-button {
   background: #fcc23a !important;
   font-weight: 900 !important;
-  font-size: 0.98rem !important;
+  font-size: 0.94rem !important;
   width: fit-content !important;
-  min-width: 214px !important;
+  min-width: 192px !important;
   display: inline-flex !important;
   justify-content: center !important;
-  padding: 12px 22px !important;
+  padding: 11px 20px !important;
   box-shadow: inset 0 -2px 0 rgba(0,0,0,0.1) !important;
-  margin-top: 6px !important;
+  margin-top: 4px !important;
 }
 .eyebrow-icon { color: #fcc23a !important; }
 
