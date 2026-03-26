@@ -10,7 +10,6 @@ const ADMIN_CATEGORIES = [
   'politics',
   'business',
   'jobs',
-  'food',
 ];
 const ADMIN_PLACEMENTS = ['headline', 'trending'];
 const FEATURED_EXPIRY_INTERVAL_MS = 60 * 1000;

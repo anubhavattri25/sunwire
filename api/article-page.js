@@ -24,7 +24,7 @@ const { buildPublisherReview } = require("../lib/article/publisherReview");
 const { cleanText, isLowValueTrendText } = require("../lib/article/shared");
 const ARTICLE_SSR_POOL_SIZE = 250;
 const ARTICLE_FALLBACK_POOL_SIZE = 120;
-const ARTICLE_FALLBACK_FILTERS = ["politics", "business", "ai", "tech", "entertainment", "sports", "jobs", "food"];
+const ARTICLE_FALLBACK_FILTERS = ["politics", "business", "ai", "tech", "entertainment", "sports", "jobs"];
 const ARTICLE_BROWSER_CACHE_CONTROL = "public, max-age=60, stale-while-revalidate=300";
 const ARTICLE_CDN_CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=600";
 

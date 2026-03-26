@@ -98,7 +98,7 @@ const FILTER_ALIASES = {
   all: "all",
   latest: "all",
   "india-pulse": "all",
-  politics: "all",
+  politics: "politics",
   "war-conflict": "all",
   "startups-funding": "all",
   ai: "ai",
@@ -106,8 +106,9 @@ const FILTER_ALIASES = {
   entertainment: "entertainment",
   sports: "sports",
   business: "business",
+  jobs: "jobs",
 };
-const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs", "food"];
+const CATEGORY_KEYS = ["ai", "tech", "entertainment", "sports", "business", "politics", "jobs"];
 const TECH_DESK_SOURCE_PATTERNS = [
   /livemint tech/i,
   /indian express tech/i,
@@ -140,7 +141,6 @@ const HOMEPAGE_SECTION_DEFINITIONS = [
   { key: "business", title: "Business", eyebrow: "Markets and money", category: "business", filter: "business" },
   { key: "politics", title: "Politics", eyebrow: "Power and policy", category: "politics", filter: "politics" },
   { key: "jobs", title: "Jobs", eyebrow: "Hiring and careers", category: "jobs", filter: "jobs" },
-  { key: "food", title: "Food", eyebrow: "Dining and culture", category: "food", filter: "food" },
 ];
 const SEO_SITE_NAME = "Sunwire";
 const SEO_SITE_ORIGIN = "https://sunwire.in";
@@ -175,6 +175,14 @@ const SEO_FILTER_META = {
   business: {
     title: "Business News | Sunwire",
     description: "Latest business news on startups, funding, markets, earnings, platform economics, and company moves on Sunwire.",
+  },
+  politics: {
+    title: "Politics News | Sunwire",
+    description: "Latest politics news covering ministers, policy, elections, government, and power moves on Sunwire.",
+  },
+  jobs: {
+    title: "Jobs News | Sunwire",
+    description: "Latest jobs and hiring news covering recruitment, vacancies, careers, and government opportunities on Sunwire.",
   },
 };
 const CATEGORY_EYEBROWS = {
@@ -753,7 +761,7 @@ function buildSectionPath(filter = activeFilter, page = currentPage) {
 function parseHomeRoute(location = window.location) {
   const queryParams = new URLSearchParams(location.search);
   const pathname = String(location.pathname || "/").replace(/\/+$/g, "") || "/";
-  const sectionMatch = pathname.match(/^\/(ai|tech|entertainment|sports|business)(?:\/page\/(\d+))?$/i);
+  const sectionMatch = pathname.match(/^\/(ai|tech|entertainment|sports|business|politics|jobs)(?:\/page\/(\d+))?$/i);
   const rootPageMatch = pathname.match(/^\/page\/(\d+)$/i);
 
   if (sectionMatch) {
@@ -1585,26 +1593,6 @@ function buildHomepageSectionStories(section = {}, allStories = [], categoryMap 
   if (section.source === "jobs") {
     const exactStories = takeUnique(
       sortStoriesForTrending(baseStories.filter(isJobsStory), "just-in").map((story) => ({
-        ...story,
-        displayCategory: sectionLabel,
-      })),
-      new Set(),
-      8
-    );
-    const fallbackStories = mapSectionStories(
-      takeUnique(
-        latestPool.filter((story) => !exactStories.some((entry) => storyKey(entry) === storyKey(story))),
-        new Set(),
-        Math.max(0, 8 - exactStories.length)
-      ),
-      sectionLabel
-    );
-    return [...exactStories, ...fallbackStories].slice(0, 8);
-  }
-
-  if (section.source === "food") {
-    const exactStories = takeUnique(
-      sortStoriesForTrending(baseStories.filter(isFoodStory), "just-in").map((story) => ({
         ...story,
         displayCategory: sectionLabel,
       })),
@@ -2617,6 +2605,7 @@ async function performSearch(query = "", { forceRefresh = false, shouldPushState
 }
 
 menuToggle.addEventListener("click", () => {
+  setAdminMenuOpenState(false);
   siteHeader.classList.toggle("is-open");
   syncActiveControls();
 });
@@ -2681,6 +2670,7 @@ authButton?.addEventListener("click", async () => {
 
 adminMenuButton?.addEventListener("click", () => {
   const isOpen = adminMenu?.classList.contains("is-open");
+  siteHeader.classList.remove("is-open");
   setAdminMenuOpenState(!isOpen);
 });
 

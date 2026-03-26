@@ -645,6 +645,10 @@ function renderArchive(items = []) {
 }
 
 function applyArticleToForm(article = {}) {
+  const normalizedCategory = cleanText(article.category || "ai") || "ai";
+  const hasCategoryOption = dom.categoryInput
+    ? [...dom.categoryInput.options].some((option) => option.value === normalizedCategory)
+    : false;
   state.currentEditingArticleId = cleanText(article.id || "");
   if (dom.headlineInput) dom.headlineInput.value = cleanText(article.headline || "");
   if (dom.subheadlineInput) dom.subheadlineInput.value = cleanText(article.subheadline || "");
@@ -652,7 +656,7 @@ function applyArticleToForm(article = {}) {
   if (dom.sourceInput) dom.sourceInput.value = cleanText(article.source || "");
   if (dom.primarySourceNameInput) dom.primarySourceNameInput.value = cleanText(article.primarySourceName || article.source || "");
   if (dom.primarySourceUrlInput) dom.primarySourceUrlInput.value = cleanText(article.primarySourceUrl || "");
-  if (dom.categoryInput) dom.categoryInput.value = cleanText(article.category || "ai") || "ai";
+  if (dom.categoryInput) dom.categoryInput.value = hasCategoryOption ? normalizedCategory : "ai";
   if (dom.showOnHeroInput) dom.showOnHeroInput.checked = Boolean(article.showOnHero);
   if (dom.durationMinutesInput) dom.durationMinutesInput.value = "";
   if (dom.featuredUntilInput) dom.featuredUntilInput.value = toLocalDateTimeValue(article.featuredUntil || "");

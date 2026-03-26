@@ -53,12 +53,42 @@
       resize: vertical;
     }
 
+    input,
+    textarea,
+    select,
+    button {
+      font-size: 16px;
+    }
+
     .dashboard-view[hidden] {
       display: none !important;
     }
 
     .archive-group + .archive-group {
       margin-top: 2rem;
+    }
+
+    @media (max-width: 768px) {
+      .mobile-stack {
+        flex-direction: column;
+        align-items: stretch;
+      }
+
+      .mobile-stack > * {
+        width: 100%;
+      }
+
+      .mobile-sticky-actions {
+        position: sticky;
+        bottom: 10px;
+        z-index: 40;
+        padding: 14px;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        border-radius: 24px;
+        background: rgba(255, 255, 255, 0.92);
+        box-shadow: 0 18px 42px rgba(16, 24, 38, 0.16);
+        backdrop-filter: blur(16px);
+      }
     }
   </style>
 </head>
@@ -143,7 +173,7 @@
                 <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950" id="editorHeading">Create article-ready story</h2>
                 <p class="mt-2 text-sm text-slate-500" id="currentEditMeta">Fill every field needed for homepage, category, and article page quality.</p>
               </div>
-              <div class="flex flex-wrap gap-2">
+              <div class="flex flex-wrap gap-2 mobile-stack">
                 <button class="rounded-full bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200" data-duration-minutes="30" type="button">30 min</button>
                 <button class="rounded-full bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200" data-duration-minutes="60" type="button">1 hour</button>
                 <button class="rounded-full bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200" data-duration-minutes="360" type="button">6 hours</button>
@@ -239,7 +269,6 @@
                         <option value="politics">Politics</option>
                         <option value="business">Business</option>
                         <option value="jobs">Jobs</option>
-                        <option value="food">Food</option>
                       </select>
                     </label>
 
@@ -334,7 +363,7 @@
                 </section>
               </div>
 
-              <div class="flex flex-wrap items-center gap-3">
+              <div class="flex flex-wrap items-center gap-3 mobile-stack mobile-sticky-actions">
                 <button class="rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60" id="pushNewsButton" type="submit">
                   Push News
                 </button>
@@ -404,6 +433,6 @@
     <div class="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-2xl" id="toastMessage">Saved</div>
   </div>
 
-  <script type="module" src="/admin/news.js?v=20260326-2"></script>
+  <script type="module" src="/admin/news.js?v=20260326-3"></script>
 </body>
 </html>
