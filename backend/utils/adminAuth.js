@@ -228,7 +228,9 @@ function sendUnauthorized(res, statusCode = 403) {
 }
 
 async function requireNewsroomSession(req, res, options = {}) {
-  const session = await readAdminSession(req);
+  const session = await readAdminSession(req, {
+    trustSignedRole: options.trustSignedRole === true,
+  });
   const allowedRoles = Array.isArray(options.roles) && options.roles.length
     ? options.roles
     : [NEWSROOM_ROLES.ADMIN];

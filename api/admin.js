@@ -289,7 +289,10 @@ async function renderAdminPage(req, res) {
     return;
   }
 
-  const session = await requireSubmitterSession(req, res, { redirectTo: '/' });
+  const session = await requireSubmitterSession(req, res, {
+    redirectTo: '/',
+    trustSignedRole: true,
+  });
   if (!session) return;
 
   const templatePath = path.join(process.cwd(), 'templates', 'admin-news.html');
@@ -325,10 +328,9 @@ async function renderAdminPage(req, res) {
 
 async function handleSession(req, res) {
   res.setHeader('Cache-Control', 'no-store');
-  await ensureNewsroomTables(prisma);
 
   if (req.method === 'GET') {
-    const session = await readAdminSession(req);
+    const session = await readAdminSession(req, { trustSignedRole: true });
     return res.status(200).json({
       authenticated: Boolean(session?.email),
       adminEmail: ADMIN_EMAIL,
@@ -347,6 +349,7 @@ async function handleSession(req, res) {
   }
 
   const body = await readJsonBody(req);
+  await ensureNewsroomTables(prisma);
   const profile = await verifyGoogleIdToken(body?.idToken || '');
   const role = await resolveNewsroomRole(profile.email);
   if (!role) {

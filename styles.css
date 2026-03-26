@@ -1534,7 +1534,7 @@ body[data-home-mode="archive"] .category-zone {
   .site-header__inner {
     grid-template-columns: minmax(0, 1fr) auto;
     grid-template-areas:
-      "brand brand"
+      "brand actions"
       "menu actions"
       "nav nav";
     gap: 10px;
@@ -1562,7 +1562,8 @@ body[data-home-mode="archive"] .category-zone {
     align-items: center;
     justify-items: end;
     justify-self: end;
-    width: auto;
+    align-self: stretch;
+    width: min(54vw, 250px);
     gap: 8px;
   }
 
@@ -1623,21 +1624,32 @@ body[data-home-mode="archive"] .category-zone {
 
   #authButton {
     grid-area: auth;
-    width: auto;
-    max-width: min(54vw, 240px);
+    width: 100%;
+    max-width: 100%;
     justify-content: flex-start;
     justify-self: end;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    padding-inline: 12px;
   }
 
   .admin-menu-panel {
     left: auto;
     right: 0;
-    width: min(320px, calc(100vw - 20px));
-    max-height: min(60vh, 360px);
-    padding: 10px;
+    min-width: 0;
+    width: min(216px, calc(100vw - 24px));
+    max-height: min(52vh, 300px);
+    padding: 6px;
+    gap: 2px;
+    border-radius: 16px;
+    top: calc(100% + 8px);
+  }
+
+  .admin-menu-item {
+    min-height: 40px;
+    padding: 10px 12px;
+    font-size: 0.82rem;
   }
 
   .header-search {
@@ -2512,6 +2524,34 @@ body[data-home-mode="archive"] .category-zone {
 .auth-feedback.is-success { background: rgba(43, 138, 62, 0.08); border-color: rgba(43, 138, 62, 0.2); color: #2b8a3e; }
 .text-button.is-authenticated { color: #2b8a3e; font-weight: 800; }
 .text-button.is-busy { opacity: 0.6; pointer-events: none; }
+
+@media (max-width: 420px) {
+  .site-actions {
+    width: min(56vw, 240px);
+  }
+
+  .brand__title {
+    font-size: clamp(1.78rem, 8.2vw, 2.28rem);
+  }
+
+  .brand__tagline {
+    font-size: 0.54rem;
+  }
+
+  .menu-toggle {
+    min-height: 40px;
+    padding-inline: 14px;
+  }
+
+  .text-button {
+    min-height: 36px;
+    font-size: 0.78rem;
+  }
+
+  .admin-menu-panel {
+    width: min(204px, calc(100vw - 20px));
+  }
+}
 /* RIGHT SIDEBAR TWEAKS applied to exactly match spec */
 .sidebar-card {
   border-radius: 24px !important;

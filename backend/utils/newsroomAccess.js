@@ -1,6 +1,12 @@
 const { randomUUID } = require('node:crypto');
 const globalForNewsroomTables = globalThis;
 
+function shouldSkipRuntimeTableSetup() {
+  return process.env.VERCEL === '1'
+    || process.env.VERCEL === 'true'
+    || process.env.NODE_ENV === 'production';
+}
+
 function cleanText(value = '') {
   return String(value || '').trim();
 }
@@ -10,6 +16,10 @@ function normalizeEmail(value = '') {
 }
 
 async function ensureNewsroomTables(prisma) {
+  if (shouldSkipRuntimeTableSetup()) {
+    globalForNewsroomTables.__sunwireNewsroomTablesReady = true;
+    return;
+  }
   if (globalForNewsroomTables.__sunwireNewsroomTablesReady) return;
   if (globalForNewsroomTables.__sunwireNewsroomTablesPromise) {
     await globalForNewsroomTables.__sunwireNewsroomTablesPromise;
