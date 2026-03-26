@@ -672,8 +672,16 @@ function draftPreviewArticle() {
 function renderFeaturedStatus(article) {
   state.featuredArticle = article || null;
   if (!article) {
-    if (dom.featuredStatus) dom.featuredStatus.textContent = "No live hero article.";
-    if (dom.featuredMeta) dom.featuredMeta.textContent = "Push a story with hero enabled to reserve the homepage top slot.";
+    if (dom.featuredStatus) {
+      dom.featuredStatus.textContent = isAdminRole()
+        ? "No live hero article."
+        : "Draft hero preview updates here.";
+    }
+    if (dom.featuredMeta) {
+      dom.featuredMeta.textContent = isAdminRole()
+        ? "Push a story with hero enabled to reserve the homepage top slot."
+        : "Turn hero on to request homepage priority for this story.";
+    }
     if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = true;
     syncFeaturedPreview();
     return;
@@ -689,7 +697,10 @@ function renderFeaturedStatus(article) {
 }
 
 function syncFeaturedPreview() {
-  const sourceArticle = dom.showOnHeroInput?.checked ? draftPreviewArticle() : (state.featuredArticle || draftPreviewArticle());
+  const draftArticle = draftPreviewArticle();
+  const sourceArticle = (!isAdminRole() || dom.showOnHeroInput?.checked || !state.featuredArticle)
+    ? draftArticle
+    : state.featuredArticle;
   const hasPreview = Boolean(cleanText(sourceArticle.title || "") || cleanText(sourceArticle.source || "") || cleanText(sourceArticle.image_url || ""));
 
   if (!hasPreview) {
@@ -1616,6 +1627,7 @@ async function init() {
   }
 
   setViewMode(state.mode, { skipUrl: true });
+  renderFeaturedStatus(null);
   resetStructuredInputs();
   syncRoleVisibility();
   attachDraftPreviewListeners();

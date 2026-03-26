@@ -1558,7 +1558,7 @@ body[data-home-mode="archive"] .category-zone {
     grid-template-columns: auto auto;
     grid-template-areas:
       "auth auth"
-      "search admin";
+      "admin search";
     align-items: center;
     justify-items: end;
     justify-self: end;
@@ -1605,6 +1605,7 @@ body[data-home-mode="archive"] .category-zone {
     width: 40px;
     height: 40px;
     grid-area: search;
+    justify-self: end;
   }
 
   .signal-button {
@@ -1619,7 +1620,7 @@ body[data-home-mode="archive"] .category-zone {
 
   .admin-menu {
     grid-area: admin;
-    justify-self: end;
+    justify-self: start;
   }
 
   #authButton {
@@ -1635,10 +1636,10 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .admin-menu-panel {
-    left: auto;
-    right: 0;
+    left: 0;
+    right: auto;
     min-width: 0;
-    width: min(216px, calc(100vw - 24px));
+    width: min(208px, calc(100vw - 32px));
     max-height: min(52vh, 300px);
     padding: 6px;
     gap: 2px;
@@ -2549,7 +2550,7 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .admin-menu-panel {
-    width: min(204px, calc(100vw - 20px));
+    width: min(196px, calc(100vw - 24px));
   }
 }
 /* RIGHT SIDEBAR TWEAKS applied to exactly match spec */
