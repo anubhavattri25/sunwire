@@ -35,6 +35,13 @@ const {
   updateNewsRequest,
 } = require('../backend/utils/newsroomAccess');
 const { uploadImageToCloudinary } = require('../backend/utils/adminImageUpload');
+const {
+  getDatabaseBusyMessage,
+  isDatabaseCoolingDown,
+  isDatabasePoolLimitError,
+  markDatabasePressure,
+  normalizeDatabaseError,
+} = require('../backend/utils/databaseAvailability');
 const { readJsonBody } = require('../backend/utils/requestBody');
 const { slugify } = require('../lib/seo');
 
@@ -45,6 +52,12 @@ const MIN_KEY_POINTS = 3;
 const MIN_FACT_SHEET_ROWS = 4;
 const MIN_BACKGROUND_ITEMS = 2;
 const ADMIN_PAGE_MODES = new Set(['news-requests', 'edit-news', 'watch-all-news', 'submit-request', 'access-control']);
+const adminDashboardCache = globalThis.__SUNWIRE_ADMIN_DASHBOARD_CACHE__ || {
+  summary: null,
+  archive: null,
+};
+
+globalThis.__SUNWIRE_ADMIN_DASHBOARD_CACHE__ = adminDashboardCache;
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -398,79 +411,147 @@ function buildAdminSummaryResponse({
 
 async function fetchAdminSummary(options = {}) {
   const includeCounts = options.includeCounts !== false;
-  await ensureNewsroomTables(prisma);
-  await expireFeaturedArticles(prisma);
-  const [featured, recentManual, totalManual] = await prisma.$transaction([
-    prisma.article.findFirst({
-      where: {
-        manual_upload: true,
-        is_featured: true,
-        featured_until: { gt: new Date() },
-      },
-      select: articleSelect,
-      orderBy: [
-        { featured_until: 'desc' },
-        { created_at: 'desc' },
-      ],
-    }),
-    prisma.article.findMany({
-      where: { manual_upload: true },
-      select: articleSelect,
-      orderBy: [{ created_at: 'desc' }],
-      take: 12,
-    }),
-    prisma.article.count({ where: { manual_upload: true } }),
-  ]);
+  const cachedSummary = adminDashboardCache.summary;
+  const fallbackSummary = includeCounts
+    ? (cachedSummary || buildAdminSummaryResponse({
+      featured: null,
+      recent: [],
+      totalManual: 0,
+      pendingRequests: 0,
+      submitterCount: 0,
+    }))
+    : (cachedSummary || buildAdminSummaryResponse({
+      featured: null,
+      recent: [],
+      totalManual: 0,
+    }));
 
-  if (!includeCounts) {
-    return buildAdminSummaryResponse({
-      featured,
-      recent: recentManual,
-      totalManual,
-    });
+  if (isDatabaseCoolingDown()) {
+    return {
+      ...fallbackSummary,
+      degraded: true,
+      message: getDatabaseBusyMessage(),
+    };
   }
 
-  const counts = await prisma.$transaction(async (tx) => {
-    const pending = await listNewsRequests(tx, { status: 'pending', limit: 100 });
-    const submitters = await listAuthorizedSubmitters(tx);
-    return {
-      pendingRequests: pending.length,
-      submitterCount: submitters.length,
-    };
-  });
+  try {
+    await ensureNewsroomTables(prisma);
+    await expireFeaturedArticles(prisma);
+    const [featured, recentManual, totalManual] = await prisma.$transaction([
+      prisma.article.findFirst({
+        where: {
+          manual_upload: true,
+          is_featured: true,
+          featured_until: { gt: new Date() },
+        },
+        select: articleSelect,
+        orderBy: [
+          { featured_until: 'desc' },
+          { created_at: 'desc' },
+        ],
+      }),
+      prisma.article.findMany({
+        where: { manual_upload: true },
+        select: articleSelect,
+        orderBy: [{ created_at: 'desc' }],
+        take: 12,
+      }),
+      prisma.article.count({ where: { manual_upload: true } }),
+    ]);
 
-  return buildAdminSummaryResponse({
-    featured,
-    recent: recentManual,
-    totalManual,
-    pendingRequests: counts.pendingRequests,
-    submitterCount: counts.submitterCount,
-  });
+    let response;
+    if (!includeCounts) {
+      response = buildAdminSummaryResponse({
+        featured,
+        recent: recentManual,
+        totalManual,
+      });
+    } else {
+      const counts = await prisma.$transaction(async (tx) => {
+        const pending = await listNewsRequests(tx, { status: 'pending', limit: 100 });
+        const submitters = await listAuthorizedSubmitters(tx);
+        return {
+          pendingRequests: pending.length,
+          submitterCount: submitters.length,
+        };
+      });
+
+      response = buildAdminSummaryResponse({
+        featured,
+        recent: recentManual,
+        totalManual,
+        pendingRequests: counts.pendingRequests,
+        submitterCount: counts.submitterCount,
+      });
+    }
+
+    adminDashboardCache.summary = response;
+    return response;
+  } catch (error) {
+    if (isDatabasePoolLimitError(error)) {
+      markDatabasePressure(error);
+      return {
+        ...fallbackSummary,
+        degraded: true,
+        message: getDatabaseBusyMessage(),
+      };
+    }
+    throw error;
+  }
 }
 
 async function fetchAdminArchive() {
-  await expireFeaturedArticles(prisma);
-  const records = await prisma.article.findMany({
-    where: { manual_upload: true },
-    select: articleSelect,
-    orderBy: [{ created_at: 'desc' }],
-    take: 500,
-  });
-
-  return {
+  const fallbackArchive = adminDashboardCache.archive || {
     ok: true,
-    items: records.map((record) => {
-      const article = toApiArticle(record);
-      return {
-        ...article,
-        created_at: record.created_at,
-        published_at: record.published_at,
-        is_featured: Boolean(record.is_featured),
-        featured_until: record.featured_until,
-      };
-    }),
-    total: records.length,
+    items: [],
+    total: 0,
   };
+
+  if (isDatabaseCoolingDown()) {
+    return {
+      ...fallbackArchive,
+      degraded: true,
+      message: getDatabaseBusyMessage(),
+    };
+  }
+
+  try {
+    await expireFeaturedArticles(prisma);
+    const records = await prisma.article.findMany({
+      where: { manual_upload: true },
+      select: articleSelect,
+      orderBy: [{ created_at: 'desc' }],
+      take: 500,
+    });
+
+    const response = {
+      ok: true,
+      items: records.map((record) => {
+        const article = toApiArticle(record);
+        return {
+          ...article,
+          created_at: record.created_at,
+          published_at: record.published_at,
+          is_featured: Boolean(record.is_featured),
+          featured_until: record.featured_until,
+        };
+      }),
+      total: records.length,
+    };
+
+    adminDashboardCache.archive = response;
+    return response;
+  } catch (error) {
+    if (isDatabasePoolLimitError(error)) {
+      markDatabasePressure(error);
+      return {
+        ...fallbackArchive,
+        degraded: true,
+        message: getDatabaseBusyMessage(),
+      };
+    }
+    throw error;
+  }
 }
 
 async function fetchAdminArticle(articleId = '') {
@@ -856,12 +937,13 @@ module.exports = async function handler(req, res) {
     if (view === 'upload') return await handleUpload(req, res);
     return res.status(404).json({ error: 'Admin route not found.' });
   } catch (error) {
-    const statusCode = Number(error.statusCode || 500);
+    const normalizedError = normalizeDatabaseError(error, 'Admin request failed.');
+    const statusCode = Number(normalizedError.statusCode || 500);
     if (!res.headersSent) {
       if (view === 'page') {
-        return res.status(statusCode).send(error.message || 'Admin page failed.');
+        return res.status(statusCode).send(normalizedError.message || 'Admin page failed.');
       }
-      return res.status(statusCode).json({ error: error.message || 'Admin request failed.' });
+      return res.status(statusCode).json({ error: normalizedError.message || 'Admin request failed.' });
     }
   }
 };

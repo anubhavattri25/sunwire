@@ -1,4 +1,10 @@
 const prisma = require("../backend/config/database");
+const {
+  getDatabaseBusyMessage,
+  isDatabaseCoolingDown,
+  markDatabasePressure,
+  normalizeDatabaseError,
+} = require("../backend/utils/databaseAvailability");
 const { buildFeaturedOrderBy, expireFeaturedArticles } = require("../backend/utils/adminArticle");
 const { queryStories, toCompatStory } = require("../lib/server/backendCompat");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
@@ -176,6 +182,16 @@ module.exports = async function handler(req, res) {
   const requestedFilter = req.query.filter || req.query.category || "all";
   const normalizedFilter = normalizeNewsFilter(requestedFilter);
   try {
+    const warmCachedPayload = getMemoryCachedPayload(cacheKey);
+    if (isDatabaseCoolingDown() && warmCachedPayload) {
+      setNewsResponseHeaders(res, false);
+      res.status(200).json({
+        ...warmCachedPayload,
+        sourceMode: warmCachedPayload.sourceMode || "stale-cache",
+      });
+      return;
+    }
+
     try {
       const expired = await expireFeaturedArticles(prisma);
       if (Number(expired?.count || 0) > 0) {
@@ -219,6 +235,7 @@ module.exports = async function handler(req, res) {
     res.status(200).json(payload);
 
   } catch (err) {
+    markDatabasePressure(err);
     const stalePayload = getMemoryCachedPayload(cacheKey);
     if (stalePayload) {
       setNewsResponseHeaders(res, false);
@@ -229,9 +246,10 @@ module.exports = async function handler(req, res) {
       return;
     }
 
-    res.status(500).json({
+    const normalizedError = normalizeDatabaseError(err, "Manual news fetch failed");
+    res.status(Number(normalizedError.statusCode || 500)).json({
       error: "Manual news fetch failed",
-      message: err.message,
+      message: normalizedError.message || getDatabaseBusyMessage(),
     });
   } finally {
     // Keep the shared Prisma client warm so repeated homepage requests do not

@@ -1,6 +1,10 @@
 const { slugify } = require('../../lib/seo');
 const { normalizeAuthorName } = require('../../lib/article/googleNews');
 const { countWords } = require('../services/contentQuality');
+const {
+  isDatabaseCoolingDown,
+  markDatabasePressure,
+} = require('./databaseAvailability');
 
 const ADMIN_CATEGORIES = [
   'ai',
@@ -43,6 +47,9 @@ function buildFeaturedOrderBy() {
 }
 
 async function expireFeaturedArticles(prisma) {
+  if (isDatabaseCoolingDown()) {
+    return { count: 0, skipped: true, coolingDown: true };
+  }
   const nowMs = Date.now();
   if (nowMs - Number(featuredExpiryState.lastRunAt || 0) < FEATURED_EXPIRY_INTERVAL_MS) {
     return { count: 0, skipped: true };
@@ -61,7 +68,10 @@ async function expireFeaturedArticles(prisma) {
       is_featured: false,
       featured_until: null,
     },
-  }).catch(() => ({ count: 0 }));
+  }).catch((error) => {
+    markDatabasePressure(error);
+    return { count: 0 };
+  });
 }
 
 function buildManualSourceUrl({ slug = '', createdAt = new Date() } = {}) {

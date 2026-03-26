@@ -1292,6 +1292,9 @@ async function loadAdminSummary(options = {}) {
   const data = await fetchJson(`/api/admin?view=news${scope}`, {
     forceFresh: options.forceFresh === true,
   });
+  if (data.degraded && data.message) {
+    setStatus(data.message);
+  }
   renderFeaturedStatus(data.featured || null);
   renderRecentManualList(data.recent || []);
   if (typeof data.pendingRequests !== "undefined" && dom.navRequestsCount) {
@@ -1307,6 +1310,9 @@ async function loadArchiveData(options = {}) {
   const data = await fetchJson("/api/admin?view=news&scope=all", {
     forceFresh: options.forceFresh === true,
   });
+  if (data.degraded && data.message) {
+    setStatus(data.message);
+  }
   renderArchive(data.items || []);
 }
 
