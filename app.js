@@ -94,6 +94,7 @@ const DEFERRED_ASSET_VERSION = "20260326-13";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
+const NEWSROOM_ROLE_STORAGE_KEY = "sunwire:newsroom-role:v1";
 const ADMIN_EMAIL = "anubhavattri07@gmail.com";
 const FILTER_ALIASES = {
   all: "all",
@@ -283,7 +284,7 @@ let currentStories = [];
 let currentCategoryMap = {};
 let googleAuthSession = readGoogleAuthSession();
 let googleAuthIdToken = readGoogleAuthIdToken();
-let newsroomRole = "";
+let newsroomRole = readStoredNewsroomRole();
 let isAuthBusy = false;
 let authBusyLabel = "";
 let currentPage = 1;
@@ -363,6 +364,15 @@ function readGoogleAuthIdToken() {
   }
 }
 
+function readStoredNewsroomRole() {
+  try {
+    return cleanText(window.localStorage.getItem(NEWSROOM_ROLE_STORAGE_KEY) || "").toLowerCase();
+  } catch (_) {
+    window.localStorage.removeItem(NEWSROOM_ROLE_STORAGE_KEY);
+    return "";
+  }
+}
+
 function saveGoogleAuthSession(session = null) {
   if (!session?.email) {
     window.localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
@@ -391,6 +401,11 @@ function saveGoogleAuthIdToken(token = "") {
 
 function setNewsroomRole(role = "") {
   newsroomRole = cleanText(role).toLowerCase();
+  if (!newsroomRole) {
+    window.localStorage.removeItem(NEWSROOM_ROLE_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(NEWSROOM_ROLE_STORAGE_KEY, newsroomRole);
 }
 
 function isAdminUserEmail(email = "") {
@@ -447,6 +462,13 @@ function syncAdminMenu() {
   const canOpenDashboard = hasNewsroomAccess();
   adminMenu.hidden = !canOpenDashboard;
   adminMenuButton.classList.toggle("is-admin", canOpenDashboard);
+  adminMenuItems.forEach((item) => {
+    const allowedRoles = cleanText(item.dataset.adminRoles || "admin,submitter")
+      .split(",")
+      .map((entry) => cleanText(entry).toLowerCase())
+      .filter(Boolean);
+    item.hidden = !canOpenDashboard || !allowedRoles.includes(newsroomRole);
+  });
   if (!canOpenDashboard || !adminMenu.classList.contains("is-open")) {
     setAdminMenuOpenState(false);
   }
@@ -587,6 +609,9 @@ function consumeGoogleRedirectResponse() {
     }
     const profile = extractGoogleUserProfile(idToken);
     googleAuthSession = profile;
+    if (isAdminUserEmail(profile.email)) {
+      setNewsroomRole("admin");
+    }
     saveGoogleAuthSession(profile);
     saveGoogleAuthIdToken(idToken);
     setAuthStatus(`Logged in as ${profile.email}`);
@@ -687,6 +712,31 @@ async function clearAdminSession() {
   }
 }
 
+async function hydrateAdminSession(options = {}) {
+  try {
+    const response = await fetch("/api/admin/session", {
+      method: "GET",
+      credentials: "include",
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (response.ok && payload?.authenticated && cleanText(payload?.role || "")) {
+      setNewsroomRole(payload.role || "");
+      syncAdminMenu();
+      return true;
+    }
+  } catch (_) {
+    // Ignore cookie hydration failures.
+  }
+
+  if (googleAuthSession?.email && googleAuthIdToken) {
+    return syncAdminSession("", { quiet: options.quiet !== false });
+  }
+
+  setNewsroomRole("");
+  syncAdminMenu();
+  return false;
+}
+
 function setAdminMenuOpenState(nextOpen) {
   const shouldOpen = Boolean(nextOpen);
   if (!adminMenu || !adminMenuButton || !adminMenuPanel) return;
@@ -695,7 +745,7 @@ function setAdminMenuOpenState(nextOpen) {
   adminMenuPanel.hidden = !shouldOpen;
 }
 
-async function openAdminDashboard() {
+async function openAdminDashboard(mode = "") {
   const email = cleanText(googleAuthSession?.email || "");
   if (!email) {
     showAuthFeedback("Login with Google to access the admin dashboard.", "error");
@@ -703,9 +753,15 @@ async function openAdminDashboard() {
     return;
   }
 
-  const ready = await syncAdminSession();
+  const ready = googleAuthIdToken
+    ? await syncAdminSession()
+    : await hydrateAdminSession({ quiet: false });
   if (!ready) return;
-  window.location.assign("/admin/news");
+  const nextMode = cleanText(mode);
+  const url = nextMode && nextMode !== "dashboard"
+    ? `/admin/news?mode=${encodeURIComponent(nextMode)}`
+    : "/admin/news";
+  window.location.assign(url);
 }
 
 function cleanTitle(title = "") {
@@ -2706,7 +2762,7 @@ adminMenuItems.forEach((item) => {
       return;
     }
     event.preventDefault();
-    await openAdminDashboard();
+    await openAdminDashboard(target);
   });
 });
 
@@ -2833,8 +2889,8 @@ syncActiveControls();
 consumeGoogleRedirectResponse();
 syncAuthButton();
 syncAdminMenu();
-if (googleAuthSession?.email && googleAuthIdToken) {
-  void syncAdminSession("", { quiet: true });
+if (googleAuthSession?.email || newsroomRole) {
+  void hydrateAdminSession({ quiet: true });
 }
 syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();
@@ -2867,14 +2923,19 @@ window.addEventListener("load", () => {
   });
 }, { once: true });
 window.addEventListener("storage", (event) => {
-  if (event.key !== GOOGLE_AUTH_SESSION_STORAGE_KEY && event.key !== GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY) return;
+  if (
+    event.key !== GOOGLE_AUTH_SESSION_STORAGE_KEY
+    && event.key !== GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY
+    && event.key !== NEWSROOM_ROLE_STORAGE_KEY
+  ) return;
   googleAuthSession = readGoogleAuthSession();
   googleAuthIdToken = readGoogleAuthIdToken();
-  if (!googleAuthSession?.email || !googleAuthIdToken) setNewsroomRole("");
+  newsroomRole = readStoredNewsroomRole();
+  if (!googleAuthSession?.email && !googleAuthIdToken) setNewsroomRole("");
   syncAuthButton();
   syncAdminMenu();
-  if (googleAuthSession?.email && googleAuthIdToken) {
-    void syncAdminSession("", { quiet: true });
+  if (googleAuthSession?.email || newsroomRole) {
+    void hydrateAdminSession({ quiet: true });
   }
 });
 window.addEventListener("popstate", async () => {

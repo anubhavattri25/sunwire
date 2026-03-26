@@ -34,7 +34,7 @@
     <link rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   </noscript>
-  <link rel="stylesheet" href="/styles.css?v=20260326-20" />
+  <link rel="stylesheet" href="/styles.css?v=20260326-22" />
 </head>
 
 <body data-home-mode="home">
@@ -74,7 +74,12 @@
         <div id="adminMenu" class="admin-menu" hidden>
           <button id="adminMenuButton" class="text-button" type="button">Admin</button>
           <div id="adminMenuPanel" class="admin-menu-panel" hidden>
-            <button class="admin-menu-item" data-admin-target="news" type="button">Dashboard</button>
+            <button class="admin-menu-item" data-admin-target="dashboard" type="button">Dashboard</button>
+            <button class="admin-menu-item" data-admin-target="news-requests" data-admin-roles="admin" type="button">News Requests</button>
+            <button class="admin-menu-item" data-admin-target="edit-news" data-admin-roles="admin" type="button">Edit News</button>
+            <button class="admin-menu-item" data-admin-target="watch-all-news" data-admin-roles="admin" type="button">Watch All News</button>
+            <button class="admin-menu-item" data-admin-target="access-control" data-admin-roles="admin" type="button">Access Control</button>
+            <button class="admin-menu-item" data-admin-target="submit-request" data-admin-roles="admin,submitter" type="button">Submit Request</button>
           </div>
         </div>
         <button id="authButton" class="text-button" type="button">Login</button>
@@ -302,7 +307,7 @@
     })();
   </script>
 
-  <script type="module" src="/app.js?v=20260326-19"></script>
+  <script type="module" src="/app.js?v=20260326-20"></script>
 </body>
 
 </html>
