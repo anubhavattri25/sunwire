@@ -63,7 +63,7 @@ export function renderSidebarData(elements = {}, data = {}) {
     priceBoardSourcesEl,
   } = elements;
 
-  const events = Array.isArray(data?.events) ? data.events.slice(0, 3) : [];
+  const events = Array.isArray(data?.events) ? data.events : [];
   const tool = data?.tool || {};
   const prices = Array.isArray(data?.marketBoard?.items) ? data.marketBoard.items.slice(0, 3) : [];
   const marketBoard = data?.marketBoard || {};
