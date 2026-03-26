@@ -2178,7 +2178,7 @@ async function fetchJson(url, { forceFresh = false } = {}) {
 }
 
 async function fetchSidebarData(forceRefresh = false) {
-  return fetchJson("/api/sidebar", { forceFresh: forceRefresh });
+  return fetchJson("/api/sidebar?v=20260326-sidebar", { forceFresh: forceRefresh });
 }
 
 function renderFlatNewsGrid(container, stories = [], variant = "dense") {
