@@ -15,12 +15,36 @@ const {
 const { buildHomeView, renderHomeTemplate } = require("../lib/ssr");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
 
-const HOME_PAGE_SIZE = 32;
+const HOME_FIRST_PAGE_STORY_COUNT = 12;
+const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 20;
-const STORY_POOL_SIZE = 72;
+const STORY_POOL_SIZE = 252;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
-const HOME_POOL_PAGE_COVERAGE = Math.ceil(STORY_POOL_SIZE / HOME_PAGE_SIZE);
 const SKIP_LOCAL_HOME_SSR = false;
+
+function getHomeTotalPages(totalStories = 0) {
+  const safeTotal = Math.max(0, Number(totalStories) || 0);
+  if (safeTotal <= HOME_FIRST_PAGE_STORY_COUNT) return 1;
+  return 1 + Math.ceil((safeTotal - HOME_FIRST_PAGE_STORY_COUNT) / HOME_ARCHIVE_PAGE_SIZE);
+}
+
+function getHomePageStoryWindow(page = 1) {
+  const safePage = normalizePageNumber(page);
+  if (safePage <= 1) {
+    return {
+      startIndex: 0,
+      pageSize: HOME_FIRST_PAGE_STORY_COUNT,
+      endIndex: HOME_FIRST_PAGE_STORY_COUNT,
+    };
+  }
+
+  const startIndex = HOME_FIRST_PAGE_STORY_COUNT + ((safePage - 2) * HOME_ARCHIVE_PAGE_SIZE);
+  return {
+    startIndex,
+    pageSize: HOME_ARCHIVE_PAGE_SIZE,
+    endIndex: startIndex + HOME_ARCHIVE_PAGE_SIZE,
+  };
+}
 
 function resolveGoogleClientId() {
   return String(
@@ -34,7 +58,7 @@ function resolveGoogleClientId() {
 
 function injectRuntimeConfig(template = "") {
   const clientId = resolveGoogleClientId();
-  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260326-16"></script>`;
+  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260326-18"></script>`;
   return String(template || "").replace(
     /<script type="module" src="\/?app\.js\?v=[^"]+"><\/script>/,
     runtimeScript
@@ -156,7 +180,7 @@ module.exports = async (req, res) => {
     try {
       const filter = normalizeFilter(query.filter || "all");
       const requestedPage = normalizePageNumber(query.page || 1);
-      const pageSize = filter === "all" ? HOME_PAGE_SIZE : DESK_PAGE_SIZE;
+      const pageSize = filter === "all" ? HOME_ARCHIVE_PAGE_SIZE : DESK_PAGE_SIZE;
       let pagePayload = null;
       let poolPayload = null;
       let pageStories = [];
@@ -165,23 +189,25 @@ module.exports = async (req, res) => {
       let totalPages = 1;
       let page = requestedPage;
 
-      if (filter === "all" && requestedPage <= HOME_POOL_PAGE_COVERAGE) {
+      if (filter === "all") {
+        const requiredPoolSize = Math.max(STORY_POOL_SIZE, getHomePageStoryWindow(requestedPage).endIndex);
         poolPayload = await getStoriesForSsr({
           page: 1,
-          pageSize: STORY_POOL_SIZE,
+          pageSize: requiredPoolSize,
           filter: "all",
           reason: "page_ssr_pool",
         });
 
         allStories = getArticlesFromPayload(poolPayload);
         totalStories = Number(poolPayload?.totalStories) || Number(poolPayload?.total) || allStories.length;
-        totalPages = Math.max(1, Math.ceil(Math.max(1, totalStories) / HOME_PAGE_SIZE));
+        totalPages = getHomeTotalPages(totalStories);
         page = Math.min(requestedPage, totalPages);
-        pageStories = allStories.slice((page - 1) * HOME_PAGE_SIZE, page * HOME_PAGE_SIZE);
+        const { startIndex, endIndex, pageSize: homePageSize } = getHomePageStoryWindow(page);
+        pageStories = allStories.slice(startIndex, endIndex);
         pagePayload = {
           ...poolPayload,
           page,
-          pageSize,
+          pageSize: homePageSize,
           totalStories,
           totalPages,
           stories: pageStories,

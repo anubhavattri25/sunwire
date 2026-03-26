@@ -645,6 +645,10 @@ body[data-home-mode="archive"] .category-zone {
   font-size: 0.92rem;
 }
 
+.trending-strip .news-card--compact .news-card__summary {
+  display: -webkit-box;
+}
+
 .desk-panels {
   display: grid;
   gap: 18px;
@@ -1485,6 +1489,10 @@ body[data-home-mode="archive"] .category-zone {
   .news-card-grid--page,
   .desk-panel__grid:not(.desk-panel__grid--rail):not(.desk-panel__grid--catalog) {
     grid-template-columns: 1fr;
+  }
+
+  .trending-strip__cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .desk-panel__grid--catalog {

@@ -73,12 +73,12 @@ const homepageSidebarEl = document.getElementById("homepageSidebar");
 const newsCardTemplate = document.getElementById("newsCardTemplate");
 const sectionPanelTemplate = document.getElementById("sectionPanelTemplate");
 
-const DEFAULT_HOME_PAGE_SIZE = 32;
+const HOME_FIRST_PAGE_STORY_COUNT = 12;
+const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 16;
 const CATEGORY_GRID_STORY_COUNT = 4;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
 const CATEGORY_POOL_FETCH_SIZE = 250;
-const HOME_POOL_PAGE_COVERAGE = Math.ceil(CATEGORY_POOL_FETCH_SIZE / DEFAULT_HOME_PAGE_SIZE);
 const RANDOM_NEWS_COUNT = 16;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
@@ -879,7 +879,31 @@ function syncHomeSeo() {
 }
 
 function getPageSizeForFilter(filter = activeFilter) {
-  return filter === "all" || filter === "latest" ? DEFAULT_HOME_PAGE_SIZE : DESK_PAGE_SIZE;
+  return filter === "all" || filter === "latest" ? HOME_ARCHIVE_PAGE_SIZE : DESK_PAGE_SIZE;
+}
+
+function getHomeTotalPages(totalStories = 0) {
+  const safeTotal = Math.max(0, Number(totalStories) || 0);
+  if (safeTotal <= HOME_FIRST_PAGE_STORY_COUNT) return 1;
+  return 1 + Math.ceil((safeTotal - HOME_FIRST_PAGE_STORY_COUNT) / HOME_ARCHIVE_PAGE_SIZE);
+}
+
+function getHomePageStoryWindow(page = 1) {
+  const safePage = Math.max(1, Number(page) || 1);
+  if (safePage <= 1) {
+    return {
+      startIndex: 0,
+      pageSize: HOME_FIRST_PAGE_STORY_COUNT,
+      endIndex: HOME_FIRST_PAGE_STORY_COUNT,
+    };
+  }
+
+  const startIndex = HOME_FIRST_PAGE_STORY_COUNT + ((safePage - 2) * HOME_ARCHIVE_PAGE_SIZE);
+  return {
+    startIndex,
+    pageSize: HOME_ARCHIVE_PAGE_SIZE,
+    endIndex: startIndex + HOME_ARCHIVE_PAGE_SIZE,
+  };
 }
 
 function setSearchStatus(message = "") {
@@ -1645,7 +1669,7 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     const fullGridStories = takeUnique(
       filteredMainStories,
       new Set(),
-      DEFAULT_HOME_PAGE_SIZE,
+      HOME_ARCHIVE_PAGE_SIZE,
       fallbackStories
     );
     return {
@@ -1672,40 +1696,19 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     || homepageFallbackPool[0]
     || latestPool[0]
     || null;
-  if (hero) used.add(storyKey(hero));
 
   const trendingSourcePool = dedupeStories([
+    ...filteredMainStories,
     ...homepagePriorityPool,
     ...sortStoriesForTrending(homepageFallbackPool, activeTrendingMode),
   ]);
-  const trending = takeUnique(trendingSourcePool, used, TRENDING_COUNT, homepageFallbackPool);
+  const trending = takeUnique(trendingSourcePool, new Set(), HOME_FIRST_PAGE_STORY_COUNT, homepageFallbackPool);
   const topSections = [];
-  const recentPushStories = takeUnique(
-    sortStoriesForLatest(
-      homepageFallbackPool.filter((story) => !used.has(storyKey(story)))
-    ),
-    new Set(),
-    RANDOM_NEWS_COUNT,
-    sortStoriesForLatest(
-      allStoriesPool.filter((story) => !used.has(storyKey(story)))
-    )
-  );
-  const moreSections = [
-    {
-      key: "recent-pushes",
-      title: "Recent Pushes",
-      eyebrow: "Fresh from the desk",
-      hideAction: true,
-      layout: "catalog",
-      cardVariant: "dense",
-      stories: recentPushStories,
-    },
-  ].filter((section) => section.stories.length);
+  const moreSections = [];
 
   const tickerStories = dedupeStories([
     hero,
     ...trending,
-    ...recentPushStories,
   ].filter(Boolean));
 
   return { hero, trending, topSections, moreSections, tickerStories };
@@ -1766,7 +1769,7 @@ function renderLoadingState() {
   if (heroSectionEl) heroSectionEl.hidden = currentPage > 1 || isFocusedDeskView;
   if (trendingSectionEl) trendingSectionEl.hidden = currentPage > 1 || isFocusedDeskView;
   if (categoryZoneSectionEl) categoryZoneSectionEl.hidden = true;
-  if (moreNewsSectionEl) moreNewsSectionEl.hidden = false;
+  if (moreNewsSectionEl) moreNewsSectionEl.hidden = currentPage <= 1 && !isFocusedDeskView;
   if (moreNewsSectionEl) moreNewsSectionEl.classList.toggle("more-news-shell--clean", isFocusedDeskView || currentPage > 1);
   if (moreNewsSectionHeadEl) moreNewsSectionHeadEl.hidden = isFocusedDeskView || currentPage > 1;
   if (homepageSidebarEl) homepageSidebarEl.hidden = currentPage > 1 || isFocusedDeskView;
@@ -1791,10 +1794,10 @@ function renderLoadingState() {
   if (moreNewsGridEl) moreNewsGridEl.innerHTML = "";
 
   if (currentPage <= 1 && !isFocusedDeskView && trendingGridEl) {
-    for (let i = 0; i < 4; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
+    for (let i = 0; i < HOME_FIRST_PAGE_STORY_COUNT; i += 1) trendingGridEl.appendChild(createSkeletonCard("compact"));
   }
 
-  if (moreNewsGridEl) {
+  if (moreNewsGridEl && (currentPage > 1 || isFocusedDeskView)) {
     moreNewsGridEl.classList.remove("desk-panels", "desk-panels--expanded");
     moreNewsGridEl.classList.add("news-card-grid");
     moreNewsGridEl.classList.toggle("news-card-grid--page", currentPage > 1);
@@ -2238,16 +2241,16 @@ function buildHomepageDataFromPool(poolPayload = {}, page = 1) {
   const safePage = Math.max(1, Number(page) || 1);
   const pooledStories = dedupeStories(extractNewsStories(poolPayload));
   const totalStories = Number(poolPayload?.totalStories) || Number(poolPayload?.total) || pooledStories.length;
-  const totalPages = Math.max(1, Math.ceil(Math.max(1, totalStories) / DEFAULT_HOME_PAGE_SIZE));
+  const totalPages = getHomeTotalPages(totalStories);
   const clampedPage = Math.min(safePage, totalPages);
-  const startIndex = (clampedPage - 1) * DEFAULT_HOME_PAGE_SIZE;
-  const pageStories = pooledStories.slice(startIndex, startIndex + DEFAULT_HOME_PAGE_SIZE);
+  const { startIndex, endIndex, pageSize } = getHomePageStoryWindow(clampedPage);
+  const pageStories = pooledStories.slice(startIndex, endIndex);
 
   return {
     main: {
       ...poolPayload,
       page: clampedPage,
-      pageSize: DEFAULT_HOME_PAGE_SIZE,
+      pageSize,
       totalStories,
       totalPages,
       stories: pageStories,
@@ -2378,7 +2381,7 @@ function renderHomepageLayout(layout) {
   if (moreNewsTitleEl) {
     moreNewsTitleEl.textContent = hasFullGrid
       ? (layout.pageTitle || `${activeDeskLabel()} News`)
-      : "Recent Pushes";
+      : "More News";
   }
 
   if (!hasFullGrid) {
@@ -2400,7 +2403,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
   const normalizedQuery = cleanText(query);
   const resolvedLayout = layout || {
     hero: stories[0] || null,
-    trending: stories.slice(1, TRENDING_COUNT + 1),
+    trending: stories.slice(1, HOME_FIRST_PAGE_STORY_COUNT + 1),
     topSections: [],
     moreSections: [],
   };
@@ -2471,8 +2474,9 @@ async function loadStories(page = 1, forceRefresh = false, triggerBackendRefresh
   renderLoadingState();
 
   try {
-    if ((normalizedFilter === "all" || normalizedFilter === "latest") && page <= HOME_POOL_PAGE_COVERAGE) {
-      const poolPayload = await fetchCentralNews(1, "all", CATEGORY_POOL_FETCH_SIZE, forceRefresh, triggerBackendRefresh);
+    if (normalizedFilter === "all" || normalizedFilter === "latest") {
+      const requiredPoolSize = Math.max(CATEGORY_POOL_FETCH_SIZE, getHomePageStoryWindow(page).endIndex);
+      const poolPayload = await fetchCentralNews(1, "all", requiredPoolSize, forceRefresh, triggerBackendRefresh);
       if (requestId !== activeLoadRequestId) return;
       const derivedHomepageData = buildHomepageDataFromPool(poolPayload, page);
       applyHomepagePayload(

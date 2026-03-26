@@ -798,11 +798,22 @@ a {
   }
 
   .article-main {
-    padding: 20px 18px 22px;
+    padding: 16px 12px 18px;
   }
 
   .article-block {
-    padding: 18px 18px 20px;
+    padding: 16px 12px 18px;
+  }
+
+  .article-followup {
+    margin-top: 18px;
+  }
+
+  .primary-source,
+  .related-section,
+  .ad-slot__inner {
+    padding-left: 14px;
+    padding-right: 14px;
   }
 
   .article-actions {
