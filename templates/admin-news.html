@@ -73,6 +73,11 @@
       box-shadow: 0 12px 30px rgba(16, 24, 38, 0.12);
     }
 
+    [data-admin-only][hidden],
+    [data-submitter-only][hidden] {
+      display: none !important;
+    }
+
     @media (max-width: 768px) {
       .mobile-stack {
         flex-direction: column;
@@ -628,6 +633,6 @@
     <div class="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-2xl" id="toastMessage">Saved</div>
   </div>
 
-  <script type="module" src="/admin/news.js?v=20260327-7"></script>
+  <script type="module" src="/admin/news.js?v=20260327-9"></script>
 </body>
 </html>

@@ -14,11 +14,12 @@ const {
 } = require("../lib/server/ssrStories");
 const { buildHomeView, renderHomeTemplate } = require("../lib/ssr");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
+const { readAdminSession } = require("../backend/utils/adminAuth");
 
 const HOME_FIRST_PAGE_STORY_COUNT = 12;
 const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 20;
-const STORY_POOL_SIZE = 252;
+const STORY_POOL_SIZE = 96;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const SKIP_LOCAL_HOME_SSR = false;
 
@@ -56,9 +57,9 @@ function resolveGoogleClientId() {
   ).trim();
 }
 
-function injectRuntimeConfig(template = "") {
+function injectRuntimeConfig(template = "", authState = null) {
   const clientId = resolveGoogleClientId();
-  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260327-23"></script>`;
+  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_AUTH_STATE__=${JSON.stringify(authState || null)};window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260327-25"></script>`;
   return String(template || "").replace(
     /<script type="module" src="\/?app\.js\?v=[^"]+"><\/script>/,
     runtimeScript
@@ -172,6 +173,17 @@ module.exports = async (req, res) => {
   }
 
   const query = req.query || {};
+  const session = await readAdminSession(req).catch(() => null);
+  const authState = session
+    ? {
+      user: {
+        email: String(session.email || "").trim(),
+        name: String(session.name || "").trim(),
+        picture: String(session.picture || "").trim(),
+      },
+      role: String(session.role || "").trim().toLowerCase(),
+    }
+    : null;
   let state = buildHomeState(query);
   let template = readTemplate("index.html");
   let view = null;
@@ -277,14 +289,19 @@ module.exports = async (req, res) => {
         nextUrl: page < totalPages ? buildSectionUrl(filter, page + 1) : "",
       };
 
-      template = renderHomeTemplate(template, view);
+      template = renderHomeTemplate(template, view, {
+        authState,
+        clientId: resolveGoogleClientId(),
+      });
     } catch (error) {
       console.log("SSR failed, sending static template", error);
     }
   }
 
   if (SKIP_LOCAL_HOME_SSR) {
-    template = injectRuntimeConfig(template);
+    template = injectRuntimeConfig(template, authState);
+  } else if (!view) {
+    template = injectRuntimeConfig(template, authState);
   }
 
   const html = injectHead(template, {

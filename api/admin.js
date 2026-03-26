@@ -293,8 +293,14 @@ async function renderAdminPage(req, res) {
   if (!session) return;
 
   const templatePath = path.join(process.cwd(), 'templates', 'admin-news.html');
-  const template = await fs.readFile(templatePath, 'utf8');
+  let template = await fs.readFile(templatePath, 'utf8');
   const mode = normalizePageMode(req.query?.mode || '', session.role);
+  if (session.role !== 'admin') {
+    template = template.replace(/data-admin-only="true"/g, 'data-admin-only="true" hidden');
+  }
+  if (session.role !== 'submitter') {
+    template = template.replace(/data-submitter-only="true"/g, 'data-submitter-only="true" hidden');
+  }
   const runtimeScript = [
     '<script>',
     `window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(resolveGoogleClientId())};`,
@@ -304,7 +310,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260327-7"></script>',
+    '<script type="module" src="/admin/news.js?v=20260327-9"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

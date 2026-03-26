@@ -128,45 +128,7 @@ function replaceStoriesWithMap(stories = [], replacements = new Map()) {
 }
 
 async function hydrateHomepagePoolPayload(payload = {}) {
-  const stories = Array.isArray(payload?.stories) ? payload.stories : [];
-  if (!stories.length) return payload;
-
-  const pageStories = stories.slice(0, 30);
-  const view = buildHomeView({
-    filter: "all",
-    page: 1,
-    totalPages: Math.max(1, Number(payload.totalPages) || 1),
-    totalStories: Number(payload.totalStories) || Number(payload.total) || stories.length,
-    pageStories,
-    allStories: stories,
-  });
-  const visibleStories = collectVisibleStories(view);
-  const candidateStories = collectHomepageCandidateStories({
-    pageStories,
-    allStories: stories,
-    prioritizedStories: visibleStories,
-  });
-
-  if (!candidateStories.length) return payload;
-
-  const enrichedStories = await enrichStoriesWithImages(candidateStories, {
-    allowRemoteFetch: true,
-    remoteFetchLimit: 8,
-    concurrency: 3,
-  });
-  const replacementMap = new Map(
-    enrichedStories
-      .map((story) => [storyKey(story), story])
-      .filter(([key]) => Boolean(key))
-  );
-  const nextStories = replaceStoriesWithMap(stories, replacementMap);
-
-  return {
-    ...payload,
-    stories: nextStories,
-    articles: nextStories,
-    pageStories: replaceStoriesWithMap(Array.isArray(payload?.pageStories) ? payload.pageStories : pageStories, replacementMap),
-  };
+  return payload;
 }
 
 async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all" } = {}) {
@@ -185,9 +147,9 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     .filter((story) => story?.publisherReview?.showInPublicListings !== false);
   const pagedStories = eligibleStories.slice((safePage - 1) * safePageSize, safePage * safePageSize);
   const stories = await enrichStoriesWithImages(pagedStories, {
-    allowRemoteFetch: true,
-    remoteFetchLimit: 8,
-    concurrency: 3,
+    allowRemoteFetch: false,
+    remoteFetchLimit: 0,
+    concurrency: 1,
   });
   const approximateTotal = eligibleStories.length;
   const hasMore = safePage * safePageSize < approximateTotal;
@@ -249,10 +211,6 @@ module.exports = async function handler(req, res) {
         pageSize: req.query.pageSize,
         filter: requestedFilter,
       });
-    }
-
-    if (requestedPage === 1 && normalizedFilter === "all") {
-      payload = await hydrateHomepagePoolPayload(payload);
     }
 
     setMemoryCachedPayload(cacheKey, payload);

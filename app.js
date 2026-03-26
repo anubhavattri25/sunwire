@@ -79,7 +79,7 @@ const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 16;
 const CATEGORY_GRID_STORY_COUNT = 4;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
-const CATEGORY_POOL_FETCH_SIZE = 250;
+const CATEGORY_POOL_FETCH_SIZE = 96;
 const RANDOM_NEWS_COUNT = 16;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
@@ -88,9 +88,10 @@ const AUTO_REFRESH_MS = 20 * 60 * 1000;
 const SIDEBAR_REFRESH_MS = 20 * 60 * 1000;
 const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
-const API_RESPONSE_TTL_MS = 2 * 60 * 1000;
+const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const DEFERRED_ASSET_VERSION = "20260326-13";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260327-9";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -282,9 +283,12 @@ const PLACEHOLDER_PALETTES = [
 
 let currentStories = [];
 let currentCategoryMap = {};
-let googleAuthSession = readGoogleAuthSession();
+let serverInjectedAuthState = readServerInjectedAuthState();
+let googleAuthSession = readGoogleAuthSession() || serverInjectedAuthState.user || null;
 let googleAuthIdToken = readGoogleAuthIdToken();
-let newsroomRole = readStoredNewsroomRole();
+let newsroomRole = readStoredNewsroomRole()
+  || cleanText(serverInjectedAuthState.role || "").toLowerCase()
+  || (isAdminUserEmail(googleAuthSession?.email || "") ? "admin" : "");
 let isAuthBusy = false;
 let authBusyLabel = "";
 let currentPage = 1;
@@ -328,6 +332,25 @@ function readGoogleClientId() {
     || document.documentElement?.dataset?.googleClientId
     || ""
   );
+}
+
+function readServerInjectedAuthState() {
+  const payload = window.__SUNWIRE_AUTH_STATE__;
+  if (!payload || typeof payload !== "object") {
+    return { user: null, role: "" };
+  }
+
+  const email = cleanText(payload?.user?.email || payload?.email || "");
+  return {
+    user: email
+      ? {
+        email,
+        name: cleanText(payload?.user?.name || payload?.name || ""),
+        picture: cleanText(payload?.user?.picture || payload?.picture || ""),
+      }
+      : null,
+    role: cleanText(payload?.role || "").toLowerCase(),
+  };
 }
 
 function readGoogleAuthSession() {
@@ -616,14 +639,13 @@ function consumeGoogleRedirectResponse() {
     }
     const profile = extractGoogleUserProfile(idToken);
     googleAuthSession = profile;
-    if (isAdminUserEmail(profile.email)) {
-      setNewsroomRole("admin");
-    }
+    setNewsroomRole(isAdminUserEmail(profile.email) ? "admin" : "submitter");
     saveGoogleAuthSession(profile);
     saveGoogleAuthIdToken(idToken);
     setAuthStatus(`Logged in as ${profile.email}`);
     showAuthFeedback(`Logged in as ${profile.email}`, "success");
     syncAdminMenu();
+    prefetchAdminRoutes();
     void syncAdminSession(idToken, { quiet: true });
   } catch (error) {
     console.error(error);
@@ -673,9 +695,10 @@ async function logoutGoogleUser() {
 }
 
 async function syncAdminSession(idToken = "", options = {}) {
+  const previousRole = newsroomRole;
   const token = cleanText(idToken || googleAuthIdToken || "");
   if (!token) {
-    setNewsroomRole("");
+    if (!previousRole) setNewsroomRole("");
     if (!options.quiet) showAuthFeedback("Please log in again to verify admin access.", "error");
     return false;
   }
@@ -702,7 +725,7 @@ async function syncAdminSession(idToken = "", options = {}) {
     syncAdminMenu();
     return true;
   } catch (_) {
-    setNewsroomRole("");
+    if (!previousRole) setNewsroomRole("");
     syncAdminMenu();
     if (!options.quiet) showAuthFeedback("Dashboard access could not be verified right now.", "error");
     return false;
@@ -1058,7 +1081,7 @@ function openDeskInPlace(filter = "all") {
   activeFilter = filter;
   syncActiveControls();
   updateBrowserUrl({ filter, query: "", page: 1 });
-  return loadStories(1, true);
+  return loadStories(1);
 }
 
 function categoryLabel(story = {}) {
@@ -1409,6 +1432,17 @@ function warmArticleRoute(href = "") {
   document.head.appendChild(preload);
 }
 
+function warmScriptAsset(href = "") {
+  if (!href || routePrefetchSet.has(href)) return;
+  routePrefetchSet.add(href);
+
+  const preload = document.createElement("link");
+  preload.rel = "modulepreload";
+  preload.href = href;
+  preload.dataset.sunwirePrefetch = href;
+  document.head.appendChild(preload);
+}
+
 function prefetchAdminRoutes() {
   const routes = hasNewsroomAccess()
     ? (newsroomRole === "admin"
@@ -1422,6 +1456,8 @@ function prefetchAdminRoutes() {
       : ["/admin/news", "/admin/news?mode=submit-request"])
     : [];
   routes.forEach((href) => warmArticleRoute(href));
+  warmScriptAsset(`/admin/news.js?v=${ADMIN_DASHBOARD_ASSET_VERSION}`);
+  warmScriptAsset("/shared/client-utils.mjs");
 }
 
 function buildArticleApiUrl(story = {}) {
@@ -2188,7 +2224,10 @@ function renderPagination(totalPagesCount, activePageNumber) {
     if (!disabled) {
       btn.addEventListener("click", async () => {
         if (page === currentPage || isLoading) return;
-        window.location.assign(buildNavigationUrl({ filter: activeFilter, query: activeSearchQuery, page }));
+        currentPage = page;
+        updateBrowserUrl({ filter: activeFilter, query: activeSearchQuery, page });
+        await loadStories(page);
+        window.scrollTo({ top: 0, behavior: "smooth" });
       });
     }
     fragment.appendChild(btn);
@@ -2358,7 +2397,7 @@ function buildHomepageDataFromPool(poolPayload = {}, page = 1) {
       pageStories,
     },
     mainStories: pageStories,
-    categoryMap: buildHomepageCategoryMapFromStories(pooledStories),
+    categoryMap: createEmptyCategoryMap(),
   };
 }
 
@@ -2586,10 +2625,6 @@ async function loadStories(page = 1, forceRefresh = false, triggerBackendRefresh
       );
       return;
     }
-
-    const categoryMapPromise = normalizedFilter === "all" || normalizedFilter === "latest"
-      ? fetchHomepageCategoryMap(forceRefresh, triggerBackendRefresh).catch(() => null)
-      : null;
     const main = await fetchCentralNews(
       page,
       normalizedFilter,
@@ -2606,12 +2641,6 @@ async function loadStories(page = 1, forceRefresh = false, triggerBackendRefresh
     }
 
     applyHomepagePayload(main, mainStories, initialCategoryMap);
-
-    if (categoryMapPromise) {
-      const categoryMap = await categoryMapPromise;
-      if (requestId !== activeLoadRequestId) return;
-      if (categoryMap) applyHomepagePayload(main, mainStories, categoryMap);
-    }
   } catch (_) {
     if (requestId !== activeLoadRequestId) return;
     if (currentPage > 1 && !activeSearchQuery) {

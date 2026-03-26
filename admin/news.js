@@ -14,6 +14,7 @@ const ADMIN_ROLE = "admin";
 const SUBMITTER_ROLE = "submitter";
 const ROLE = String(window.__SUNWIRE_ADMIN_ROLE__ || "").trim().toLowerCase();
 const PAGE_MODE = String(window.__SUNWIRE_ADMIN_PAGE_MODE__ || "").trim() || (ROLE === ADMIN_ROLE ? "news-requests" : "submit-request");
+const DASHBOARD_GET_CACHE_TTL_MS = 60 * 1000;
 const ALLOWED_MODES = {
   [ADMIN_ROLE]: ["news-requests", "edit-news", "watch-all-news", "access-control"],
   [SUBMITTER_ROLE]: ["submit-request"],
@@ -148,6 +149,7 @@ const state = {
   requestBusy: false,
   accessBusy: false,
 };
+const dashboardResponseCache = new Map();
 
 function wordCount(value = "") {
   return cleanText(value).split(/\s+/).filter(Boolean).length;
@@ -181,20 +183,55 @@ function showToast(message) {
   }, 2200);
 }
 
+function scheduleIdle(callback) {
+  if (typeof window.requestIdleCallback === "function") {
+    window.requestIdleCallback(() => callback(), { timeout: 1200 });
+    return;
+  }
+  window.setTimeout(callback, 120);
+}
+
 async function fetchJson(url, options = {}) {
-  const response = await fetch(url, {
+  const { forceFresh = false, headers = {}, ...requestOptions } = options;
+  const method = cleanText(requestOptions.method || "GET").toUpperCase() || "GET";
+  const canUseCache = method === "GET" && !forceFresh;
+  const cacheKey = canUseCache ? `${method}:${url}` : "";
+  const cached = canUseCache ? dashboardResponseCache.get(cacheKey) : null;
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.promise;
+  }
+
+  const request = fetch(url, {
     credentials: "same-origin",
     headers: {
       "Content-Type": "application/json",
-      ...(options.headers || {}),
+      ...headers,
     },
-    ...options,
-  });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(cleanText(data.error || data.message || "Request failed."));
+    ...requestOptions,
+  })
+    .then(async (response) => {
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(cleanText(data.error || data.message || "Request failed."));
+      }
+      if (method !== "GET") {
+        dashboardResponseCache.clear();
+      }
+      return data;
+    })
+    .catch((error) => {
+      if (cacheKey) dashboardResponseCache.delete(cacheKey);
+      throw error;
+    });
+
+  if (canUseCache) {
+    dashboardResponseCache.set(cacheKey, {
+      expiresAt: Date.now() + DASHBOARD_GET_CACHE_TTL_MS,
+      promise: request,
+    });
   }
-  return data;
+
+  return request;
 }
 
 function isAdminRole() {
@@ -555,10 +592,17 @@ function styleNavLink(link, active) {
 function syncRoleVisibility() {
   const adminOnlyHidden = !isAdminRole();
   if (dom.navRequests) dom.navRequests.hidden = adminOnlyHidden;
-  if (dom.navEditNews) dom.navEditNews.hidden = adminOnlyHidden;
   if (dom.navWatchAllNews) dom.navWatchAllNews.hidden = adminOnlyHidden;
   if (dom.navAccessControl) dom.navAccessControl.hidden = adminOnlyHidden;
-  if (dom.navSubmitRequest) dom.navSubmitRequest.hidden = isAdminRole();
+  if (dom.navSubmitRequest) dom.navSubmitRequest.hidden = true;
+  if (dom.navEditNews) {
+    dom.navEditNews.hidden = false;
+    dom.navEditNews.href = isAdminRole() ? "/admin/news?mode=edit-news" : "/admin/news?mode=submit-request";
+    const title = dom.navEditNews.querySelector("span:first-child");
+    const badge = dom.navEditNews.querySelector("span:last-child");
+    if (title) title.textContent = "Edit News";
+    if (badge) badge.textContent = isAdminRole() ? "Desk" : "Request";
+  }
   if (dom.featuredRemoveButton && !state.featuredArticle?.id) {
     dom.featuredRemoveButton.hidden = true;
   } else if (dom.featuredRemoveButton) {
@@ -582,7 +626,7 @@ function setViewMode(mode, options = {}) {
   if (dom.watchAllDashboardSection) dom.watchAllDashboardSection.hidden = state.mode !== "watch-all-news";
   if (dom.accessDashboardSection) dom.accessDashboardSection.hidden = state.mode !== "access-control";
   styleNavLink(dom.navRequests, state.mode === "news-requests");
-  styleNavLink(dom.navEditNews, state.mode === "edit-news");
+  styleNavLink(dom.navEditNews, state.mode === "edit-news" || state.mode === "submit-request");
   styleNavLink(dom.navWatchAllNews, state.mode === "watch-all-news");
   styleNavLink(dom.navAccessControl, state.mode === "access-control");
   styleNavLink(dom.navSubmitRequest, state.mode === "submit-request");
@@ -1469,7 +1513,7 @@ function attachQuickDurationButtons() {
 function attachNavHandlers() {
   [
     [dom.navRequests, "news-requests"],
-    [dom.navEditNews, "edit-news"],
+    [dom.navEditNews, isAdminRole() ? "edit-news" : "submit-request"],
     [dom.navWatchAllNews, "watch-all-news"],
     [dom.navAccessControl, "access-control"],
     [dom.navSubmitRequest, "submit-request"],
@@ -1485,6 +1529,17 @@ function attachNavHandlers() {
         setStatus(error.message || "Dashboard load failed.", true);
         showToast(error.message || "Dashboard load failed.");
       }
+    });
+  });
+}
+
+function prefetchDashboardData() {
+  const urls = isAdminRole()
+    ? ["/api/admin?view=news", "/api/admin?view=requests", "/api/admin?view=access"]
+    : ["/api/admin?view=requests"];
+  scheduleIdle(() => {
+    urls.forEach((url) => {
+      void fetchJson(url).catch(() => null);
     });
   });
 }
@@ -1600,6 +1655,7 @@ async function init() {
     } else {
       await loadPageData();
     }
+    prefetchDashboardData();
   } catch (error) {
     setStatus(error.message || "Admin dashboard failed to load.", true);
     showToast(error.message || "Admin dashboard failed to load.");
