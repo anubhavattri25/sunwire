@@ -1,4 +1,5 @@
 const { randomUUID } = require('node:crypto');
+const globalForNewsroomTables = globalThis;
 
 function cleanText(value = '') {
   return String(value || '').trim();
@@ -9,44 +10,61 @@ function normalizeEmail(value = '') {
 }
 
 async function ensureNewsroomTables(prisma) {
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS newsroom_submitter_access (
-      email TEXT PRIMARY KEY,
-      created_by_email TEXT NOT NULL DEFAULT '',
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  if (globalForNewsroomTables.__sunwireNewsroomTablesReady) return;
+  if (globalForNewsroomTables.__sunwireNewsroomTablesPromise) {
+    await globalForNewsroomTables.__sunwireNewsroomTablesPromise;
+    return;
+  }
 
-  await prisma.$executeRawUnsafe(`
-    CREATE TABLE IF NOT EXISTS newsroom_news_requests (
-      id TEXT PRIMARY KEY,
-      requester_email TEXT NOT NULL,
-      requester_name TEXT NOT NULL DEFAULT '',
-      requester_picture TEXT NOT NULL DEFAULT '',
-      status TEXT NOT NULL DEFAULT 'pending',
-      requested_headline TEXT NOT NULL DEFAULT '',
-      requested_category TEXT NOT NULL DEFAULT '',
-      wants_hero BOOLEAN NOT NULL DEFAULT FALSE,
-      payload JSONB NOT NULL,
-      reviewer_note TEXT NOT NULL DEFAULT '',
-      reviewed_by_email TEXT NOT NULL DEFAULT '',
-      reviewed_at TIMESTAMPTZ NULL,
-      published_article_id UUID NULL,
-      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );
-  `);
+  globalForNewsroomTables.__sunwireNewsroomTablesPromise = (async () => {
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS newsroom_submitter_access (
+        email TEXT PRIMARY KEY,
+        created_by_email TEXT NOT NULL DEFAULT '',
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
 
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS newsroom_news_requests_status_created_idx
-    ON newsroom_news_requests (status, created_at DESC);
-  `);
+    await prisma.$executeRawUnsafe(`
+      CREATE TABLE IF NOT EXISTS newsroom_news_requests (
+        id TEXT PRIMARY KEY,
+        requester_email TEXT NOT NULL,
+        requester_name TEXT NOT NULL DEFAULT '',
+        requester_picture TEXT NOT NULL DEFAULT '',
+        status TEXT NOT NULL DEFAULT 'pending',
+        requested_headline TEXT NOT NULL DEFAULT '',
+        requested_category TEXT NOT NULL DEFAULT '',
+        wants_hero BOOLEAN NOT NULL DEFAULT FALSE,
+        payload JSONB NOT NULL,
+        reviewer_note TEXT NOT NULL DEFAULT '',
+        reviewed_by_email TEXT NOT NULL DEFAULT '',
+        reviewed_at TIMESTAMPTZ NULL,
+        published_article_id UUID NULL,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      );
+    `);
 
-  await prisma.$executeRawUnsafe(`
-    CREATE INDEX IF NOT EXISTS newsroom_news_requests_requester_created_idx
-    ON newsroom_news_requests (requester_email, created_at DESC);
-  `);
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS newsroom_news_requests_status_created_idx
+      ON newsroom_news_requests (status, created_at DESC);
+    `);
+
+    await prisma.$executeRawUnsafe(`
+      CREATE INDEX IF NOT EXISTS newsroom_news_requests_requester_created_idx
+      ON newsroom_news_requests (requester_email, created_at DESC);
+    `);
+
+    globalForNewsroomTables.__sunwireNewsroomTablesReady = true;
+  })();
+
+  try {
+    await globalForNewsroomTables.__sunwireNewsroomTablesPromise;
+  } catch (error) {
+    globalForNewsroomTables.__sunwireNewsroomTablesPromise = null;
+    throw error;
+  }
 }
 
 async function listAuthorizedSubmitters(prisma) {

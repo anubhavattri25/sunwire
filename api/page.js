@@ -19,7 +19,7 @@ const { readAdminSession } = require("../backend/utils/adminAuth");
 const HOME_FIRST_PAGE_STORY_COUNT = 12;
 const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 20;
-const STORY_POOL_SIZE = 96;
+const STORY_POOL_SIZE = 64;
 const HOME_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const SKIP_LOCAL_HOME_SSR = false;
 
@@ -59,7 +59,7 @@ function resolveGoogleClientId() {
 
 function injectRuntimeConfig(template = "", authState = null) {
   const clientId = resolveGoogleClientId();
-  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_AUTH_STATE__=${JSON.stringify(authState || null)};window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260327-25"></script>`;
+  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_AUTH_STATE__=${JSON.stringify(authState || null)};window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260327-26"></script>`;
   return String(template || "").replace(
     /<script type="module" src="\/?app\.js\?v=[^"]+"><\/script>/,
     runtimeScript
@@ -173,7 +173,7 @@ module.exports = async (req, res) => {
   }
 
   const query = req.query || {};
-  const session = await readAdminSession(req).catch(() => null);
+  const session = await readAdminSession(req, { trustSignedRole: true }).catch(() => null);
   const authState = session
     ? {
       user: {

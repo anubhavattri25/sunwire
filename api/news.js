@@ -234,8 +234,7 @@ module.exports = async function handler(req, res) {
       message: err.message,
     });
   } finally {
-    if (process.env.VERCEL) {
-      await prisma.$disconnect().catch(() => null);
-    }
+    // Keep the shared Prisma client warm so repeated homepage requests do not
+    // churn connections and reconnect on every invocation.
   }
 };

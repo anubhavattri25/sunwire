@@ -3,6 +3,7 @@ import { cleanText, fmtDate, toTitleCase } from "../shared/client-utils.mjs";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const NEWSROOM_ROLE_STORAGE_KEY = "sunwire:newsroom-role:v1";
+const AUTH_UI_OVERRIDE_STORAGE_KEY = "sunwire:auth-ui-override:v1";
 const DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_BODY_WORDS = 500;
 const MIN_SUMMARY_WORDS = 20;
@@ -232,6 +233,28 @@ async function fetchJson(url, options = {}) {
   }
 
   return request;
+}
+
+function setAuthUiOverride(state = "") {
+  try {
+    if (!state) {
+      window.sessionStorage.removeItem(AUTH_UI_OVERRIDE_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(AUTH_UI_OVERRIDE_STORAGE_KEY, JSON.stringify({
+      state: cleanText(state),
+      expiresAt: Date.now() + 15000,
+    }));
+  } catch (_) {
+    // Ignore storage failures during auth transitions.
+  }
+}
+
+function clearClientAuthState() {
+  dashboardResponseCache.clear();
+  window.localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
+  window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(NEWSROOM_ROLE_STORAGE_KEY);
 }
 
 function isAdminRole() {
@@ -1262,45 +1285,82 @@ async function loadArticleForEdit(articleId) {
   showToast("Loaded story into Edit News.");
 }
 
-async function loadAdminSummary() {
+async function loadAdminSummary(options = {}) {
   if (!isAdminRole()) return;
-  const data = await fetchJson("/api/admin?view=news");
+  const includeCounts = options.includeCounts !== false;
+  const scope = includeCounts ? "" : "&scope=editor";
+  const data = await fetchJson(`/api/admin?view=news${scope}`, {
+    forceFresh: options.forceFresh === true,
+  });
   renderFeaturedStatus(data.featured || null);
   renderRecentManualList(data.recent || []);
-  if (dom.navRequestsCount) dom.navRequestsCount.textContent = String(Number(data.pendingRequests || 0));
-  if (dom.navAccessCount) dom.navAccessCount.textContent = String(Number(data.submitterCount || 0));
+  if (typeof data.pendingRequests !== "undefined" && dom.navRequestsCount) {
+    dom.navRequestsCount.textContent = String(Number(data.pendingRequests || 0));
+  }
+  if (typeof data.submitterCount !== "undefined" && dom.navAccessCount) {
+    dom.navAccessCount.textContent = String(Number(data.submitterCount || 0));
+  }
 }
 
-async function loadArchiveData() {
+async function loadArchiveData(options = {}) {
   if (!isAdminRole()) return;
-  const data = await fetchJson("/api/admin?view=news&scope=all");
+  const data = await fetchJson("/api/admin?view=news&scope=all", {
+    forceFresh: options.forceFresh === true,
+  });
   renderArchive(data.items || []);
 }
 
-async function loadRequests() {
-  const data = await fetchJson("/api/admin?view=requests");
+async function loadRequests(options = {}) {
+  const data = await fetchJson("/api/admin?view=requests", {
+    forceFresh: options.forceFresh === true,
+  });
   renderRequestList(data.items || []);
 }
 
-async function loadAccessList() {
+async function loadAccessList(options = {}) {
   if (!isAdminRole()) return;
-  const data = await fetchJson("/api/admin?view=access");
+  const data = await fetchJson("/api/admin?view=access", {
+    forceFresh: options.forceFresh === true,
+  });
   renderAccessList(data.items || []);
 }
 
-async function loadPageData() {
-  const tasks = [];
+async function loadPageData(options = {}) {
+  const forceFresh = options.forceFresh === true;
+  const awaitSummary = options.awaitSummary === true;
 
-  if (isAdminRole()) {
-    tasks.push(loadAdminSummary());
-    if (state.mode === "watch-all-news") tasks.push(loadArchiveData());
-    if (state.mode === "news-requests") tasks.push(loadRequests());
-    if (state.mode === "access-control") tasks.push(loadAccessList());
-  } else {
-    tasks.push(loadRequests());
+  if (!isAdminRole()) {
+    await loadRequests({ forceFresh });
+    return;
   }
 
-  await Promise.all(tasks);
+  if (state.mode === "edit-news") {
+    await loadAdminSummary({ forceFresh, includeCounts: false });
+    return;
+  }
+
+  if (state.mode === "watch-all-news") {
+    await loadArchiveData({ forceFresh });
+    const summaryTask = loadAdminSummary({ forceFresh, includeCounts: false });
+    if (awaitSummary) await summaryTask;
+    else void summaryTask.catch(() => null);
+    return;
+  }
+
+  if (state.mode === "news-requests") {
+    await loadRequests({ forceFresh });
+    const summaryTask = loadAdminSummary({ forceFresh, includeCounts: true });
+    if (awaitSummary) await summaryTask;
+    else void summaryTask.catch(() => null);
+    return;
+  }
+
+  if (state.mode === "access-control") {
+    await loadAccessList({ forceFresh });
+    const summaryTask = loadAdminSummary({ forceFresh, includeCounts: true });
+    if (awaitSummary) await summaryTask;
+    else void summaryTask.catch(() => null);
+  }
 }
 
 async function handleDeleteArticle(articleId, title = "") {
@@ -1535,7 +1595,7 @@ function attachNavHandlers() {
 
 function prefetchDashboardData() {
   const urls = isAdminRole()
-    ? ["/api/admin?view=news", "/api/admin?view=requests", "/api/admin?view=access"]
+    ? ["/api/admin?view=news&scope=editor", "/api/admin?view=requests", "/api/admin?view=access"]
     : ["/api/admin?view=requests"];
   scheduleIdle(() => {
     urls.forEach((url) => {
@@ -1583,7 +1643,7 @@ async function init() {
   dom.refreshAdminDataButton?.addEventListener("click", async () => {
     try {
       setStatus("Refreshing dashboard...");
-      await loadPageData();
+      await loadPageData({ forceFresh: true, awaitSummary: true });
       setStatus("Dashboard refreshed.");
       showToast("Dashboard refreshed.");
     } catch (error) {
@@ -1639,18 +1699,22 @@ async function init() {
     }
   });
   dom.logoutAdminButton?.addEventListener("click", async () => {
-    await fetchJson("/api/admin?view=session", { method: "DELETE" });
-    window.localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
-    window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
-    window.localStorage.removeItem(NEWSROOM_ROLE_STORAGE_KEY);
-    window.location.href = "/";
+    setButtonBusy(dom.logoutAdminButton, true, "Logging out...");
+    setAuthUiOverride("logged-out");
+    clearClientAuthState();
+    void fetch("/api/admin?view=session", {
+      method: "DELETE",
+      credentials: "same-origin",
+      keepalive: true,
+    }).catch(() => null);
+    window.location.replace("/");
   });
 
   try {
     const editId = new URL(window.location.href).searchParams.get("edit");
     if (editId && isAdminRole()) {
       setViewMode("edit-news", { skipUrl: true });
-      await loadPageData();
+      await loadPageData({ awaitSummary: true });
       await loadArticleForEdit(editId);
     } else {
       await loadPageData();

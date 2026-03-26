@@ -79,7 +79,7 @@ const HOME_ARCHIVE_PAGE_SIZE = 16;
 const DESK_PAGE_SIZE = 16;
 const CATEGORY_GRID_STORY_COUNT = 4;
 const CATEGORY_PREVIEW_FETCH_SIZE = 24;
-const CATEGORY_POOL_FETCH_SIZE = 96;
+const CATEGORY_POOL_FETCH_SIZE = 64;
 const RANDOM_NEWS_COUNT = 16;
 const TRENDING_COUNT = 4;
 const HERO_ROTATION_POOL_SIZE = 6;
@@ -91,11 +91,12 @@ const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const DEFERRED_ASSET_VERSION = "20260326-13";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260327-9";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260327-10";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
 const NEWSROOM_ROLE_STORAGE_KEY = "sunwire:newsroom-role:v1";
+const AUTH_UI_OVERRIDE_STORAGE_KEY = "sunwire:auth-ui-override:v1";
 const ADMIN_EMAIL = "anubhavattri07@gmail.com";
 const FILTER_ALIASES = {
   all: "all",
@@ -283,14 +284,25 @@ const PLACEHOLDER_PALETTES = [
 
 let currentStories = [];
 let currentCategoryMap = {};
-let serverInjectedAuthState = readServerInjectedAuthState();
-let googleAuthSession = readGoogleAuthSession() || serverInjectedAuthState.user || null;
+const authUiOverride = readAuthUiOverride();
+let serverInjectedAuthState = authUiOverride?.state === "logged-out"
+  ? { user: null, role: "" }
+  : readServerInjectedAuthState();
+let googleAuthSession = authUiOverride?.state === "logged-out"
+  ? null
+  : (readGoogleAuthSession() || serverInjectedAuthState.user || null);
 let googleAuthIdToken = readGoogleAuthIdToken();
-let newsroomRole = readStoredNewsroomRole()
-  || cleanText(serverInjectedAuthState.role || "").toLowerCase()
-  || (isAdminUserEmail(googleAuthSession?.email || "") ? "admin" : "");
+let newsroomRole = authUiOverride?.state === "logged-out"
+  ? ""
+  : (
+    readStoredNewsroomRole()
+    || cleanText(serverInjectedAuthState.role || "").toLowerCase()
+    || (isAdminUserEmail(googleAuthSession?.email || "") ? "admin" : "")
+  );
 let isAuthBusy = false;
 let authBusyLabel = "";
+let adminSessionPromise = null;
+let lastAdminSessionVerifiedAt = serverInjectedAuthState.user && serverInjectedAuthState.role ? Date.now() : 0;
 let currentPage = 1;
 let totalPages = 1;
 let totalStories = 0;
@@ -323,6 +335,38 @@ function loadHomeWidgetsModule() {
 function loadSearchModule() {
   searchModulePromise ||= import(`./app-search.mjs?v=${DEFERRED_ASSET_VERSION}`);
   return searchModulePromise;
+}
+
+function readAuthUiOverride() {
+  try {
+    const raw = window.sessionStorage.getItem(AUTH_UI_OVERRIDE_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    const state = cleanText(parsed?.state || "");
+    const expiresAt = Number(parsed?.expiresAt || 0);
+    if (!state || (expiresAt && expiresAt <= Date.now())) {
+      window.sessionStorage.removeItem(AUTH_UI_OVERRIDE_STORAGE_KEY);
+      return null;
+    }
+    return { state, expiresAt };
+  } catch (_) {
+    return null;
+  }
+}
+
+function setAuthUiOverride(state = "") {
+  try {
+    if (!state) {
+      window.sessionStorage.removeItem(AUTH_UI_OVERRIDE_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(AUTH_UI_OVERRIDE_STORAGE_KEY, JSON.stringify({
+      state: cleanText(state),
+      expiresAt: Date.now() + 15000,
+    }));
+  } catch (_) {
+    // Ignore storage failures during auth transitions.
+  }
 }
 
 function readGoogleClientId() {
@@ -437,6 +481,29 @@ function isAdminUserEmail(email = "") {
 
 function hasNewsroomAccess() {
   return newsroomRole === "admin" || newsroomRole === "submitter";
+}
+
+function hasFreshAdminSession() {
+  return Boolean(lastAdminSessionVerifiedAt && (Date.now() - lastAdminSessionVerifiedAt) < 60 * 1000);
+}
+
+function markAdminSessionVerified() {
+  lastAdminSessionVerifiedAt = Date.now();
+}
+
+function clearAdminSessionVerification() {
+  lastAdminSessionVerifiedAt = 0;
+}
+
+function runWithAdminSessionLock(factory) {
+  if (adminSessionPromise) return adminSessionPromise;
+  const task = Promise.resolve()
+    .then(() => factory())
+    .finally(() => {
+      if (adminSessionPromise === task) adminSessionPromise = null;
+    });
+  adminSessionPromise = task;
+  return task;
 }
 
 function setAuthStatus(message = "") {
@@ -642,6 +709,7 @@ function consumeGoogleRedirectResponse() {
     setNewsroomRole(isAdminUserEmail(profile.email) ? "admin" : "submitter");
     saveGoogleAuthSession(profile);
     saveGoogleAuthIdToken(idToken);
+    setAuthUiOverride("");
     setAuthStatus(`Logged in as ${profile.email}`);
     showAuthFeedback(`Logged in as ${profile.email}`, "success");
     syncAdminMenu();
@@ -680,25 +748,29 @@ async function logoutGoogleUser() {
   setAuthBusyState(true, "Logging out...");
 
   try {
+    setAuthUiOverride("logged-out");
     googleAuthSession = null;
+    serverInjectedAuthState = { user: null, role: "" };
     setNewsroomRole("");
+    clearAdminSessionVerification();
     saveGoogleAuthSession(null);
     saveGoogleAuthIdToken("");
-    await clearAdminSession();
     setAuthStatus(currentEmail ? `${currentEmail} logged out.` : "Logged out.");
     showAuthFeedback(currentEmail ? `${currentEmail} logged out.` : "Logged out.", "success");
-  } finally {
     syncAdminMenu();
+    clearAdminSession({ keepalive: true }).catch(() => null);
+  } finally {
     setAuthBusyState(false);
-    window.location.reload();
+    window.location.replace(`${window.location.pathname}${window.location.search}`);
   }
 }
 
-async function syncAdminSession(idToken = "", options = {}) {
+async function syncAdminSessionInternal(idToken = "", options = {}) {
   const previousRole = newsroomRole;
   const token = cleanText(idToken || googleAuthIdToken || "");
   if (!token) {
     if (!previousRole) setNewsroomRole("");
+    clearAdminSessionVerification();
     if (!options.quiet) showAuthFeedback("Please log in again to verify admin access.", "error");
     return false;
   }
@@ -715,6 +787,7 @@ async function syncAdminSession(idToken = "", options = {}) {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) {
       setNewsroomRole("");
+      clearAdminSessionVerification();
       syncAdminMenu();
       if (!options.quiet) {
         showAuthFeedback(payload.error || "Dashboard access could not be verified.", "error");
@@ -722,21 +795,29 @@ async function syncAdminSession(idToken = "", options = {}) {
       return false;
     }
     setNewsroomRole(payload.role || "");
+    setAuthUiOverride("");
+    markAdminSessionVerified();
     syncAdminMenu();
     return true;
   } catch (_) {
     if (!previousRole) setNewsroomRole("");
+    clearAdminSessionVerification();
     syncAdminMenu();
     if (!options.quiet) showAuthFeedback("Dashboard access could not be verified right now.", "error");
     return false;
   }
 }
 
-async function clearAdminSession() {
+async function syncAdminSession(idToken = "", options = {}) {
+  return runWithAdminSessionLock(() => syncAdminSessionInternal(idToken, options));
+}
+
+async function clearAdminSession(options = {}) {
   try {
     await fetch("/api/admin/session", {
       method: "DELETE",
       credentials: "include",
+      keepalive: options.keepalive === true,
     });
   } catch (_) {
     // Ignore session cleanup failures.
@@ -744,28 +825,35 @@ async function clearAdminSession() {
 }
 
 async function hydrateAdminSession(options = {}) {
-  try {
-    const response = await fetch("/api/admin/session", {
-      method: "GET",
-      credentials: "include",
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (response.ok && payload?.authenticated && cleanText(payload?.role || "")) {
-      setNewsroomRole(payload.role || "");
-      syncAdminMenu();
-      return true;
+  if (hasFreshAdminSession() && hasNewsroomAccess()) return true;
+
+  return runWithAdminSessionLock(async () => {
+    try {
+      const response = await fetch("/api/admin/session", {
+        method: "GET",
+        credentials: "include",
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (response.ok && payload?.authenticated && cleanText(payload?.role || "")) {
+        setNewsroomRole(payload.role || "");
+        setAuthUiOverride("");
+        markAdminSessionVerified();
+        syncAdminMenu();
+        return true;
+      }
+    } catch (_) {
+      // Ignore cookie hydration failures.
     }
-  } catch (_) {
-    // Ignore cookie hydration failures.
-  }
 
-  if (googleAuthSession?.email && googleAuthIdToken) {
-    return syncAdminSession("", { quiet: options.quiet !== false });
-  }
+    if (googleAuthSession?.email && googleAuthIdToken) {
+      return syncAdminSessionInternal("", { quiet: options.quiet !== false });
+    }
 
-  setNewsroomRole("");
-  syncAdminMenu();
-  return false;
+    clearAdminSessionVerification();
+    setNewsroomRole("");
+    syncAdminMenu();
+    return false;
+  });
 }
 
 function setAdminMenuOpenState(nextOpen) {
@@ -790,6 +878,10 @@ async function openAdminDashboard(mode = "") {
     : "/admin/news";
 
   if (hasNewsroomAccess()) {
+    const ready = hasFreshAdminSession()
+      ? true
+      : await hydrateAdminSession({ quiet: true });
+    if (!ready) return;
     prefetchAdminRoutes();
     window.location.assign(url);
     return;
@@ -1458,6 +1550,9 @@ function prefetchAdminRoutes() {
   routes.forEach((href) => warmArticleRoute(href));
   warmScriptAsset(`/admin/news.js?v=${ADMIN_DASHBOARD_ASSET_VERSION}`);
   warmScriptAsset("/shared/client-utils.mjs");
+  if (hasNewsroomAccess() && !hasFreshAdminSession()) {
+    void hydrateAdminSession({ quiet: true }).catch(() => null);
+  }
 }
 
 function buildArticleApiUrl(story = {}) {
@@ -3000,7 +3095,10 @@ window.addEventListener("storage", (event) => {
   googleAuthSession = readGoogleAuthSession();
   googleAuthIdToken = readGoogleAuthIdToken();
   newsroomRole = readStoredNewsroomRole();
-  if (!googleAuthSession?.email && !googleAuthIdToken) setNewsroomRole("");
+  if (!googleAuthSession?.email && !googleAuthIdToken) {
+    clearAdminSessionVerification();
+    setNewsroomRole("");
+  }
   syncAuthButton();
   syncAdminMenu();
   if (googleAuthSession?.email || newsroomRole) {

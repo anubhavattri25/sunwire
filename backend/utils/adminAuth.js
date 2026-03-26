@@ -159,9 +159,13 @@ async function resolveNewsroomRole(email = '') {
   return '';
 }
 
-async function readAdminSession(req) {
+async function readAdminSession(req, options = {}) {
   const session = parseSignedAdminSession(req);
   if (!session?.email) return null;
+
+  if (options.trustSignedRole && [NEWSROOM_ROLES.ADMIN, NEWSROOM_ROLES.SUBMITTER].includes(session.role)) {
+    return session;
+  }
 
   const resolvedRole = await resolveNewsroomRole(session.email);
   if (!resolvedRole) return null;

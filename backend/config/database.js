@@ -21,13 +21,13 @@ function getDatabaseUrl() {
 
     if (parsedUrl.hostname.includes('pooler.supabase.com')) {
       if (!parsedUrl.searchParams.has('connection_limit')) {
-        parsedUrl.searchParams.set('connection_limit', '3');
+        parsedUrl.searchParams.set('connection_limit', '1');
       }
       if (!parsedUrl.searchParams.has('pgbouncer')) {
         parsedUrl.searchParams.set('pgbouncer', 'true');
       }
       if (!parsedUrl.searchParams.has('pool_timeout')) {
-        parsedUrl.searchParams.set('pool_timeout', '20');
+        parsedUrl.searchParams.set('pool_timeout', '10');
       }
     }
 

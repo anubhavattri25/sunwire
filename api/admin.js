@@ -310,7 +310,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260327-9"></script>',
+    '<script type="module" src="/admin/news.js?v=20260327-10"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -369,10 +369,35 @@ async function handleSession(req, res) {
   });
 }
 
-async function fetchAdminSummary() {
+function buildAdminSummaryResponse({
+  featured = null,
+  recent = [],
+  totalManual = 0,
+  pendingRequests = null,
+  submitterCount = null,
+} = {}) {
+  const response = {
+    ok: true,
+    featured: featured ? toApiArticle(featured) : null,
+    recent: recent.map(toApiArticle),
+    totalManual,
+  };
+
+  if (Number.isFinite(pendingRequests)) {
+    response.pendingRequests = pendingRequests;
+  }
+  if (Number.isFinite(submitterCount)) {
+    response.submitterCount = submitterCount;
+  }
+
+  return response;
+}
+
+async function fetchAdminSummary(options = {}) {
+  const includeCounts = options.includeCounts !== false;
   await ensureNewsroomTables(prisma);
   await expireFeaturedArticles(prisma);
-  const [featured, recentManual, totalManual, pendingRequests, submitters] = await Promise.all([
+  const [featured, recentManual, totalManual] = await prisma.$transaction([
     prisma.article.findFirst({
       where: {
         manual_upload: true,
@@ -392,18 +417,32 @@ async function fetchAdminSummary() {
       take: 12,
     }),
     prisma.article.count({ where: { manual_upload: true } }),
-    listNewsRequests(prisma, { status: 'pending', limit: 100 }),
-    listAuthorizedSubmitters(prisma),
   ]);
 
-  return {
-    ok: true,
-    featured: featured ? toApiArticle(featured) : null,
-    recent: recentManual.map(toApiArticle),
+  if (!includeCounts) {
+    return buildAdminSummaryResponse({
+      featured,
+      recent: recentManual,
+      totalManual,
+    });
+  }
+
+  const counts = await prisma.$transaction(async (tx) => {
+    const pending = await listNewsRequests(tx, { status: 'pending', limit: 100 });
+    const submitters = await listAuthorizedSubmitters(tx);
+    return {
+      pendingRequests: pending.length,
+      submitterCount: submitters.length,
+    };
+  });
+
+  return buildAdminSummaryResponse({
+    featured,
+    recent: recentManual,
     totalManual,
-    pendingRequests: pendingRequests.length,
-    submitterCount: submitters.length,
-  };
+    pendingRequests: counts.pendingRequests,
+    submitterCount: counts.submitterCount,
+  });
 }
 
 async function fetchAdminArchive() {
@@ -507,6 +546,9 @@ async function handleNews(req, res) {
     const scope = cleanText(req.query?.scope || '');
     if (scope === 'all') {
       return res.status(200).json(await fetchAdminArchive());
+    }
+    if (scope === 'editor') {
+      return res.status(200).json(await fetchAdminSummary({ includeCounts: false }));
     }
 
     return res.status(200).json(await fetchAdminSummary());
