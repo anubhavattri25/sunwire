@@ -20,6 +20,11 @@ function getDatabaseUrl() {
     const parsedUrl = new URL(rawUrl);
 
     if (parsedUrl.hostname.includes('pooler.supabase.com')) {
+      // Supabase session-mode pooler on 5432 exhausts quickly on serverless.
+      // Force the transaction-mode pooler port for Prisma runtime traffic.
+      if (!parsedUrl.port || parsedUrl.port === '5432') {
+        parsedUrl.port = '6543';
+      }
       if (!parsedUrl.searchParams.has('connection_limit')) {
         parsedUrl.searchParams.set('connection_limit', '1');
       }
