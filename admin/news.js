@@ -236,28 +236,10 @@ function createBackgroundRow(item = {}) {
   context.className = "min-h-[110px] rounded-[20px] border border-slate-300 bg-white px-4 py-3 text-sm leading-7 outline-none transition focus:border-slate-950";
   context.dataset.role = "background-context";
 
-  const meta = document.createElement("div");
-  meta.className = "grid gap-3 md:grid-cols-[0.4fr_0.6fr]";
-
-  const source = document.createElement("input");
-  source.type = "text";
-  source.value = cleanText(item.source);
-  source.placeholder = "Source name (optional)";
-  source.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
-  source.dataset.role = "background-source";
-
-  const url = document.createElement("input");
-  url.type = "url";
-  url.value = cleanText(item.url);
-  url.placeholder = "https://...";
-  url.className = "h-12 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950";
-  url.dataset.role = "background-url";
-
   const actions = document.createElement("div");
   actions.className = "mt-3 flex justify-end";
 
-  meta.append(source, url);
-  fields.append(title, context, meta);
+  fields.append(title, context);
   actions.append(createRemoveButton(() => {
     row.remove();
     ensureMinimumRows();
@@ -323,8 +305,6 @@ function extractBackground() {
     .map((row) => ({
       title: cleanText(row.querySelector('[data-role="background-title"]')?.value || ""),
       context: cleanText(row.querySelector('[data-role="background-context"]')?.value || ""),
-      source: cleanText(row.querySelector('[data-role="background-source"]')?.value || ""),
-      url: cleanText(row.querySelector('[data-role="background-url"]')?.value || ""),
     }))
     .filter((item) => item.title && item.context)
     .slice(0, 6);

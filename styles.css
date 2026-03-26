@@ -1867,9 +1867,9 @@ body[data-home-mode="archive"] .category-zone {
   border-radius: 24px;
   overflow: hidden;
   background: #111;
-  height: 100%;
+  height: min(68vh, 720px);
   aspect-ratio: auto;
-  min-height: 0;
+  min-height: 520px;
   box-shadow: 0 24px 60px rgba(0, 0, 0, 0.22);
 }
 
@@ -2069,10 +2069,10 @@ body[data-home-mode="archive"] .category-zone {
 
 .right-sidebar {
   display: grid;
-  grid-template-rows: minmax(0, 0.98fr) minmax(0, 0.76fr) minmax(0, 0.96fr);
+  grid-template-rows: auto auto auto;
   gap: 14px;
-  align-self: stretch;
-  height: 100%;
+  align-self: start;
+  height: auto;
   min-width: 0;
 }
 
@@ -2325,6 +2325,7 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .left-hero {
+    height: auto;
     min-height: 400px;
   }
 
