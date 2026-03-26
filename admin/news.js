@@ -698,9 +698,14 @@ function renderFeaturedStatus(article) {
 
 function syncFeaturedPreview() {
   const draftArticle = draftPreviewArticle();
-  const sourceArticle = (!isAdminRole() || dom.showOnHeroInput?.checked || !state.featuredArticle)
-    ? draftArticle
-    : state.featuredArticle;
+  const draftHasPreview = Boolean(
+    cleanText(draftArticle.title || "")
+    || cleanText(draftArticle.source || "")
+    || cleanText(draftArticle.image_url || "")
+  );
+  const sourceArticle = isAdminRole()
+    ? ((dom.showOnHeroInput?.checked || !state.featuredArticle) ? draftArticle : state.featuredArticle)
+    : (draftHasPreview ? draftArticle : (state.featuredArticle || draftArticle));
   const hasPreview = Boolean(cleanText(sourceArticle.title || "") || cleanText(sourceArticle.source || "") || cleanText(sourceArticle.image_url || ""));
 
   if (!hasPreview) {
@@ -1297,7 +1302,6 @@ async function loadArticleForEdit(articleId) {
 }
 
 async function loadAdminSummary(options = {}) {
-  if (!isAdminRole()) return;
   const includeCounts = options.includeCounts !== false;
   const scope = includeCounts ? "" : "&scope=editor";
   const data = await fetchJson(`/api/admin?view=news${scope}`, {
@@ -1348,6 +1352,9 @@ async function loadPageData(options = {}) {
 
   if (!isAdminRole()) {
     await loadRequests({ forceFresh });
+    const summaryTask = loadAdminSummary({ forceFresh, includeCounts: false });
+    if (awaitSummary) await summaryTask;
+    else void summaryTask.catch(() => null);
     return;
   }
 

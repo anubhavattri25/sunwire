@@ -326,7 +326,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260327-10"></script>',
+    '<script type="module" src="/admin/news.js?v=20260327-11"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -617,22 +617,34 @@ async function handleNews(req, res) {
   res.setHeader('Cache-Control', 'no-store');
 
   if (req.method === 'GET') {
+    const articleId = cleanText(req.query?.id || '');
+    const scope = cleanText(req.query?.scope || '');
+
+    if (scope === 'editor') {
+      const session = await requireSubmitterSession(req, res);
+      if (!session) return;
+      const summary = await fetchAdminSummary({ includeCounts: false });
+      return res.status(200).json({
+        ok: true,
+        featured: summary.featured || null,
+        recent: session.role === NEWSROOM_ROLES.ADMIN ? (summary.recent || []) : [],
+        totalManual: session.role === NEWSROOM_ROLES.ADMIN ? Number(summary.totalManual || 0) : 0,
+        degraded: summary.degraded === true,
+        message: summary.message || '',
+      });
+    }
+
     const session = await requireAdminSession(req, res);
     if (!session) return;
 
-    const articleId = cleanText(req.query?.id || '');
     if (articleId) {
       const article = await fetchAdminArticle(articleId);
       if (!article) return res.status(404).json({ error: 'Manual article not found.' });
       return res.status(200).json({ ok: true, article });
     }
 
-    const scope = cleanText(req.query?.scope || '');
     if (scope === 'all') {
       return res.status(200).json(await fetchAdminArchive());
-    }
-    if (scope === 'editor') {
-      return res.status(200).json(await fetchAdminSummary({ includeCounts: false }));
     }
 
     return res.status(200).json(await fetchAdminSummary());
