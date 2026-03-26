@@ -46,6 +46,7 @@ const headlineOfTheDayLink = document.getElementById("headlineOfTheDayLink");
 const headlineOfTheDayMeta = document.getElementById("headlineOfTheDayMeta");
 const heroAuthorEl = document.getElementById("heroAuthor");
 const heroSummaryEl = document.getElementById("heroSummary");
+const heroMediaLinkEl = document.getElementById("heroMediaLink");
 const heroImageEl = document.getElementById("heroImage");
 const heroViewStoryEl = document.getElementById("heroViewStory");
 const heroReactionTitleEl = document.getElementById("heroReactionTitle");
@@ -1825,6 +1826,7 @@ function renderHero(story) {
   if (!story) {
     headlineOfTheDayLink.textContent = "No headline available yet.";
     headlineOfTheDayLink.href = "/";
+    if (heroMediaLinkEl) heroMediaLinkEl.href = "/";
     heroSummaryEl.textContent = "Fresh AI, tech, entertainment, sports, and business stories are loading.";
     headlineOfTheDayMeta.textContent = "Waiting for fresh stories.";
     heroAuthorEl.textContent = "SunWire Desk";
@@ -1839,6 +1841,7 @@ function renderHero(story) {
     return;
   }
 
+  const heroHref = buildArticleHref(story);
   const optimizedHeadline = optimizeHeadline(story.title, "hero");
   if (optimizedHeadline.includes(":")) {
     const parts = optimizedHeadline.split(":");
@@ -1847,8 +1850,9 @@ function renderHero(story) {
     headlineOfTheDayLink.textContent = optimizedHeadline;
   }
 
-  headlineOfTheDayLink.href = buildArticleHref(story);
-  if (heroViewStoryEl) heroViewStoryEl.href = buildArticleHref(story);
+  headlineOfTheDayLink.href = heroHref;
+  if (heroMediaLinkEl) heroMediaLinkEl.href = heroHref;
+  if (heroViewStoryEl) heroViewStoryEl.href = heroHref;
   if (heroReactionTitleEl) heroReactionTitleEl.textContent = story.title.split(":")[0] || "Global Impact";
 
   heroSummaryEl.textContent = optimizeSummary(story.summary || "", story, "hero");

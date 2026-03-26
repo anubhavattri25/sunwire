@@ -34,7 +34,7 @@
     <link rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   </noscript>
-  <link rel="stylesheet" href="/styles.css?v=20260326-19" />
+  <link rel="stylesheet" href="/styles.css?v=20260326-20" />
 </head>
 
 <body data-home-mode="home">
@@ -42,15 +42,15 @@
 
   <header class="site-header">
     <div class="shell site-header__inner">
-      <button class="menu-toggle" id="menuToggle" type="button" aria-label="Open categories" aria-expanded="false"
-        aria-controls="siteNav">
-        Categories
-      </button>
-
       <a class="brand" href="/" aria-label="SunWire home">
         <span class="brand__title">SUNWIRE</span>
         <span class="brand__tagline">Be the First to Know</span>
       </a>
+
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="Open categories" aria-expanded="false"
+        aria-controls="siteNav">
+        Categories
+      </button>
 
       <nav class="site-nav" id="siteNav" aria-label="Primary">
         <a class="site-nav__link" href="/ai" data-nav-filter="ai">AI</a>
@@ -117,7 +117,9 @@
       <div class="home-left-col">
         <!-- LEFT: CINEMATIC HERO -->
         <div class="left-hero">
-          <img id="heroImage" src="https://sunwire.in/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
+          <a class="hero-media-link" id="heroMediaLink" href="/" target="_self" rel="noopener noreferrer" aria-label="Open headline story">
+            <img id="heroImage" src="https://sunwire.in/social-card.svg" alt="SunWire lead story" loading="eager" decoding="async" fetchpriority="high" width="1600" height="900" />
+          </a>
           <div class="hero-overlay"></div>
           <div class="hero-content">
             <span class="hero-kicker" id="heroDeskChip">Live Desk</span>
@@ -300,7 +302,7 @@
     })();
   </script>
 
-  <script type="module" src="/app.js?v=20260326-18"></script>
+  <script type="module" src="/app.js?v=20260326-19"></script>
 </body>
 
 </html>
