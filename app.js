@@ -436,8 +436,10 @@ function syncAdminMenu() {
   if (!adminMenu || !adminMenuButton) return;
   const isAdmin = isAdminUserEmail(googleAuthSession?.email || "");
   adminMenu.hidden = !isAdmin;
-  if (!isAdmin) setAdminMenuOpenState(false);
   adminMenuButton.classList.toggle("is-admin", isAdmin);
+  if (!isAdmin || !adminMenu.classList.contains("is-open")) {
+    setAdminMenuOpenState(false);
+  }
 }
 
 function setAuthBusyState(nextBusy, label = "") {
@@ -1947,6 +1949,8 @@ function renderDeskPanels(container, sections = [], variant = "dense") {
           event.preventDefault();
           openSection();
         });
+        action.hidden = false;
+        action.addEventListener("click", openSection);
       }
 
       const grid = panel.querySelector(".desk-panel__grid");
