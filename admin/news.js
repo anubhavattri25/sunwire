@@ -1,5 +1,8 @@
 import { cleanText, fmtDate, toTitleCase } from "../shared/client-utils.mjs";
 
+const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
+const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
+const NEWSROOM_ROLE_STORAGE_KEY = "sunwire:newsroom-role:v1";
 const DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_BODY_WORDS = 500;
 const MIN_SUMMARY_WORDS = 20;
@@ -1582,6 +1585,9 @@ async function init() {
   });
   dom.logoutAdminButton?.addEventListener("click", async () => {
     await fetchJson("/api/admin?view=session", { method: "DELETE" });
+    window.localStorage.removeItem(GOOGLE_AUTH_SESSION_STORAGE_KEY);
+    window.localStorage.removeItem(GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY);
+    window.localStorage.removeItem(NEWSROOM_ROLE_STORAGE_KEY);
     window.location.href = "/";
   });
 

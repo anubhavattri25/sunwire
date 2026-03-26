@@ -1,5 +1,4 @@
 const prisma = require("../backend/config/database");
-const { articleSelect } = require("../backend/models/Article");
 const { buildFeaturedOrderBy, expireFeaturedArticles } = require("../backend/utils/adminArticle");
 const { queryStories, toCompatStory } = require("../lib/server/backendCompat");
 const { enrichStoriesWithImages } = require("../lib/server/storyImages");
@@ -7,27 +6,6 @@ const { buildHomeView } = require("../lib/ssr");
 
 const NEWS_CDN_CACHE_CONTROL = "public, s-maxage=60, stale-while-revalidate=120";
 const memoryNewsCache = globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ || new Map();
-const TECH_SOURCE_FILTERS = [
-  "LiveMint Tech",
-  "Indian Express Tech",
-  "TechPP",
-  "India Today Technology",
-  "The Hindu Technology",
-];
-
-function isLocalOfflineMode() {
-  return process.env.SUNWIRE_LOCAL_OFFLINE === "1";
-}
-
-function cleanEnvValue(value = "") {
-  return String(value || "").trim();
-}
-
-function getRemoteNewsApiBaseUrl() {
-  const explicitApi = cleanEnvValue(process.env.SUNWIRE_REMOTE_NEWS_API);
-  if (explicitApi) return explicitApi;
-  return "https://sunwire.in/api/news";
-}
 
 globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__ = memoryNewsCache;
 
@@ -72,27 +50,6 @@ function normalizeNewsFilter(input = "all") {
 function buildNewsWhere(filter = "all") {
   const normalizedFilter = normalizeNewsFilter(filter);
   if (normalizedFilter === "all") return {};
-
-  if (normalizedFilter === "tech") {
-    return {
-      AND: [
-        {
-          category: {
-            equals: normalizedFilter,
-            mode: "insensitive",
-          },
-        },
-        {
-          OR: TECH_SOURCE_FILTERS.map((source) => ({
-            source: {
-              contains: source,
-              mode: "insensitive",
-            },
-          })),
-        },
-      ],
-    };
-  }
 
   return {
     category: {
@@ -247,90 +204,16 @@ async function queryStoriesWithoutCount({ page = 1, pageSize = 30, filter = "all
     articles: stories,
     stories,
     pageStories: stories,
-    sourceMode: "light-fallback",
-  };
-}
-
-function buildOfflineNewsPayload({ page = 1, pageSize = 30, filter = "all" } = {}) {
-  const safePage = Math.max(1, Number.parseInt(page || "1", 10) || 1);
-  const safePageSize = Math.max(1, Number.parseInt(pageSize || "30", 10) || 30);
-  const normalizedFilter = normalizeNewsFilter(filter);
-
-  return {
-    generatedAt: new Date().toISOString(),
-    page: safePage,
-    pageSize: safePageSize,
-    total: 0,
-    totalStories: 0,
-    totalPages: 1,
-    hasMore: false,
-    filter: normalizedFilter,
-    articles: [],
-    stories: [],
-    pageStories: [],
-    sourceMode: "offline",
-  };
-}
-
-async function fetchRemoteNewsPayload({ page = 1, pageSize = 30, filter = "all" } = {}) {
-  const safePage = Math.max(1, Number.parseInt(page || "1", 10) || 1);
-  const safePageSize = Math.max(1, Number.parseInt(pageSize || "30", 10) || 30);
-  const normalizedFilter = normalizeNewsFilter(filter);
-  const params = new URLSearchParams({
-    page: String(safePage),
-    pageSize: String(safePageSize),
-    filter: normalizedFilter,
-  });
-
-  const response = await fetch(`${getRemoteNewsApiBaseUrl()}?${params.toString()}`);
-  if (!response.ok) {
-    throw new Error(`Remote news API returned ${response.status}`);
-  }
-
-  const payload = await response.json();
-  return {
-    ...payload,
-    page: Number(payload.page) || safePage,
-    pageSize: Number(payload.pageSize) || safePageSize,
-    total: Number(payload.total) || Number(payload.totalStories) || 0,
-    totalStories: Number(payload.totalStories) || Number(payload.total) || 0,
-    totalPages: Math.max(1, Number(payload.totalPages) || 1),
-    filter: normalizeNewsFilter(payload.filter || normalizedFilter),
-    stories: Array.isArray(payload.stories) ? payload.stories : (Array.isArray(payload.articles) ? payload.articles : []),
-    articles: Array.isArray(payload.articles) ? payload.articles : (Array.isArray(payload.stories) ? payload.stories : []),
-    pageStories: Array.isArray(payload.pageStories)
-      ? payload.pageStories
-      : (Array.isArray(payload.stories) ? payload.stories : (Array.isArray(payload.articles) ? payload.articles : [])),
-    sourceMode: payload.sourceMode || "remote-api",
+    sourceMode: "manual-desk-fallback",
   };
 }
 
 module.exports = async function handler(req, res) {
-  const refresh = req.query.refresh === "1";
   const cacheKey = buildFrontendNewsCacheKey(req.query || {});
   const requestedPage = Math.max(1, Number.parseInt(req.query.page || "1", 10) || 1);
   const requestedFilter = req.query.filter || req.query.category || "all";
   const normalizedFilter = normalizeNewsFilter(requestedFilter);
   try {
-    if (process.env.SUNWIRE_LOCAL_DATA_MODE === "production-api") {
-      try {
-        let payload = await fetchRemoteNewsPayload({
-          page: req.query.page,
-          pageSize: req.query.pageSize,
-          filter: requestedFilter,
-        });
-        if (requestedPage === 1 && normalizedFilter === "all") {
-          payload = await hydrateHomepagePoolPayload(payload);
-        }
-        setMemoryCachedPayload(cacheKey, payload);
-        setNewsResponseHeaders(res, refresh);
-        res.status(200).json(payload);
-        return;
-      } catch (error) {
-        if (!isLocalOfflineMode()) throw error;
-      }
-    }
-
     try {
       const expired = await expireFeaturedArticles(prisma);
       if (Number(expired?.count || 0) > 0) {
@@ -340,42 +223,17 @@ module.exports = async function handler(req, res) {
       // Ignore background database maintenance failures
     }
 
-    if (isLocalOfflineMode()) {
-      const payload = buildOfflineNewsPayload({
-        page: req.query.page,
-        pageSize: req.query.pageSize,
-        filter: requestedFilter,
-      });
-      setMemoryCachedPayload(cacheKey, payload);
-      setNewsResponseHeaders(res, refresh);
-      res.status(200).json(payload);
-      return;
-    }
-
     if (!process.env.DATABASE_URL) {
       res.status(503).json({ error: "DATABASE_URL is not configured." });
       return;
     }
 
-    if (!refresh) {
-      const cachedPayload = getMemoryCachedPayload(cacheKey);
-      if (cachedPayload) {
-        setMemoryCachedPayload(cacheKey, cachedPayload);
-        setNewsResponseHeaders(res, false);
-        res.status(200).json(cachedPayload);
-        return;
-      }
-    }
-
-    // Run ingestion when refresh=1
-    if (refresh) {
-      const { ingestNewsSources } = require("../backend/services/newsIngestor");
-      const { processPendingArticles } = require("../backend/services/articleProcessor");
-      const articles = await ingestNewsSources();
-
-      if (Array.isArray(articles) && articles.length) {
-        await processPendingArticles(articles);
-      }
+    const cachedPayload = getMemoryCachedPayload(cacheKey);
+    if (cachedPayload) {
+      setMemoryCachedPayload(cacheKey, cachedPayload);
+      setNewsResponseHeaders(res, false);
+      res.status(200).json(cachedPayload);
+      return;
     }
 
     let payload;
@@ -398,25 +256,23 @@ module.exports = async function handler(req, res) {
     }
 
     setMemoryCachedPayload(cacheKey, payload);
-    setNewsResponseHeaders(res, refresh);
+    setNewsResponseHeaders(res, false);
 
     res.status(200).json(payload);
 
   } catch (err) {
-    if (!refresh) {
-      const stalePayload = getMemoryCachedPayload(cacheKey);
-      if (stalePayload) {
-        setNewsResponseHeaders(res, false);
-        res.status(200).json({
-          ...stalePayload,
-          sourceMode: stalePayload.sourceMode || "stale-cache",
-        });
-        return;
-      }
+    const stalePayload = getMemoryCachedPayload(cacheKey);
+    if (stalePayload) {
+      setNewsResponseHeaders(res, false);
+      res.status(200).json({
+        ...stalePayload,
+        sourceMode: stalePayload.sourceMode || "stale-cache",
+      });
+      return;
     }
 
     res.status(500).json({
-      error: "Pipeline failed",
+      error: "Manual news fetch failed",
       message: err.message,
     });
   } finally {

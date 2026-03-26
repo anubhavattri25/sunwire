@@ -4,14 +4,12 @@ const { articleSelect, toApiArticle } = require('../models/Article');
 const { buildPublisherReview } = require('../../lib/article/publisherReview');
 const { buildCacheKey, getCachedJson, setCachedJson, invalidateCache } = require('../utils/cache');
 const { buildFeaturedOrderBy, expireFeaturedArticles } = require('../utils/adminArticle');
-const { getStatusCounts, pipelineState } = require('../services/newsIngestor');
-const { getLocalAiConfig, isLocalAiRewriteEnabled } = require('../services/localAiRewrite');
 const { safeConnectRedis } = require('../config/redis');
 const {
-  ensureDatabaseConfigured,
   isDatabaseReachable,
   respondIfDatabaseUnavailable,
 } = require('../utils/databaseAvailability');
+const newsService = require('../services/news');
 
 const router = express.Router();
 const PAGE_SIZE = 12;
@@ -135,46 +133,39 @@ router.get('/system-status', async (req, res, next) => {
   try {
     res.setHeader('Cache-Control', 'no-store');
     const redis = await safeConnectRedis();
-    const aiConfig = getLocalAiConfig();
     const databaseConfigured = Boolean(process.env.DATABASE_URL);
     const databaseReachable = databaseConfigured ? await isDatabaseReachable() : false;
-
-    let counts = {
-      articlesToday: 0,
-      articlesLastHour: 0,
-      articlesLast6Hours: 0,
-      articlesLast24Hours: 0,
-    };
-
-    if (databaseReachable) {
-      counts = await getStatusCounts();
-    }
+    const newsroom = await newsService.getNewsroomStats({ prisma, databaseReachable });
+    const state = newsService.getPublicPipelineState();
 
     return res.json({
-      articles_today: counts.articlesToday,
-      articles_last_hour: counts.articlesLastHour,
-      articles_last_6_hours: counts.articlesLast6Hours,
-      articles_last_24_hours: counts.articlesLast24Hours,
-      sources_online: pipelineState.sourcesOnline,
-      sources_failed: pipelineState.sourcesFailed,
-      last_successful_fetch_at: pipelineState.lastFetchAt,
-      last_successful_process_at: pipelineState.lastProcessAt,
-      last_trending_update_at: pipelineState.lastTrendingUpdateAt,
-      pending_raw_articles: pipelineState.pendingRawArticles.length,
-      api_keys: {
-        ollama: isLocalAiRewriteEnabled(),
-        cloudinary: Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
-        unsplash: Boolean(process.env.UNSPLASH_ACCESS_KEY),
-      },
-      ai: {
-        provider: aiConfig.provider,
-        enabled: isLocalAiRewriteEnabled(),
-        ollama_base_url: aiConfig.baseUrl,
-        ollama_model: aiConfig.model,
-      },
+      mode: state.mode,
+      manual_only: true,
+      admin_email: state.adminEmail,
+      articles_total: newsroom.articlesTotal,
+      manual_articles_total: newsroom.manualArticlesTotal,
+      featured_articles_live: newsroom.featuredArticlesLive,
+      latest_article_at: newsroom.latestArticleAt,
+      last_manual_publish_at: newsroom.lastManualPublishAt,
+      pending_raw_articles: 0,
+      sources_online: [],
+      sources_failed: [],
+      last_successful_fetch_at: null,
+      last_successful_process_at: null,
+      last_trending_update_at: null,
+      pipeline: state,
       cache: {
         connected: Boolean(redis),
         configured: Boolean(process.env.REDIS_URL),
+      },
+      services: {
+        cloudinary: Boolean(process.env.CLOUDINARY_CLOUD_NAME && process.env.CLOUDINARY_API_KEY && process.env.CLOUDINARY_API_SECRET),
+        googleAuth: Boolean(
+          process.env.GOOGLE_CLIENT_ID
+          || process.env.GOOGLE_AUTH_CLIENT_ID
+          || process.env.GOOGLE_OAUTH_CLIENT_ID
+          || process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+        ),
       },
       databaseConfigured,
       databaseReachable,

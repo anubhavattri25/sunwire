@@ -8,14 +8,6 @@ const prisma = require('./config/database');
 const { getRedis } = require('./config/redis');
 const newsRoutes = require('./routes/newsRoutes');
 const adminRoutes = require('./routes/adminRoutes');
-const trendingRoutes = require('./routes/trendingRoutes');
-const breakingRoutes = require('./routes/breakingRoutes');
-const { ingestNewsSources } = require('./services/newsIngestor');
-const { processPendingArticles } = require('./services/articleProcessor');
-const { updateTrendingScores } = require('./services/trendingCalculator');
-const { startFetchNewsJob } = require('./jobs/fetchNewsJob');
-const { startProcessArticlesJob } = require('./jobs/processArticlesJob');
-const { startUpdateTrendingJob } = require('./jobs/updateTrendingJob');
 const { logEvent } = require('./utils/logger');
 
 const app = express();
@@ -97,8 +89,6 @@ app.get('/', (req, res) => {
 
 app.use('/api', newsRoutes);
 app.use('/api', adminRoutes);
-app.use('/api', trendingRoutes);
-app.use('/api', breakingRoutes);
 
 app.use((error, req, res, next) => {
   logEvent('http.error', {
@@ -109,38 +99,12 @@ app.use((error, req, res, next) => {
   res.status(500).json({ error: 'Internal server error.' });
 });
 
-async function warmStart() {
-  if (!hasDatabase) {
-    logEvent('startup.pipeline.skipped', { reason: 'DATABASE_URL missing' });
-    return;
-  }
-
-  try {
-    await ingestNewsSources();
-    await processPendingArticles();
-    await updateTrendingScores();
-    logEvent('startup.pipeline.complete');
-  } catch (error) {
-    logEvent('startup.pipeline.error', { message: error.message });
-  }
-}
-
-const jobs = hasDatabase
-  ? [
-      startFetchNewsJob(),
-      startProcessArticlesJob(),
-      startUpdateTrendingJob(),
-    ]
-  : [];
-
 const server = app.listen(port, host, async () => {
   logEvent('server.started', { port, host, databaseConfigured: hasDatabase });
-  await warmStart();
 });
 
 async function shutdown(signal) {
   logEvent('server.shutdown', { signal });
-  jobs.forEach((job) => job?.stop?.());
   server.close(async () => {
     await prisma.$disconnect().catch(() => {});
     const redis = getRedis();

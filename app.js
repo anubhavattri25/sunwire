@@ -460,8 +460,15 @@ function syncAuthButton() {
 function syncAdminMenu() {
   if (!adminMenu || !adminMenuButton) return;
   const canOpenDashboard = hasNewsroomAccess();
+  const dashboardItem = adminMenuItems.find((item) => item.dataset.adminTarget === "dashboard");
+  const primaryLabel = newsroomRole === "admin" ? "Admin" : "Editor";
   adminMenu.hidden = !canOpenDashboard;
   adminMenuButton.classList.toggle("is-admin", canOpenDashboard);
+  adminMenuButton.textContent = primaryLabel;
+  adminMenuButton.setAttribute("aria-label", canOpenDashboard ? `${primaryLabel} menu` : "Admin menu");
+  if (dashboardItem) {
+    dashboardItem.textContent = newsroomRole === "admin" ? "Admin Dashboard" : "Editor Dashboard";
+  }
   adminMenuItems.forEach((item) => {
     const allowedRoles = cleanText(item.dataset.adminRoles || "admin,submitter")
       .split(",")
@@ -661,6 +668,7 @@ async function logoutGoogleUser() {
   } finally {
     syncAdminMenu();
     setAuthBusyState(false);
+    window.location.reload();
   }
 }
 
@@ -753,14 +761,21 @@ async function openAdminDashboard(mode = "") {
     return;
   }
 
-  const ready = googleAuthIdToken
-    ? await syncAdminSession()
-    : await hydrateAdminSession({ quiet: false });
-  if (!ready) return;
   const nextMode = cleanText(mode);
   const url = nextMode && nextMode !== "dashboard"
     ? `/admin/news?mode=${encodeURIComponent(nextMode)}`
     : "/admin/news";
+
+  if (hasNewsroomAccess()) {
+    prefetchAdminRoutes();
+    window.location.assign(url);
+    return;
+  }
+
+  const ready = googleAuthIdToken
+    ? await syncAdminSession()
+    : await hydrateAdminSession({ quiet: false });
+  if (!ready) return;
   window.location.assign(url);
 }
 
@@ -1392,6 +1407,21 @@ function warmArticleRoute(href = "") {
   preload.href = href;
   preload.dataset.sunwirePrefetch = href;
   document.head.appendChild(preload);
+}
+
+function prefetchAdminRoutes() {
+  const routes = hasNewsroomAccess()
+    ? (newsroomRole === "admin"
+      ? [
+        "/admin/news",
+        "/admin/news?mode=news-requests",
+        "/admin/news?mode=edit-news",
+        "/admin/news?mode=watch-all-news",
+        "/admin/news?mode=access-control",
+      ]
+      : ["/admin/news", "/admin/news?mode=submit-request"])
+    : [];
+  routes.forEach((href) => warmArticleRoute(href));
 }
 
 function buildArticleApiUrl(story = {}) {
@@ -2749,8 +2779,13 @@ authButton?.addEventListener("click", async () => {
 adminMenuButton?.addEventListener("click", () => {
   const isOpen = adminMenu?.classList.contains("is-open");
   siteHeader.classList.remove("is-open");
+  prefetchAdminRoutes();
   setAdminMenuOpenState(!isOpen);
 });
+
+adminMenuButton?.addEventListener("pointerenter", () => {
+  prefetchAdminRoutes();
+}, { once: true });
 
 adminMenuItems.forEach((item) => {
   item.addEventListener("click", async (event) => {
@@ -2891,6 +2926,11 @@ syncAuthButton();
 syncAdminMenu();
 if (googleAuthSession?.email || newsroomRole) {
   void hydrateAdminSession({ quiet: true });
+}
+if (hasNewsroomAccess()) {
+  scheduleIdleTask(() => {
+    prefetchAdminRoutes();
+  });
 }
 syncHomeSeo();
 currentCategoryMap = createEmptyCategoryMap();

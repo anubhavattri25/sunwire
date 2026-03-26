@@ -12,6 +12,7 @@ module.exports = async (req, res) => {
     res.status(200).json({
       ok: true,
       generatedAt: new Date().toISOString(),
+      mode: state.mode,
       pipeline: state,
     });
   } catch (error) {

@@ -116,23 +116,23 @@
             <span>Home Page</span>
             <span class="text-white/60">/</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=news-requests" id="navRequests">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=news-requests" id="navRequests" data-admin-only="true">
             <span>News Requests</span>
             <span class="text-accent" id="navRequestsCount">Queue</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=edit-news" id="navEditNews">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=edit-news" id="navEditNews" data-admin-only="true">
             <span>Edit News</span>
             <span class="text-accent">Desk</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=watch-all-news" id="navWatchAllNews">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=watch-all-news" id="navWatchAllNews" data-admin-only="true">
             <span>Watch All News</span>
             <span class="text-steel">Archive</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=access-control" id="navAccessControl">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=access-control" id="navAccessControl" data-admin-only="true">
             <span>Access Control</span>
             <span class="text-pine" id="navAccessCount">Emails</span>
           </a>
-          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=submit-request" id="navSubmitRequest">
+          <a class="flex items-center justify-between rounded-2xl border border-slate-200 bg-white px-4 py-3 text-slate-950 shadow-sm" href="/admin/news?mode=submit-request" id="navSubmitRequest" data-submitter-only="true">
             <span>Submit Request</span>
             <span class="text-accent">Draft</span>
           </a>
@@ -628,6 +628,6 @@
     <div class="rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-2xl" id="toastMessage">Saved</div>
   </div>
 
-  <script type="module" src="/admin/news.js?v=20260326-5"></script>
+  <script type="module" src="/admin/news.js?v=20260327-7"></script>
 </body>
 </html>
