@@ -2516,6 +2516,123 @@ body[data-home-mode="archive"] .category-zone {
   display: none !important;
 }
 
+@media (min-width: 901px) {
+  .main-layout {
+    --home-feature-height: clamp(455px, 58vh, 590px);
+    min-height: var(--home-feature-height) !important;
+  }
+
+  .left-hero,
+  .right-sidebar {
+    height: var(--home-feature-height) !important;
+    min-height: var(--home-feature-height) !important;
+    max-height: var(--home-feature-height) !important;
+  }
+
+  .right-sidebar {
+    grid-template-rows: minmax(0, 1fr) minmax(0, 0.66fr) minmax(0, 0.54fr) !important;
+    gap: 10px !important;
+    overflow: hidden !important;
+  }
+
+  .sidebar-card {
+    min-height: 0 !important;
+  }
+
+  .sidebar-card--tool {
+    padding: 16px 18px 12px !important;
+  }
+
+  .sidebar-card--tool .sidebar-card__eyebrow {
+    margin-bottom: 6px !important;
+    font-size: 0.76rem !important;
+  }
+
+  .sidebar-card--tool h3 {
+    font-size: clamp(1.32rem, 1.6vw, 1.74rem) !important;
+    line-height: 0.94 !important;
+    margin-bottom: 2px !important;
+  }
+
+  .sidebar-card--tool p:not(.tool-no-cc) {
+    max-width: 44% !important;
+    font-size: 0.82rem !important;
+    line-height: 1.32 !important;
+    margin-bottom: 8px !important;
+    -webkit-line-clamp: 2 !important;
+  }
+
+  .sidebar-button {
+    min-width: 172px !important;
+    padding: 9px 18px !important;
+    font-size: 0.88rem !important;
+    margin-top: 0 !important;
+  }
+
+  .tool-no-cc {
+    margin-top: 6px !important;
+    font-size: 0.74rem !important;
+  }
+
+  .sidebar-card--prices {
+    padding-bottom: 8px !important;
+  }
+
+  .sidebar-card--prices .sidebar-card__header,
+  .sidebar-card--updates .sidebar-card__header {
+    padding: 10px 14px 8px !important;
+    font-size: 0.88rem !important;
+  }
+
+  .price-list {
+    padding: 6px 14px 10px !important;
+    gap: 6px !important;
+  }
+
+  .price-item {
+    gap: 8px !important;
+    font-size: 0.84rem !important;
+  }
+
+  .price-item__icon {
+    font-size: 0.96rem !important;
+  }
+
+  .sidebar-card--updates .event-list {
+    padding: 10px 14px 12px !important;
+    gap: 8px !important;
+    justify-content: start !important;
+  }
+
+  .sidebar-card--updates .event-list li {
+    gap: 10px !important;
+  }
+
+  .sidebar-card--updates .event-list li strong {
+    font-size: 0.88rem !important;
+    line-height: 1.12 !important;
+  }
+
+  .sidebar-card--updates .event-list li span {
+    font-size: 0.78rem !important;
+    line-height: 1.18 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
+  }
+}
+
+@media (max-width: 900px) {
+  .right-sidebar {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    grid-template-rows: auto auto auto !important;
+    overflow: visible !important;
+  }
+}
+
 /* HOVER ZOOM ON TRENDING */
 .news-card__image {
   transition: transform 0.4s ease !important;
