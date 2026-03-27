@@ -2016,18 +2016,26 @@ body[data-home-mode="archive"] .category-zone {
   bottom: 0;
   left: 0;
   width: 100%;
-  height: 78%;
-  background: linear-gradient(to top, rgba(0, 0, 0, 0.96) 0%, rgba(0, 0, 0, 0.55) 55%, transparent 100%);
+  height: 84%;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.97) 0%, rgba(0, 0, 0, 0.66) 50%, rgba(0, 0, 0, 0.18) 78%, transparent 100%);
   pointer-events: none;
   z-index: 1;
 }
 
 .hero-content {
   position: absolute;
+  top: 0;
   bottom: 0;
   left: 0;
   right: 0;
-  padding: 24px 28px;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-end;
+  gap: 14px;
+  padding: 108px 28px 18px;
+  background: linear-gradient(180deg, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.18) 18%, rgba(0, 0, 0, 0.7) 62%, rgba(0, 0, 0, 0.9) 100%);
   color: #fff;
   z-index: 2;
   pointer-events: none;
@@ -2049,11 +2057,11 @@ body[data-home-mode="archive"] .category-zone {
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: 0.07em;
-  margin-bottom: 10px;
+  margin-bottom: 0;
 }
 
 .hero-title {
-  margin: 0 0 10px;
+  margin: 0;
   font-family: "Inter Tight", sans-serif;
   font-size: clamp(1.65rem, 2.85vw, 2.65rem);
   line-height: 1.02;
@@ -2061,7 +2069,8 @@ body[data-home-mode="archive"] .category-zone {
   font-weight: 900;
   color: #fff;
   text-wrap: balance;
-  max-width: 92%;
+  max-width: 84%;
+  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.42);
 }
 
 .hero-title a {
@@ -2087,11 +2096,11 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .hero-desc {
-  margin: 0 0 14px;
+  margin: 0;
   color: rgba(255, 255, 255, 0.75);
   font-size: 0.96rem;
   line-height: 1.42;
-  max-width: 52ch;
+  max-width: 50ch;
   display: -webkit-box;
   -webkit-line-clamp: 2;
   -webkit-box-orient: vertical;
@@ -2104,7 +2113,7 @@ body[data-home-mode="archive"] .category-zone {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 0;
   color: rgba(255, 255, 255, 0.7);
   font-size: 0.84rem;
   font-weight: 600;
@@ -2164,31 +2173,20 @@ body[data-home-mode="archive"] .category-zone {
 }
 
 .hero-actions-row {
+  position: absolute;
+  right: 28px;
+  bottom: 24px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
+  width: auto;
   gap: 16px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  margin-top: 0;
 }
 
-.hero-reactions-chip {
-  display: flex;
-  flex-direction: column;
-  padding-left: 14px;
-  border-left: 2px solid var(--yellow);
-}
-
-.hero-reactions-chip strong {
-  display: block;
-  font-size: 0.88rem;
-  font-weight: 800;
-  color: #fff;
-  letter-spacing: -0.01em;
-}
-
-.hero-reactions-chip span {
-  font-size: 0.77rem;
-  color: rgba(255, 255, 255, 0.6);
-  font-weight: 600;
+.hero-actions-row .hero-reactions-chip {
+  display: none !important;
 }
 
 /* ============================================================
@@ -2499,7 +2497,16 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .hero-content {
-    padding: 18px 16px;
+    gap: 8px;
+    padding: 72px 16px 16px;
+  }
+
+  .hero-actions-row {
+    position: static;
+    justify-content: flex-start;
+    width: 100%;
+    flex-wrap: wrap;
+    margin-top: 10px;
   }
 
   .hero-title {
@@ -2556,8 +2563,13 @@ body[data-home-mode="archive"] .category-zone {
 /* RIGHT SIDEBAR TWEAKS applied to exactly match spec */
 .sidebar-card {
   border-radius: 24px !important;
-  background: #FFFDF7 !important;
-  box-shadow: inset 0 2px 2px rgba(255, 255, 255, 1), 0 8px 32px rgba(17, 17, 17, 0.05) !important;
+  background:
+    linear-gradient(180deg, rgba(255, 253, 247, 0.98), rgba(255, 249, 238, 0.96)) !important;
+  border: 1px solid rgba(185, 145, 64, 0.18) !important;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.92),
+    0 10px 28px rgba(142, 103, 20, 0.12),
+    0 1px 0 rgba(255, 217, 120, 0.28) !important;
   overflow: hidden;
   position: relative;
 }
@@ -2566,68 +2578,164 @@ body[data-home-mode="archive"] .category-zone {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0; bottom: 0;
-  background: url('/brain-bg.png') no-repeat right center;
-  background-size: cover;
-  opacity: 0.8;
+  background:
+    linear-gradient(90deg, rgba(255, 251, 243, 0.98) 0%, rgba(255, 250, 242, 0.92) 31%, rgba(255, 247, 230, 0.54) 48%, rgba(255, 244, 223, 0.12) 66%),
+    url('/brain-bg.png') no-repeat calc(100% + 18px) 48%;
+  background-size: 100% 100%, 76% auto;
+  opacity: 0.96;
   z-index: 0;
   pointer-events: none;
+}
+.sidebar-card--tool::before {
+  content: '';
+  position: absolute;
+  inset: 4% -10% 4% 52%;
+  background:
+    radial-gradient(circle at 24% 56%, rgba(255, 210, 98, 0.22), rgba(255, 210, 98, 0) 42%),
+    linear-gradient(90deg, rgba(255, 250, 241, 0), rgba(255, 250, 241, 0.04));
+  pointer-events: none;
+  z-index: 1;
 }
 .sidebar-card--tool > * {
   position: relative;
   z-index: 2;
 }
+.sidebar-card--tool {
+  padding: 13px 16px 11px !important;
+}
 .sidebar-card--tool h3 {
   font-family: "Inter Tight", sans-serif !important;
-  font-size: clamp(1.34rem, 1.56vw, 1.7rem) !important;
+  font-size: clamp(1.34rem, 1.56vw, 1.62rem) !important;
   font-weight: 900 !important;
   color: #111 !important;
-  letter-spacing: -0.05em !important;
+  letter-spacing: -0.062em !important;
+  line-height: 0.96 !important;
   margin-bottom: 6px !important;
+  max-width: 46% !important;
 }
 .sidebar-card--tool p:not(.tool-no-cc) {
-  font-size: 0.82rem !important;
-  color: #555 !important;
-  max-width: 62% !important;
-  margin-bottom: 8px !important;
-  line-height: 1.34 !important;
+  font-size: 0.8rem !important;
+  color: #5e5548 !important;
+  max-width: 44% !important;
+  margin-bottom: 9px !important;
+  line-height: 1.28 !important;
   display: block !important;
   overflow: visible !important;
 }
 .sidebar-button {
-  background: #fcc23a !important;
+  background: linear-gradient(180deg, #ffca46, #f3ba2f) !important;
   font-weight: 900 !important;
-  font-size: 0.88rem !important;
+  font-size: 0.86rem !important;
   width: fit-content !important;
-  min-width: 164px !important;
+  min-width: 168px !important;
   display: inline-flex !important;
   justify-content: center !important;
   padding: 9px 18px !important;
-  box-shadow: inset 0 -2px 0 rgba(0,0,0,0.1) !important;
+  border: 1px solid rgba(186, 132, 14, 0.22) !important;
+  box-shadow:
+    inset 0 -2px 0 rgba(146, 96, 0, 0.18),
+    0 4px 10px rgba(227, 177, 44, 0.22) !important;
   margin-top: 0 !important;
+}
+.sidebar-button::after {
+  content: '';
+  display: inline-block;
+  width: 8px;
 }
 .eyebrow-icon { color: #fcc23a !important; }
 
 .tool-no-cc {
   text-align: left !important;
-  color: #5f574d !important;
+  color: #645b50 !important;
   margin-top: 6px !important;
-  font-size: 0.76rem !important;
+  font-size: 0.74rem !important;
+  font-weight: 700 !important;
 }
 
 .sidebar-card--prices::after {
   content: '';
   position: absolute;
-  right: -20px; bottom: -20px;
-  width: 140%; height: 140px;
+  right: -8px; bottom: -10px;
+  width: 76%; height: 74%;
   background: url('/price-bg.png') no-repeat right bottom;
   background-size: contain;
-  opacity: 0.6;
+  opacity: 0.7;
+  mix-blend-mode: multiply;
+  z-index: 0;
+  pointer-events: none;
+}
+.sidebar-card--prices::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgba(255, 252, 246, 0.96) 0%, rgba(255, 250, 240, 0.92) 58%, rgba(255, 246, 227, 0.4) 100%),
+    radial-gradient(circle at 18% 0%, rgba(255, 216, 120, 0.26), rgba(255, 216, 120, 0) 36%);
   z-index: 0;
   pointer-events: none;
 }
 .sidebar-card--prices > * {
   position: relative;
   z-index: 2;
+}
+.sidebar-card--prices {
+  padding-bottom: 8px !important;
+}
+.sidebar-card--prices .sidebar-card__header,
+.sidebar-card--updates .sidebar-card__header {
+  align-items: center !important;
+  padding: 10px 15px 8px !important;
+  font-size: 0.94rem !important;
+  border-bottom: 1px solid rgba(173, 133, 54, 0.12) !important;
+}
+.price-icon,
+.updates-icon {
+  display: inline-grid !important;
+  place-items: center !important;
+  width: 28px !important;
+  height: 28px !important;
+  border-radius: 8px !important;
+  background: linear-gradient(180deg, rgba(250, 235, 255, 0.95), rgba(229, 239, 255, 0.9)) !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 2px 6px rgba(84, 74, 126, 0.12) !important;
+  font-size: 1rem !important;
+}
+.price-board {
+  padding: 0 14px 8px !important;
+}
+.price-list {
+  padding: 0 !important;
+  margin: 6px 0 0 !important;
+  gap: 8px !important;
+}
+.price-item {
+  grid-template-columns: 26px minmax(0, 1fr) auto auto !important;
+  gap: 8px !important;
+  align-items: center !important;
+  font-size: 0.9rem !important;
+}
+.price-item__icon {
+  font-size: 1.06rem !important;
+  filter: saturate(0.94);
+}
+.price-item__label {
+  font-family: "Inter Tight", sans-serif !important;
+  font-size: 0.94rem !important;
+  font-weight: 800 !important;
+  letter-spacing: -0.03em !important;
+}
+.price-item__value {
+  font-size: 0.94rem !important;
+  font-weight: 900 !important;
+}
+.price-item__change {
+  font-size: 0.9rem !important;
+  letter-spacing: -0.02em !important;
+}
+.price-item__change--up {
+  color: #4f8d3a !important;
+}
+.price-item__change--down {
+  color: #e45442 !important;
 }
 /* TRENDING ROW FIX: 4 COLUMNS SINGLE ROW */
 @media (min-width: 1025px) {
@@ -2644,7 +2752,7 @@ body[data-home-mode="archive"] .category-zone {
 .sidebar-card--updates .event-list li {
   position: relative !important;
   grid-template-columns: auto minmax(0, 1fr) !important;
-  gap: 12px !important;
+  gap: 11px !important;
   padding: 0 !important;
   margin: 0 !important;
   min-width: 0 !important;
@@ -2652,34 +2760,52 @@ body[data-home-mode="archive"] .category-zone {
 .sidebar-card--updates .event-list li::before {
   content: "" !important;
   position: static !important;
-  width: 10px !important;
-  height: 10px !important;
-  background: #e02020 !important;
+  width: 9px !important;
+  height: 9px !important;
+  background: linear-gradient(180deg, #ef6a47, #d84a2f) !important;
+  box-shadow: 0 0 0 4px rgba(239, 106, 71, 0.08) !important;
   border-radius: 50% !important;
-  margin-top: 0.6rem !important;
+  margin-top: 0.52rem !important;
 }
 .sidebar-card--updates .event-list li strong {
   display: block !important;
-  font-size: 1rem !important;
+  font-family: "Inter Tight", sans-serif !important;
+  font-size: 0.99rem !important;
   font-weight: 900 !important;
   color: #111 !important;
+  letter-spacing: -0.03em !important;
 }
 .sidebar-card--updates .event-list li span {
   display: block !important;
-  font-size: 0.9rem !important;
-  color: #766c63 !important;
-  line-height: 1.26 !important;
+  font-size: 0.88rem !important;
+  color: #7b6d5c !important;
+  line-height: 1.28 !important;
   overflow-wrap: break-word !important;
   word-break: normal !important;
+}
+.sidebar-card--updates .event-list {
+  padding: 10px 15px 12px !important;
+  gap: 10px !important;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.2), rgba(255,255,255,0)),
+    transparent !important;
+  overflow: hidden !important;
+}
+.sidebar-card--updates .event-list li > div,
+.sidebar-card--updates .event-list li > a {
+  gap: 3px !important;
+}
+.sidebar-card--updates .event-list li:nth-child(n+4) {
+  display: none !important;
 }
 
 /* PRICE MOVES DATE */
 .price-moves-date {
   margin-left: auto !important;
   float: none !important;
-  font-size: 0.84rem !important;
+  font-size: 0.82rem !important;
   color: #7b7369 !important;
-  font-weight: 600 !important;
+  font-weight: 500 !important;
   margin-top: 2px !important;
 }
 
@@ -2702,7 +2828,7 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .right-sidebar {
-    grid-template-rows: auto auto minmax(0, 1fr) !important;
+    grid-template-rows: minmax(0, 0.96fr) minmax(0, 0.78fr) minmax(0, 1.02fr) !important;
     gap: 10px !important;
     overflow: hidden !important;
   }
@@ -2716,59 +2842,60 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .sidebar-card--tool .sidebar-card__eyebrow {
-    margin-bottom: 4px !important;
-    font-size: 0.72rem !important;
-    letter-spacing: 0.04em !important;
-    max-width: 62% !important;
+    margin-bottom: 5px !important;
+    font-size: 0.76rem !important;
+    letter-spacing: 0.06em !important;
+    max-width: 44% !important;
   }
 
   .sidebar-card--tool h3 {
-    font-size: clamp(1.08rem, 1.24vw, 1.38rem) !important;
-    line-height: 1 !important;
-    margin-bottom: 4px !important;
+    font-size: clamp(1.22rem, 1.34vw, 1.44rem) !important;
+    line-height: 0.97 !important;
+    margin-bottom: 5px !important;
+    max-width: 44% !important;
   }
 
   .sidebar-card--tool p:not(.tool-no-cc) {
-    max-width: 66% !important;
+    max-width: 41% !important;
     font-size: 0.76rem !important;
-    line-height: 1.28 !important;
-    margin-bottom: 6px !important;
+    line-height: 1.24 !important;
+    margin-bottom: 8px !important;
   }
 
   .sidebar-button {
-    min-width: 148px !important;
-    padding: 8px 16px !important;
-    font-size: 0.82rem !important;
+    min-width: 160px !important;
+    padding: 8px 18px !important;
+    font-size: 0.84rem !important;
     margin-top: 0 !important;
   }
 
   .tool-no-cc {
-    margin-top: 4px !important;
+    margin-top: 5px !important;
     font-size: 0.7rem !important;
   }
 
   .sidebar-card--prices {
-    padding-bottom: 8px !important;
+    padding-bottom: 6px !important;
   }
 
   .sidebar-card--prices .sidebar-card__header,
   .sidebar-card--updates .sidebar-card__header {
-    padding: 10px 14px 8px !important;
-    font-size: 0.88rem !important;
+    padding: 9px 14px 8px !important;
+    font-size: 0.9rem !important;
   }
 
   .price-list {
-    padding: 6px 14px 10px !important;
-    gap: 6px !important;
+    padding: 0 !important;
+    gap: 7px !important;
   }
 
   .price-item {
     gap: 8px !important;
-    font-size: 0.84rem !important;
+    font-size: 0.86rem !important;
   }
 
   .price-item__icon {
-    font-size: 0.96rem !important;
+    font-size: 1rem !important;
   }
 
   .sidebar-card--updates .event-list {
@@ -2783,12 +2910,12 @@ body[data-home-mode="archive"] .category-zone {
 
   .sidebar-card--updates .event-list li strong {
     font-size: 0.88rem !important;
-    line-height: 1.12 !important;
+    line-height: 1.06 !important;
   }
 
   .sidebar-card--updates .event-list li span {
     font-size: 0.78rem !important;
-    line-height: 1.24 !important;
+    line-height: 1.2 !important;
     display: block !important;
     overflow: visible !important;
   }

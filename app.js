@@ -49,7 +49,6 @@ const heroSummaryEl = document.getElementById("heroSummary");
 const heroMediaLinkEl = document.getElementById("heroMediaLink");
 const heroImageEl = document.getElementById("heroImage");
 const heroViewStoryEl = document.getElementById("heroViewStory");
-const heroReactionTitleEl = document.getElementById("heroReactionTitle");
 
 const trendingGridEl = document.getElementById("trendingGrid");
 const trendingSectionEl = trendingGridEl?.closest(".trending-strip");
@@ -2080,7 +2079,6 @@ function renderHero(story) {
   headlineOfTheDayLink.href = heroHref;
   if (heroMediaLinkEl) heroMediaLinkEl.href = heroHref;
   if (heroViewStoryEl) heroViewStoryEl.href = heroHref;
-  if (heroReactionTitleEl) heroReactionTitleEl.textContent = story.title.split(":")[0] || "Global Impact";
 
   heroSummaryEl.textContent = optimizeSummary(story.summary || "", story, "hero");
   headlineOfTheDayMeta.textContent = fmtDate(getDisplayTimestamp(story));
