@@ -147,6 +147,17 @@ function parseFeaturedUntil(body = {}) {
   return parsed;
 }
 
+function ensureApprovedHeroWindow(payload = {}, requestRecord = null) {
+  if (!requestRecord?.wantsHero) return payload;
+  if (payload.showOnHero && payload.featuredUntil) return payload;
+
+  return {
+    ...payload,
+    showOnHero: true,
+    featuredUntil: new Date(Date.now() + (60 * 60 * 1000)),
+  };
+}
+
 function normalizeAdminPayload(body = {}) {
   const content = String(body?.content || '').replace(/\r/g, '').trim();
   const subheadline = cleanText(body?.subheadline || '');
@@ -832,7 +843,10 @@ async function handleRequests(req, res) {
       return res.status(200).json({ ok: true, request: mapNewsRequestRecord(updated) });
     }
 
-    const payload = normalizeAdminPayload(mapped.payload || {});
+    const payload = ensureApprovedHeroWindow(
+      normalizeAdminPayload(mapped.payload || {}),
+      mapped
+    );
     const errors = validateAdminPayload(payload);
     if (errors.length) {
       return res.status(400).json({ error: errors[0], errors });
