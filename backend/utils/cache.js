@@ -6,6 +6,24 @@ const MEMORY_CACHE = globalThis.__SUNWIRE_MEMORY_CACHE__ || new Map();
 
 globalThis.__SUNWIRE_MEMORY_CACHE__ = MEMORY_CACHE;
 
+function clearPublicStoryCaches() {
+  const publicNewsCache = globalThis.__SUNWIRE_FRONTEND_NEWS_CACHE__;
+  if (publicNewsCache && typeof publicNewsCache.clear === 'function') {
+    publicNewsCache.clear();
+  }
+
+  const adminDashboardCache = globalThis.__SUNWIRE_ADMIN_DASHBOARD_CACHE__;
+  if (adminDashboardCache && typeof adminDashboardCache === 'object') {
+    adminDashboardCache.summary = null;
+    adminDashboardCache.archive = null;
+  }
+
+  const featuredExpiryState = globalThis.__SUNWIRE_FEATURED_EXPIRY_STATE__;
+  if (featuredExpiryState && typeof featuredExpiryState === 'object') {
+    featuredExpiryState.lastRunAt = 0;
+  }
+}
+
 function buildCacheKey(...parts) {
   return [CACHE_PREFIX, ...parts].join(':');
 }
@@ -65,6 +83,8 @@ async function invalidateCache(pattern = `${CACHE_PREFIX}:*`) {
   const redis = await safeConnectRedis();
   let deleted = 0;
 
+  clearPublicStoryCaches();
+
   [...MEMORY_CACHE.keys()].forEach((key) => {
     if (pattern === `${CACHE_PREFIX}:*` || key.startsWith(pattern.replace(/\*+$/g, ''))) {
       MEMORY_CACHE.delete(key);
@@ -94,6 +114,7 @@ async function invalidateCache(pattern = `${CACHE_PREFIX}:*`) {
 
 module.exports = {
   buildCacheKey,
+  clearPublicStoryCaches,
   getCachedJson,
   setCachedJson,
   invalidateCache,
