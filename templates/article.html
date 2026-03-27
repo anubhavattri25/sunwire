@@ -73,7 +73,6 @@
             </header>
 
             <p class="article-summary" id="articleSummary">Loading verified summary...</p>
-            <div class="tag-row" id="articleTags"></div>
           </div>
 
           <figure class="article-media">
@@ -83,6 +82,7 @@
               <button class="action-button" id="copyLinkButton" type="button">Copy Link</button>
               <button class="action-button" id="nativeShareButton" type="button">Share</button>
             </div>
+            <div class="tag-row" id="articleTags"></div>
           </figure>
 
           <div class="article-inline-ad js-adsense-slot" aria-label="Advertisement">
@@ -97,16 +97,23 @@
           <section class="article-block article-block--story">
             <div class="article-block__head">
               <p class="article-block__eyebrow">Full Coverage</p>
-              <h2>Full Story</h2>
+              <h2>What Happened</h2>
             </div>
             <div class="article-body" id="articleBody">
               <p>Loading verified story...</p>
             </div>
           </section>
+
+          <aside class="article-support-rail">
+            <section class="article-block article-block--fact-sheet"></section>
+            <section class="article-block article-block--key-points"></section>
+            <section class="article-block article-block--india-pulse"></section>
+          </aside>
         </section>
 
         <div class="article-followup">
-          <section class="article-block article-block--source" id="primarySourceBlock" hidden>
+          <section class="article-block article-block--background"></section>
+          <section class="article-block article-block--source" id="primarySourceBlock">
             <div class="article-block__head">
               <p class="article-block__eyebrow">Source Trail</p>
               <h2>Primary Source</h2>
@@ -115,6 +122,16 @@
               <a class="primary-source__link" id="articleSource" href="/" target="_blank" rel="noopener noreferrer">Loading source...</a>
               <p>Trace the reporting trail through the original filing, announcement, interview, or official source behind this story.</p>
             </div>
+          </section>
+        </div>
+
+        <div class="article-secondary">
+          <section class="article-block article-block--latest">
+            <div class="article-block__head">
+              <p class="article-block__eyebrow">Fresh Links</p>
+              <h2>Latest News</h2>
+            </div>
+            <ul class="story-list" id="latestNewsList"></ul>
           </section>
         </div>
       </article>
@@ -140,6 +157,6 @@
     </div>
   </footer>
 
-  <script type="module" src="/article.js?v=20260326-16"></script>
+  <script type="module" src="/article.js?v=20260327-article-layout-1"></script>
 </body>
 </html>

@@ -11,6 +11,7 @@ import {
 } from "./shared/client-utils.mjs";
 
 const dom = {
+  articleLead: document.querySelector(".article-lead"),
   articleMeta: document.getElementById("articleMeta"),
   articleTitle: document.getElementById("articleTitle"),
   articleAuthor: document.getElementById("articleAuthor"),
@@ -19,6 +20,15 @@ const dom = {
   articleSummary: document.getElementById("articleSummary"),
   articleBody: document.getElementById("articleBody"),
   articleTags: document.getElementById("articleTags"),
+  articleSupportRail: document.querySelector(".article-support-rail"),
+  factSheetBlock: document.querySelector(".article-block--fact-sheet"),
+  keyPointsBlock: document.querySelector(".article-block--key-points"),
+  indiaPulseBlock: document.querySelector(".article-block--india-pulse"),
+  backgroundBlock: document.querySelector(".article-block--background"),
+  articleFollowup: document.querySelector(".article-followup"),
+  articleSecondary: document.querySelector(".article-secondary"),
+  latestBlock: document.querySelector(".article-block--latest"),
+  latestNewsList: document.getElementById("latestNewsList"),
   primarySourceBlock: document.getElementById("primarySourceBlock"),
   primarySourceLink: document.getElementById("primarySourceLink"),
   articleSource: document.getElementById("articleSource") || document.getElementById("primarySourceLink"),
@@ -476,6 +486,106 @@ function renderParagraphs(container, paragraphs = [], fallbackText = "", options
   });
 }
 
+function renderStoryListItems(stories = []) {
+  if (!Array.isArray(stories) || !stories.length) {
+    return '<li>No stories available right now.</li>';
+  }
+
+  return stories.map((story) => {
+    const href = buildArticleHref(story);
+    return [
+      "<li>",
+      `<a href="${escapeHtml(href)}">`,
+      `<strong>${escapeHtml(cleanText(story.title || "Story"))}</strong>`,
+      `<span>${escapeHtml(displayDeskLabel(story.category || "latest"))} • ${escapeHtml(fmtDate(story.publishedAt || story.published_at || ""))}</span>`,
+      "</a>",
+      "</li>",
+    ].join("");
+  }).join("");
+}
+
+function renderFactSheetHtml(rows = []) {
+  const items = Array.isArray(rows) && rows.length
+    ? rows
+    : [{ label: "Status", value: "Verified data points are still loading." }];
+  return [
+    '<div class="fact-sheet-wrap">',
+    '<table class="fact-sheet" id="factSheetTable">',
+    "<tbody>",
+    items.map((row) => `<tr><th scope="row">${escapeHtml(cleanText(row.label || ""))}</th><td>${escapeHtml(cleanText(row.value || ""))}</td></tr>`).join(""),
+    "</tbody>",
+    "</table>",
+    "</div>",
+  ].join("");
+}
+
+function renderBackgroundHtml(items = []) {
+  const entries = Array.isArray(items) && items.length
+    ? items
+    : [{ title: "Context update", context: "Related past events are still being assembled for this story." }];
+  return `<div class="background-list" id="backgroundList">${entries.map((item) => [
+    '<div class="background-item">',
+    `<h3>${escapeHtml(cleanText(item.title || "Background"))}</h3>`,
+    `<p>${escapeHtml(cleanText(item.context || ""))}</p>`,
+    "</div>",
+  ].join("")).join("")}</div>`;
+}
+
+function setBlockHtml(block, html = "", { hidden = false } = {}) {
+  if (!block) return;
+  block.hidden = hidden;
+  if (!hidden) block.innerHTML = html;
+}
+
+function syncArticleLayout(article = {}, fallback = {}) {
+  const keyPoints = Array.isArray(article.keyPoints) ? article.keyPoints.filter(Boolean).slice(0, 4) : [];
+  const factSheet = Array.isArray(article.factSheet) ? article.factSheet.slice(0, 6) : [];
+  const background = Array.isArray(article.background) ? article.background.slice(0, 3) : [];
+  const whyItMatters = cleanText(article.indiaPulse || article.whyItMatters || "");
+  const sourceUrl = article.primarySource?.url || article.sourceUrl || fallback.url || "";
+  const preloadedLatest = Array.isArray(readPreloadedArticleData()?.relatedSets?.latest)
+    ? readPreloadedArticleData().relatedSets.latest.slice(0, 4)
+    : [];
+
+  setBlockHtml(dom.factSheetBlock, [
+    '<div class="article-block__head"><p class="article-block__eyebrow">Fact Sheet</p><h2>Verified Details</h2></div>',
+    renderFactSheetHtml(factSheet),
+  ].join(""));
+
+  setBlockHtml(dom.keyPointsBlock, [
+    '<div class="article-block__head"><p class="article-block__eyebrow">Key Points</p><h2>What To Know</h2></div>',
+    `<div class="article-body">${(keyPoints.length ? keyPoints : ["No verified key points available."]).map((point) => `<p>${escapeHtml(cleanText(point).replace(/[.]+$/u, ""))}.</p>`).join("")}</div>`,
+  ].join(""));
+
+  setBlockHtml(dom.indiaPulseBlock, [
+    '<div class="article-block__head"><p class="article-block__eyebrow">Why It Matters</p><h2>Context</h2></div>',
+    `<div class="article-body"><p>${escapeHtml(whyItMatters || "Why this story matters is still being prepared.")}</p></div>`,
+  ].join(""));
+
+  setBlockHtml(dom.backgroundBlock, [
+    '<div class="article-block__head"><p class="article-block__eyebrow">Background</p><h2>Context Trail</h2></div>',
+    renderBackgroundHtml(background),
+  ].join(""));
+
+  if (dom.articleFollowup) {
+    dom.articleFollowup.hidden = false;
+    dom.articleFollowup.classList.remove("article-followup--single");
+  }
+
+  if (dom.primarySourceBlock) {
+    dom.primarySourceBlock.hidden = false;
+  }
+
+  if (dom.latestBlock && dom.latestNewsList) {
+    const latestStories = preloadedLatest.filter((story) => storyKey(story) !== storyKey(fallback)).slice(0, 4);
+    dom.latestBlock.hidden = false;
+    dom.latestNewsList.innerHTML = renderStoryListItems(latestStories);
+    if (dom.articleSecondary) dom.articleSecondary.hidden = false;
+  } else if (dom.articleSecondary) {
+    dom.articleSecondary.hidden = false;
+  }
+}
+
 function buildInitialBody(title = "", summary = "", source = "") {
   const cleanedSummary = sanitizeArticleCopy(summary, { maxSentences: 3 });
 
@@ -592,7 +702,6 @@ function applyArticleData(article = {}, fallback = {}) {
   dom.articleAuthor.textContent = authorName;
   dom.articleMeta.textContent = publishedAt ? `${fmtDate(publishedAt)} · ${timeAgo(publishedAt)}` : "Live now";
   dom.articleSummary.textContent = summary || "No verified summary available.";
-  if (dom.primarySourceBlock) dom.primarySourceBlock.hidden = !sourceUrl;
   if (dom.articleSource) {
     dom.articleSource.href = sourceUrl || "/";
     dom.articleSource.textContent = cleanText(article.primarySource?.name || sourceName || "Original Source");
@@ -612,6 +721,7 @@ function applyArticleData(article = {}, fallback = {}) {
   renderParagraphs(dom.articleBody, deepDive, "No additional verified details available.", {
     preserveLines: preserveManualParagraphs,
   });
+  syncArticleLayout(article, fallback);
 
   setSeo(
     article.seoTitle || `${headline} | SunWire`,
@@ -881,6 +991,7 @@ function renderInitialStoryState(story) {
 
   renderTagChips([]);
   renderArticleBodySkeleton();
+  syncArticleLayout({}, story);
 
   attachNativeShare(
     cleanText(story.title),
@@ -912,6 +1023,7 @@ async function loadStory() {
 
   if (!story.url && !story.slug) {
     renderParagraphs(dom.articleBody, [], "No additional verified details available.");
+    syncArticleLayout({}, fallbackArticle);
     scheduleRelatedContentLoad({ category: deskFilter, currentUrl: "", currentTitle: story.title, currentTags: [] });
     return;
   }
@@ -971,6 +1083,7 @@ async function loadStory() {
   } catch (_) {
     if (cachedArticle) return;
     renderParagraphs(dom.articleBody, [], "No additional verified details available.");
+    syncArticleLayout({}, fallbackArticle);
   }
 }
 
