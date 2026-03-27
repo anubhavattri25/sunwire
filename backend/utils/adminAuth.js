@@ -18,6 +18,33 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
+function parseEmailList(value = '') {
+  return [...new Set(
+    String(value || '')
+      .split(/[,\n;]/)
+      .map((entry) => normalizeEmail(entry))
+      .filter(Boolean)
+  )];
+}
+
+function getPrivilegedEditorEmails() {
+  return [...new Set([
+    normalizeEmail(ADMIN_EMAIL),
+    ...parseEmailList(
+      process.env.NEWSROOM_EDITOR_EMAILS
+      || process.env.NEWSROOM_ADMIN_EMAILS
+      || process.env.ADMIN_EMAILS
+      || ''
+    ),
+  ])];
+}
+
+function isPrivilegedEditorEmail(email = '') {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+  return getPrivilegedEditorEmails().includes(normalizedEmail);
+}
+
 function getCookieSigningSecret() {
   const secret = cleanText(
     process.env.ADMIN_SESSION_SECRET
@@ -153,7 +180,7 @@ function parseSignedAdminSession(req) {
 async function resolveNewsroomRole(email = '') {
   const normalizedEmail = normalizeEmail(email);
   if (!normalizedEmail) return '';
-  if (normalizedEmail === ADMIN_EMAIL) return NEWSROOM_ROLES.ADMIN;
+  if (isPrivilegedEditorEmail(normalizedEmail)) return NEWSROOM_ROLES.ADMIN;
   await ensureNewsroomTables(prisma);
   if (await hasSubmitterAccess(prisma, normalizedEmail)) return NEWSROOM_ROLES.SUBMITTER;
   return '';
@@ -273,6 +300,8 @@ module.exports = {
   ADMIN_SESSION_MAX_AGE_SECONDS,
   NEWSROOM_ROLES,
   clearAdminSessionCookie,
+  getPrivilegedEditorEmails,
+  isPrivilegedEditorEmail,
   readAdminSession,
   requireAdminSession,
   requireNewsroomSession,

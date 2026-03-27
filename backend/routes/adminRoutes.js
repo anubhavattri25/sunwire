@@ -5,6 +5,7 @@ const { invalidateCache } = require('../utils/cache');
 const {
   ADMIN_EMAIL,
   clearAdminSessionCookie,
+  isPrivilegedEditorEmail,
   readAdminSession,
   setAdminSessionCookie,
   verifyGoogleIdToken,
@@ -26,7 +27,7 @@ function cleanText(value = '') {
 
 async function requireExpressAdmin(req, res, next) {
   const session = await readAdminSession(req);
-  if (session?.email === ADMIN_EMAIL) {
+  if (session?.email && isPrivilegedEditorEmail(session.email)) {
     req.user = session;
     return next();
   }
@@ -49,7 +50,7 @@ router.get('/admin/session', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   const session = await readAdminSession(req);
   return res.json({
-    authenticated: Boolean(session?.email === ADMIN_EMAIL),
+    authenticated: Boolean(session?.email && isPrivilegedEditorEmail(session.email)),
     adminEmail: ADMIN_EMAIL,
     user: session || null,
   });
@@ -59,7 +60,7 @@ router.post('/admin/session', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
     const profile = await verifyGoogleIdToken(req.body?.idToken || '');
-    if (profile.email !== ADMIN_EMAIL) {
+    if (!isPrivilegedEditorEmail(profile.email)) {
       clearAdminSessionCookie(res);
       return res.status(403).json({ error: 'Admin access denied.' });
     }

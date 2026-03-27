@@ -263,6 +263,10 @@ async function updateNewsRequest(prisma, id = '', values = {}) {
       setClauses.push(`${key} = CAST($${params.length} AS JSONB)`);
       return;
     }
+    if (key === 'published_article_id') {
+      setClauses.push(`${key} = NULLIF($${params.length}, '')::UUID`);
+      return;
+    }
     setClauses.push(`${key} = $${params.length}`);
   });
 

@@ -8,6 +8,7 @@ const {
   ADMIN_EMAIL,
   NEWSROOM_ROLES,
   clearAdminSessionCookie,
+  isPrivilegedEditorEmail,
   readAdminSession,
   requireAdminSession,
   requireSubmitterSession,
@@ -887,8 +888,8 @@ async function handleAccess(req, res) {
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return res.status(400).json({ error: 'Enter a valid email address.' });
     }
-    if (email === ADMIN_EMAIL) {
-      return res.status(400).json({ error: 'Primary admin already has access.' });
+    if (isPrivilegedEditorEmail(email)) {
+      return res.status(400).json({ error: 'This email already has full editor access.' });
     }
 
     const added = await addAuthorizedSubmitter(prisma, email, session.email);
