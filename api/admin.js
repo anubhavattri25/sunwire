@@ -4,6 +4,7 @@ const prisma = require('../backend/config/database');
 const { articleSelect, toApiArticle } = require('../backend/models/Article');
 const { countWords } = require('../backend/services/contentQuality');
 const { invalidateCache } = require('../backend/utils/cache');
+const { requestPublishedArticleIndexing } = require('../backend/utils/searchIndexing');
 const {
   ADMIN_EMAIL,
   NEWSROOM_ROLES,
@@ -617,11 +618,13 @@ async function upsertManualArticle(req, res, method = 'POST') {
   });
 
   await invalidateCache();
+  const indexing = await requestPublishedArticleIndexing(saved);
 
   return res.status(isUpdate ? 200 : 201).json({
     ok: true,
     article: toApiArticle(saved),
     adminArticle: toAdminArticleInput(saved),
+    indexing,
   });
 }
 
@@ -866,12 +869,14 @@ async function handleRequests(req, res) {
     });
 
     await invalidateCache();
+    const indexing = await requestPublishedArticleIndexing(saved);
     const updated = await getNewsRequestById(prisma, requestId);
     return res.status(200).json({
       ok: true,
       request: mapNewsRequestRecord(updated),
       article: toApiArticle(saved),
       adminArticle: toAdminArticleInput(saved),
+      indexing,
     });
   }
 

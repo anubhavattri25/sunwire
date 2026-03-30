@@ -1,6 +1,6 @@
 const crypto = require("node:crypto");
 const axios = require("axios");
-const { SITE } = require("../../lib/seo");
+const { SITE, buildArticleUrl } = require("../../lib/seo");
 const { logEvent } = require("./logger");
 
 const GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token";
@@ -214,7 +214,59 @@ async function submitSearchConsoleSitemaps() {
   }
 }
 
+function buildPublishedArticleUrl(article = {}) {
+  const id = normalizeEnvString(article.id || "");
+  const slug = normalizeEnvString(article.slug || "");
+  const title = normalizeEnvString(article.title || article.headline || "");
+  const category = normalizeEnvString(article.category || "latest");
+
+  if (!id && !slug && !title) return "";
+
+  return buildArticleUrl({
+    id,
+    slug,
+    title,
+    category,
+  });
+}
+
+async function requestPublishedArticleIndexing(article = {}) {
+  const articleUrl = buildPublishedArticleUrl(article);
+
+  try {
+    const sitemapResult = await submitSearchConsoleSitemaps();
+    const result = {
+      ...sitemapResult,
+      articleUrl,
+      requestedAt: new Date().toISOString(),
+    };
+
+    logEvent("seo.article_indexing.requested", {
+      articleUrl,
+      ok: result.ok,
+      skipped: result.skipped,
+      submitted: result.submitted,
+      error: result.error || "",
+    });
+
+    return result;
+  } catch (error) {
+    const result = {
+      ok: false,
+      skipped: false,
+      submitted: 0,
+      articleUrl,
+      requestedAt: new Date().toISOString(),
+      error: error.message || "search_console_request_failed",
+    };
+
+    logEvent("seo.article_indexing.error", result);
+    return result;
+  }
+}
+
 module.exports = {
+  requestPublishedArticleIndexing,
   submitSearchConsoleSitemaps,
   pingGoogleSitemaps: submitSearchConsoleSitemaps,
 };

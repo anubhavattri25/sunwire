@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('../config/database');
 const { articleSelect, toApiArticle } = require('../models/Article');
 const { invalidateCache } = require('../utils/cache');
+const { requestPublishedArticleIndexing } = require('../utils/searchIndexing');
 const {
   ADMIN_EMAIL,
   clearAdminSessionCookie,
@@ -230,9 +231,11 @@ router.post('/admin/news', requireExpressAdmin, async (req, res, next) => {
     });
 
     await invalidateCache();
+    const indexing = await requestPublishedArticleIndexing(created);
     return res.status(201).json({
       ok: true,
       article: toApiArticle(created),
+      indexing,
     });
   } catch (error) {
     return res.status(Number(error.statusCode || 500)).json({ error: error.message || 'News push failed.' });

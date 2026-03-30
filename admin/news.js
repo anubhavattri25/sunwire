@@ -172,6 +172,23 @@ function setStatus(message, isError = false) {
   dom.formStatus.classList.toggle("text-slate-500", !isError);
 }
 
+function setRequestMeta(message = "") {
+  if (!dom.requestListMeta) return;
+  dom.requestListMeta.textContent = cleanText(message);
+}
+
+function buildIndexingStatusMessage(actionLabel = "Story pushed", indexing = null) {
+  const actionText = cleanText(actionLabel) || "Story pushed";
+  if (!indexing || typeof indexing !== "object") return `${actionText}.`;
+  if (indexing.ok) return `${actionText}. Google sitemap re-submitted for faster discovery.`;
+  if (indexing.skipped) return `${actionText}. Indexing request skipped because Search Console credentials are not configured yet.`;
+
+  const error = cleanText(indexing.error || "");
+  return error
+    ? `${actionText}. Indexing request failed: ${error}.`
+    : `${actionText}. Indexing request failed.`;
+}
+
 function showToast(message) {
   if (!dom.toast || !dom.toastMessage) return;
   dom.toastMessage.textContent = message;
@@ -1412,12 +1429,15 @@ async function handleApproveRequest() {
   setRequestButtonState(dom.approveRequestButton, true, "Publishing...");
   setRequestButtonState(dom.rejectRequestButton, true, "Working...");
   try {
-    await fetchJson(`/api/admin?view=requests&id=${encodeURIComponent(state.selectedRequestId)}&action=approve`, {
+    const data = await fetchJson(`/api/admin?view=requests&id=${encodeURIComponent(state.selectedRequestId)}&action=approve`, {
       method: "PATCH",
       body: JSON.stringify({}),
     });
-    showToast("Request approved and published.");
+    const statusMessage = buildIndexingStatusMessage("Request approved and published", data.indexing);
     await Promise.all([loadRequests(), loadAdminSummary()]);
+    setRequestMeta(statusMessage);
+    setStatus(statusMessage);
+    showToast(statusMessage);
   } finally {
     state.requestBusy = false;
     setRequestButtonState(dom.approveRequestButton, false, "Publishing...");
@@ -1554,8 +1574,9 @@ async function handleSubmit(event) {
       });
 
       applyArticleToForm(data.adminArticle || {});
-      setStatus(isUpdate ? "Story updated." : "Story pushed.");
-      showToast(isUpdate ? "Story updated." : "Story pushed.");
+      const statusMessage = buildIndexingStatusMessage(isUpdate ? "Story updated" : "Story pushed", data.indexing);
+      setStatus(statusMessage);
+      showToast(statusMessage);
       await loadPageData();
       if (state.mode === "watch-all-news") await loadArchiveData();
     }
