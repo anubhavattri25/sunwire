@@ -18,7 +18,14 @@ const marketBoardHistory = new Map();
 
 async function fetchJsonNoCache(url) {
   const sep = url.includes("?") ? "&" : "?";
-  const response = await fetch(`${url}${sep}_ts=${Date.now()}`, { cache: "no-store" });
+  const response = await fetch(`${url}${sep}_ts=${Date.now()}`, {
+    cache: "no-store",
+    headers: {
+      "User-Agent": "SunwireBot/1.0 (+https://sunwire.in)",
+      Accept: "application/json,text/plain,*/*",
+      "Accept-Language": "en-US,en;q=0.9",
+    },
+  });
   if (!response.ok) throw new Error(`Fetch failed: ${url}`);
   return response.json();
 }

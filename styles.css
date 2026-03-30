@@ -2816,8 +2816,8 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .right-sidebar {
-    grid-template-rows: minmax(0, 0.96fr) minmax(0, 0.78fr) minmax(0, 1.02fr) !important;
-    gap: 10px !important;
+    grid-template-rows: minmax(0, 0.9fr) minmax(0, 0.78fr) minmax(0, 1.14fr) !important;
+    gap: 12px !important;
     overflow: hidden !important;
   }
 
@@ -2887,25 +2887,32 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .sidebar-card--updates .event-list {
-    padding: 10px 14px 12px !important;
-    gap: 8px !important;
+    padding: 14px 15px 16px !important;
+    gap: 12px !important;
     justify-content: start !important;
   }
 
   .sidebar-card--updates .event-list li {
-    gap: 10px !important;
+    gap: 12px !important;
+    align-items: start !important;
   }
 
   .sidebar-card--updates .event-list li strong {
-    font-size: 0.88rem !important;
-    line-height: 1.06 !important;
+    font-size: 0.95rem !important;
+    line-height: 1.14 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
   }
 
   .sidebar-card--updates .event-list li span {
-    font-size: 0.78rem !important;
-    line-height: 1.2 !important;
-    display: block !important;
-    overflow: visible !important;
+    font-size: 0.84rem !important;
+    line-height: 1.36 !important;
+    display: -webkit-box !important;
+    -webkit-line-clamp: 2 !important;
+    -webkit-box-orient: vertical !important;
+    overflow: hidden !important;
   }
 }
 
@@ -2916,6 +2923,7 @@ body[data-home-mode="archive"] .category-zone {
     max-height: none !important;
     grid-template-rows: auto auto auto !important;
     overflow: visible !important;
+    gap: 14px !important;
   }
 
   .sidebar-card {
@@ -2970,12 +2978,13 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .sidebar-card--updates .event-list li strong {
-    line-height: 1.16 !important;
+    font-size: 0.96rem !important;
+    line-height: 1.18 !important;
   }
 
   .sidebar-card--updates .event-list li span {
-    font-size: 0.82rem !important;
-    line-height: 1.32 !important;
+    font-size: 0.86rem !important;
+    line-height: 1.38 !important;
   }
 }
 
