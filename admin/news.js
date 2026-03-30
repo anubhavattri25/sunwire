@@ -133,6 +133,8 @@ const dom = {
   readerPulseStepInput: document.getElementById("readerPulseStepInput"),
   readerPulseMinutesInput: document.getElementById("readerPulseMinutesInput"),
   readerPulseStartedAtInput: document.getElementById("readerPulseStartedAtInput"),
+  readerPulsePushedCount: document.getElementById("readerPulsePushedCount"),
+  readerPulsePushedList: document.getElementById("readerPulsePushedList"),
   liveUpdatesStartedAtInput: document.getElementById("liveUpdatesStartedAtInput"),
   liveUpdatesMinGapInput: document.getElementById("liveUpdatesMinGapInput"),
   liveUpdatesMaxGapInput: document.getElementById("liveUpdatesMaxGapInput"),
@@ -140,6 +142,8 @@ const dom = {
   liveUpdatesCountBadge: document.getElementById("liveUpdatesCountBadge"),
   liveUpdatesPreviewBadge: document.getElementById("liveUpdatesPreviewBadge"),
   liveUpdatesPreviewList: document.getElementById("liveUpdatesPreviewList"),
+  liveUpdatesPushedCount: document.getElementById("liveUpdatesPushedCount"),
+  liveUpdatesPushedList: document.getElementById("liveUpdatesPushedList"),
   saveReaderPulseButton: document.getElementById("saveReaderPulseButton"),
   clearReaderPulseButton: document.getElementById("clearReaderPulseButton"),
   saveLiveUpdatesButton: document.getElementById("saveLiveUpdatesButton"),
@@ -798,6 +802,87 @@ function applyStorySignalsArticle(article = null) {
   if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = liveUpdates.items.join("\n");
 
   renderStorySignalsPreview();
+}
+
+function createSignalStoryCard(article = {}, options = {}) {
+  const card = document.createElement("button");
+  card.type = "button";
+  const isSelected = cleanText(article.id || "") === cleanText(state.selectedSignalArticleId || "");
+  card.className = `w-full rounded-[22px] border px-4 py-4 text-left transition ${
+    isSelected ? "border-slate-950 bg-amber-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+  }`;
+
+  const title = document.createElement("p");
+  title.className = "text-sm font-semibold leading-6 text-slate-950";
+  title.textContent = cleanText(article.title || "Untitled story");
+
+  const meta = document.createElement("p");
+  meta.className = "mt-2 text-xs text-slate-500";
+  meta.textContent = cleanText(options.meta || "");
+
+  card.append(title, meta);
+  card.addEventListener("click", () => applyStorySignalsArticle(article));
+  return card;
+}
+
+function renderSignalBoards() {
+  const readerStories = [...state.archiveArticles]
+    .filter((article) => Number(article.syntheticViews || 0) > 0)
+    .sort((left, right) => {
+      const syntheticDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
+      if (syntheticDiff !== 0) return syntheticDiff;
+      return new Date(right.created_at || right.published_at || 0).getTime()
+        - new Date(left.created_at || left.published_at || 0).getTime();
+    })
+    .slice(0, 12);
+
+  const liveStories = [...state.archiveArticles]
+    .filter((article) => Number(article.liveUpdateCount || 0) > 0)
+    .sort((left, right) => {
+      const liveDiff = Number(right.liveUpdateCount || 0) - Number(left.liveUpdateCount || 0);
+      if (liveDiff !== 0) return liveDiff;
+      return new Date(right.created_at || right.published_at || 0).getTime()
+        - new Date(left.created_at || left.published_at || 0).getTime();
+    })
+    .slice(0, 12);
+
+  if (dom.readerPulsePushedCount) {
+    dom.readerPulsePushedCount.textContent = `${readerStories.length} live`;
+  }
+  if (dom.readerPulsePushedList) {
+    dom.readerPulsePushedList.replaceChildren();
+    if (!readerStories.length) {
+      const empty = document.createElement("p");
+      empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+      empty.textContent = "Stories pushed to People Are Reading will appear here.";
+      dom.readerPulsePushedList.append(empty);
+    } else {
+      readerStories.forEach((article) => {
+        dom.readerPulsePushedList.append(createSignalStoryCard(article, {
+          meta: `${formatCompactNumber(article.syntheticViews || 0)} readers • ${fmtDate(article.created_at || article.published_at || "")}`,
+        }));
+      });
+    }
+  }
+
+  if (dom.liveUpdatesPushedCount) {
+    dom.liveUpdatesPushedCount.textContent = `${liveStories.length} live`;
+  }
+  if (dom.liveUpdatesPushedList) {
+    dom.liveUpdatesPushedList.replaceChildren();
+    if (!liveStories.length) {
+      const empty = document.createElement("p");
+      empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+      empty.textContent = "Stories pushed to Live Updates will appear here.";
+      dom.liveUpdatesPushedList.append(empty);
+    } else {
+      liveStories.forEach((article) => {
+        dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
+          meta: `${Number(article.liveUpdateCount || 0)} queued updates • ${fmtDate(article.created_at || article.published_at || "")}`,
+        }));
+      });
+    }
+  }
 }
 
 function setButtonBusy(button, busy, busyLabel) {
@@ -1631,6 +1716,7 @@ function archiveDateLabel(key = "") {
 function renderArchive(items = []) {
   state.archiveArticles = Array.isArray(items) ? items : [];
   renderStorySignalsArticleOptions(state.archiveArticles);
+  renderSignalBoards();
   if (dom.manualTotalCount) dom.manualTotalCount.textContent = `${state.archiveArticles.length} articles`;
   if (dom.archiveUpdatedAt) dom.archiveUpdatedAt.textContent = `Updated ${fmtDate(new Date().toISOString())}`;
   if (!dom.archiveGroups) return;
@@ -1653,12 +1739,10 @@ function renderArchive(items = []) {
   });
 
   groups.forEach((articles, key) => {
-    const sortedArticles = [...articles].sort((left, right) => {
-      const syntheticDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
-      if (syntheticDiff !== 0) return syntheticDiff;
-      return new Date(right.created_at || right.published_at || 0).getTime()
-        - new Date(left.created_at || left.published_at || 0).getTime();
-    });
+    const sortedArticles = [...articles].sort((left, right) =>
+      new Date(right.created_at || right.published_at || 0).getTime()
+        - new Date(left.created_at || left.published_at || 0).getTime()
+    );
     const section = document.createElement("section");
     section.className = "archive-group";
 
@@ -1708,8 +1792,6 @@ function renderArchive(items = []) {
         toTitleCase(article.category || "news"),
         cleanText(article.source || ""),
         article.is_featured ? "Hero live" : "",
-        article.syntheticViews ? `${formatCompactNumber(article.syntheticViews)} reading` : "",
-        article.liveUpdateCount ? `${article.liveUpdateCount} queued updates` : "",
       ].filter(Boolean).join(" | ");
 
       const actions = document.createElement("div");
@@ -1718,7 +1800,7 @@ function renderArchive(items = []) {
       const manageButton = document.createElement("button");
       manageButton.type = "button";
       manageButton.className = "rounded-full border border-slate-300 bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200";
-      manageButton.textContent = "Manage Live Desk";
+      manageButton.textContent = "Select Story";
       manageButton.addEventListener("click", (event) => {
         event.stopPropagation();
         selectArticle();

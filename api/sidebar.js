@@ -21,11 +21,11 @@ const {
 
 const SIDEBAR_CACHE_TTL_MS = 30 * 60 * 1000;
 const SIDEBAR_FALLBACK_CACHE_TTL_MS = 2 * 60 * 1000;
-const sidebarCache = globalThis.__SUNWIRE_SIDEBAR_CACHE__ || {
+const sidebarBaseCache = globalThis.__SUNWIRE_SIDEBAR_CACHE__ || {
   payload: null,
   expiresAt: 0,
 };
-globalThis.__SUNWIRE_SIDEBAR_CACHE__ = sidebarCache;
+globalThis.__SUNWIRE_SIDEBAR_CACHE__ = sidebarBaseCache;
 const marketBoardHistory = new Map();
 
 async function fetchJsonNoCache(url) {
@@ -265,8 +265,8 @@ function rememberMarketBoard(board = {}) {
 }
 
 function backfillHistoryFromCachedPayload() {
-  if (!sidebarCache.payload?.marketBoard) return;
-  rememberMarketBoard(sidebarCache.payload.marketBoard);
+  if (!sidebarBaseCache.payload?.marketBoard) return;
+  rememberMarketBoard(sidebarBaseCache.payload.marketBoard);
 }
 
 function parseGoldBoard(html = "") {
@@ -608,36 +608,43 @@ module.exports = async (req, res) => {
     marketBoard: MARKET_BOARD_FALLBACK,
   };
 
-  if (sidebarCache.payload && sidebarCache.expiresAt > Date.now()) {
-    res.setHeader("Cache-Control", "no-store, max-age=0");
-    res.status(200).json(sidebarCache.payload);
-    return;
+  let eventsUsedFallback = false;
+  let cachedBasePayload = null;
+  if (sidebarBaseCache.payload && sidebarBaseCache.expiresAt > Date.now()) {
+    cachedBasePayload = sidebarBaseCache.payload;
+  } else {
+    const [startup, events, tool, marketBoard] = await Promise.all([
+      fetchStartupSpotlight().catch(() => fallback.startup),
+      fetchUpcomingEvents().catch(() => {
+        eventsUsedFallback = true;
+        return fallback.events;
+      }),
+      fetchToolOfDay().catch(() => fallback.tool),
+      fetchMarketBoard().catch(() => fallback.marketBoard),
+    ]);
+
+    sidebarBaseCache.payload = normalizeSidebarPayload({
+      generatedAt: new Date().toISOString(),
+      startup,
+      events,
+      tool,
+      marketBoard,
+      peopleReading: [],
+      peopleReadingDegraded: false,
+      peopleReadingMessage: "",
+    }, fallback);
+    sidebarBaseCache.expiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
+    cachedBasePayload = sidebarBaseCache.payload;
   }
 
-  let eventsUsedFallback = false;
-
-  const [startup, events, tool, marketBoard, peopleReading] = await Promise.all([
-    fetchStartupSpotlight().catch(() => fallback.startup),
-    fetchUpcomingEvents().catch(() => {
-      eventsUsedFallback = true;
-      return fallback.events;
-    }),
-    fetchToolOfDay().catch(() => fallback.tool),
-    fetchMarketBoard().catch(() => fallback.marketBoard),
-    fetchPeopleReading(),
-  ]);
-
-  sidebarCache.payload = normalizeSidebarPayload({
+  const peopleReading = await fetchPeopleReading();
+  const responsePayload = normalizeSidebarPayload({
+    ...(cachedBasePayload || {}),
     generatedAt: new Date().toISOString(),
-    startup,
-    events,
-    tool,
-    marketBoard,
     peopleReading: peopleReading.items,
     peopleReadingDegraded: Boolean(peopleReading.degraded),
     peopleReadingMessage: cleanText(peopleReading.message || ""),
   }, fallback);
-  sidebarCache.expiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
   res.setHeader("Cache-Control", "no-store, max-age=0");
-  res.status(200).json(sidebarCache.payload);
+  res.status(200).json(responsePayload);
 };

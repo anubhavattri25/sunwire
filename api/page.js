@@ -59,7 +59,7 @@ function resolveGoogleClientId() {
 
 function injectRuntimeConfig(template = "", authState = null) {
   const clientId = resolveGoogleClientId();
-  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_AUTH_STATE__=${JSON.stringify(authState || null)};window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260331-37"></script>`;
+  const runtimeScript = `<script>window.__SUNWIRE_HOME_DATA__=null;window.__SUNWIRE_AUTH_STATE__=${JSON.stringify(authState || null)};window.__SUNWIRE_GOOGLE_CLIENT_ID__=${JSON.stringify(clientId)};document.documentElement.dataset.googleClientId=${JSON.stringify(clientId)};var authButton=document.getElementById('authButton');if(authButton){authButton.dataset.googleClientId=${JSON.stringify(clientId)};}</script><script type="module" src="/app.js?v=20260331-38"></script>`;
   return String(template || "").replace(
     /<script type="module" src="\/?app\.js\?v=[^"]+"><\/script>/,
     runtimeScript
