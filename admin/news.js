@@ -125,6 +125,7 @@ const dom = {
   archiveGroups: document.getElementById("archiveGroups"),
   archiveEmptyState: document.getElementById("archiveEmptyState"),
   storySignalsPreview: document.getElementById("storySignalsPreview"),
+  storySignalsArticleSelect: document.getElementById("storySignalsArticleSelect"),
   storySignalsHeadline: document.getElementById("storySignalsHeadline"),
   storySignalsMeta: document.getElementById("storySignalsMeta"),
   storySignalsStatus: document.getElementById("storySignalsStatus"),
@@ -586,8 +587,31 @@ function setStorySignalsStatus(message = "", isError = false) {
   dom.storySignalsStatus.classList.toggle("text-slate-500", !isError);
 }
 
+function renderStorySignalsArticleOptions(items = []) {
+  if (!dom.storySignalsArticleSelect) return;
+  const previousValue = cleanText(dom.storySignalsArticleSelect.value || state.selectedSignalArticleId || "");
+  dom.storySignalsArticleSelect.replaceChildren();
+
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a pushed article";
+  dom.storySignalsArticleSelect.append(placeholder);
+
+  items.forEach((article) => {
+    const option = document.createElement("option");
+    option.value = cleanText(article.id || "");
+    option.textContent = cleanText(article.title || "Untitled story");
+    dom.storySignalsArticleSelect.append(option);
+  });
+
+  dom.storySignalsArticleSelect.value = items.some((article) => cleanText(article.id) === previousValue)
+    ? previousValue
+    : "";
+}
+
 function resetStorySignalsDashboard({ preserveStatus = false } = {}) {
   state.selectedSignalArticleId = "";
+  if (dom.storySignalsArticleSelect) dom.storySignalsArticleSelect.value = "";
   if (dom.storySignalsPreview) dom.storySignalsPreview.textContent = "Choose a story";
   if (dom.storySignalsHeadline) dom.storySignalsHeadline.textContent = "Select a pushed article from Watch All News.";
   if (dom.storySignalsMeta) dom.storySignalsMeta.textContent = "The dashboard will load its visitor settings and live-update queue here.";
@@ -708,6 +732,7 @@ function applyStorySignalsArticle(article = null) {
   }
 
   state.selectedSignalArticleId = cleanText(article.id || "");
+  if (dom.storySignalsArticleSelect) dom.storySignalsArticleSelect.value = state.selectedSignalArticleId;
   if (dom.storySignalsHeadline) dom.storySignalsHeadline.textContent = cleanText(article.title || "Untitled story");
   if (dom.storySignalsMeta) {
     dom.storySignalsMeta.textContent = [
@@ -1566,6 +1591,7 @@ function archiveDateLabel(key = "") {
 
 function renderArchive(items = []) {
   state.archiveArticles = Array.isArray(items) ? items : [];
+  renderStorySignalsArticleOptions(state.archiveArticles);
   if (dom.manualTotalCount) dom.manualTotalCount.textContent = `${state.archiveArticles.length} articles`;
   if (dom.archiveUpdatedAt) dom.archiveUpdatedAt.textContent = `Updated ${fmtDate(new Date().toISOString())}`;
   if (!dom.archiveGroups) return;
@@ -1616,7 +1642,21 @@ function renderArchive(items = []) {
 
     sortedArticles.forEach((article) => {
       const card = document.createElement("article");
-      card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
+      const isSelected = cleanText(article.id || "") === cleanText(state.selectedSignalArticleId || "");
+      card.className = `rounded-[24px] border bg-white p-4 transition ${isSelected ? "border-slate-950 shadow-lg shadow-slate-200/70" : "border-slate-200"}`;
+      card.tabIndex = 0;
+      card.setAttribute("role", "button");
+      card.setAttribute("aria-label", `Select ${cleanText(article.title || "story")} for audience pulse controls`);
+      const selectArticle = () => {
+        applyStorySignalsArticle(article);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      };
+      card.addEventListener("click", selectArticle);
+      card.addEventListener("keydown", (event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        selectArticle();
+      });
 
       const headline = document.createElement("p");
       headline.className = "text-base font-semibold leading-7 text-slate-950";
@@ -1640,15 +1680,16 @@ function renderArchive(items = []) {
       manageButton.type = "button";
       manageButton.className = "rounded-full border border-slate-300 bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200";
       manageButton.textContent = "Manage Live Desk";
-      manageButton.addEventListener("click", () => {
-        applyStorySignalsArticle(article);
-        window.scrollTo({ top: 0, behavior: "smooth" });
+      manageButton.addEventListener("click", (event) => {
+        event.stopPropagation();
+        selectArticle();
       });
 
       const editLink = document.createElement("a");
       editLink.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
       editLink.href = `/admin/news?edit=${encodeURIComponent(article.id)}`;
       editLink.textContent = "Edit";
+      editLink.addEventListener("click", (event) => event.stopPropagation());
 
       const openLink = document.createElement("a");
       openLink.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
@@ -1656,6 +1697,7 @@ function renderArchive(items = []) {
       openLink.target = "_blank";
       openLink.rel = "noopener noreferrer";
       openLink.textContent = "Open";
+      openLink.addEventListener("click", (event) => event.stopPropagation());
 
       actions.append(manageButton, editLink, openLink);
       card.append(headline, meta, actions);
@@ -2092,6 +2134,16 @@ function attachStorySignalsListeners() {
   dom.clearStorySignalsButton?.addEventListener("click", () => {
     resetStorySignalsDashboard();
     showToast("Watch All News dashboard cleared.");
+  });
+
+  dom.storySignalsArticleSelect?.addEventListener("change", (event) => {
+    const article = findArchiveArticleById(event.target.value || "");
+    if (!article) {
+      resetStorySignalsDashboard({ preserveStatus: true });
+      setStorySignalsStatus("Choose an article from the dropdown or archive list.", true);
+      return;
+    }
+    applyStorySignalsArticle(article);
   });
 }
 

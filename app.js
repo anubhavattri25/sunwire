@@ -93,7 +93,7 @@ const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
 const DEFERRED_ASSET_VERSION = "20260331-16";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-13";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-14";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -328,6 +328,7 @@ let sidebarHydrationPromise = null;
 let pendingSidebarPayload = null;
 let pendingTopSections = [];
 let pendingTopSectionsVariant = "dense";
+let cardImagePriorityBudget = 0;
 
 function loadHomeWidgetsModule() {
   homeWidgetsModulePromise ||= import(`./app-widgets.mjs?v=${DEFERRED_ASSET_VERSION}`);
@@ -337,6 +338,16 @@ function loadHomeWidgetsModule() {
 function loadSearchModule() {
   searchModulePromise ||= import(`./app-search.mjs?v=${DEFERRED_ASSET_VERSION}`);
   return searchModulePromise;
+}
+
+function resetCardImagePriorityBudget(count = 0) {
+  cardImagePriorityBudget = Math.max(0, Number(count) || 0);
+}
+
+function consumeCardImagePriority() {
+  if (cardImagePriorityBudget <= 0) return false;
+  cardImagePriorityBudget -= 1;
+  return true;
 }
 
 function readAuthUiOverride() {
@@ -2165,6 +2176,7 @@ function createNewsCard(story, variant = "standard") {
   const sourceEl = card.querySelector(".news-card__source");
   const href = buildArticleHref(story);
   const imageSrc = storyImage(story);
+  const prioritizeImage = consumeCardImagePriority();
 
   mediaLink.href = href;
   headlineLink.href = href;
@@ -2178,6 +2190,9 @@ function createNewsCard(story, variant = "standard") {
         ? "(max-width: 900px) 100vw, 48vw"
         : "(max-width: 900px) 100vw, 30vw",
     fallbackSrc: buildFallbackImage(story),
+    highPriority: prioritizeImage,
+    loading: prioritizeImage ? "eager" : "lazy",
+    fetchPriority: prioritizeImage ? "high" : "",
   });
   tag.textContent = categoryLabel(story);
   headline.textContent = optimizeHeadline(story.title, variant === "compact" ? "compact" : "card");
@@ -2672,6 +2687,8 @@ function renderHomepageLayout(layout) {
       : "More News";
   }
 
+  resetCardImagePriorityBudget(hasFullGrid ? 8 : 10);
+
   if (!hasFullGrid) {
     renderHero(layout.hero);
     renderTrendingSection(layout.trending || []);
@@ -2707,6 +2724,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
     : "Search Results";
 
   if (hasResults) {
+    resetCardImagePriorityBudget(10);
     renderTicker(stories);
     renderHero(resolvedLayout.hero);
     renderTrendingSection(resolvedLayout.trending);

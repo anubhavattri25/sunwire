@@ -20,9 +20,9 @@ function formatSidebarDate(value = "") {
 
 function getPriceIcon(name = "") {
   const normalized = String(name || "").toLowerCase();
-  if (normalized.includes("gold")) return "🥇";
-  if (normalized.includes("silver")) return "🥈";
-  if (normalized.includes("nifty")) return "📊";
+  if (normalized.includes("gold")) return "🪙";
+  if (normalized.includes("silver")) return "⚪";
+  if (normalized.includes("nifty")) return "📈";
   return "📈";
 }
 

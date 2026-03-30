@@ -53,19 +53,117 @@ loadEnvFile(path.join(ROOT_DIR, "backend", ".env"));
 process.env.SSR_FETCH_MODE ||= "api";
 process.env.SUNWIRE_LOCAL_DATA_MODE ||= "production-api";
 process.env.SUNWIRE_REMOTE_NEWS_API ||= "https://sunwire.in/api/news";
+process.env.SUNWIRE_REMOTE_SIDEBAR_API ||= "https://sunwire.in/api/sidebar";
+process.env.SUNWIRE_REMOTE_ARTICLE_API ||= "https://sunwire.in/api/article";
+process.env.SUNWIRE_REMOTE_ARTICLE_PAGE_API ||= "https://sunwire.in/api/article-page";
+process.env.SUNWIRE_REMOTE_ARTICLE_REDIRECT_API ||= "https://sunwire.in/api/article-redirect";
+process.env.SUNWIRE_REMOTE_PAGE_API ||= "https://sunwire.in/api/page";
 process.env.SUNWIRE_LOCAL_OFFLINE ||= "0";
 
+function isProductionApiMode() {
+  return String(process.env.SUNWIRE_LOCAL_DATA_MODE || "").trim().toLowerCase() === "production-api";
+}
+
+async function proxyUpstreamIfConfigured(req, res, remoteBase = "") {
+  const targetBase = String(remoteBase || "").trim();
+  if (!targetBase) return false;
+
+  const requestUrl = new URL(req.url, `http://${req.headers.host || `localhost:${PORT}`}`);
+  const upstreamUrl = new URL(targetBase);
+  requestUrl.searchParams.forEach((value, key) => {
+    upstreamUrl.searchParams.set(key, value);
+  });
+
+  const response = await fetch(upstreamUrl, {
+    headers: {
+      Accept: req.headers.accept || "application/json,text/plain,*/*",
+      "User-Agent": "SunwireLocal/1.0 (+http://localhost:3000)",
+    },
+    cache: "no-store",
+    redirect: "manual",
+  });
+
+  if (response.status >= 400) {
+    throw new Error(`Upstream request failed: ${upstreamUrl.toString()} (${response.status})`);
+  }
+
+  const payload = await response.text();
+  res.statusCode = response.status;
+  res.setHeader("Content-Type", response.headers.get("content-type") || "application/json; charset=utf-8");
+  res.setHeader("Cache-Control", "no-store");
+  const location = response.headers.get("location");
+  if (location) res.setHeader("Location", location);
+  res.end(payload);
+  return true;
+}
+
+const directSidebarHandler = require("./api/sidebar");
+const directArticleHandler = require("./api/article");
+const directArticlePageHandler = require("./api/article-page");
+const directArticleRedirectHandler = require("./api/article-redirect");
+const directPageHandler = require("./api/page");
+
 const HANDLERS = {
-  "/api/article": require("./api/article"),
-  "/api/article-page": require("./api/article-page"),
-  "/api/article-redirect": require("./api/article-redirect"),
+  "/api/article": async (req, res) => {
+    if (isProductionApiMode()) {
+      try {
+        const proxied = await proxyUpstreamIfConfigured(req, res, process.env.SUNWIRE_REMOTE_ARTICLE_API);
+        if (proxied) return;
+      } catch (_) {
+        // Fall back to the local handler when upstream access is unavailable.
+      }
+    }
+    await directArticleHandler(req, res);
+  },
+  "/api/article-page": async (req, res) => {
+    if (isProductionApiMode()) {
+      try {
+        const proxied = await proxyUpstreamIfConfigured(req, res, process.env.SUNWIRE_REMOTE_ARTICLE_PAGE_API);
+        if (proxied) return;
+      } catch (_) {
+        // Fall back to the local handler when upstream access is unavailable.
+      }
+    }
+    await directArticlePageHandler(req, res);
+  },
+  "/api/article-redirect": async (req, res) => {
+    if (isProductionApiMode()) {
+      try {
+        const proxied = await proxyUpstreamIfConfigured(req, res, process.env.SUNWIRE_REMOTE_ARTICLE_REDIRECT_API);
+        if (proxied) return;
+      } catch (_) {
+        // Fall back to the local handler when upstream access is unavailable.
+      }
+    }
+    await directArticleRedirectHandler(req, res);
+  },
   "/api/admin": require("./api/admin"),
   "/api/health": require("./api/health"),
   "/api/ingest": require("./api/ingest"),
   "/api/news": require("./api/news"),
   "/api/news-sitemap": require("./api/news-sitemap"),
-  "/api/page": require("./api/page"),
-  "/api/sidebar": require("./api/sidebar"),
+  "/api/page": async (req, res) => {
+    if (isProductionApiMode()) {
+      try {
+        const proxied = await proxyUpstreamIfConfigured(req, res, process.env.SUNWIRE_REMOTE_PAGE_API);
+        if (proxied) return;
+      } catch (_) {
+        // Fall back to the local page renderer when upstream access is unavailable.
+      }
+    }
+    await directPageHandler(req, res);
+  },
+  "/api/sidebar": async (req, res) => {
+    if (isProductionApiMode()) {
+      try {
+        const proxied = await proxyUpstreamIfConfigured(req, res, process.env.SUNWIRE_REMOTE_SIDEBAR_API);
+        if (proxied) return;
+      } catch (_) {
+        // Fall back to the local generator when upstream access is unavailable.
+      }
+    }
+    await directSidebarHandler(req, res);
+  },
   "/api/sitemap": require("./api/sitemap"),
 };
 

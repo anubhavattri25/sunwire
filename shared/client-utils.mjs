@@ -169,16 +169,26 @@ export function upsertImagePreload(href = "", options = {}) {
 export function applyResponsiveImage(imageElement, src, options = {}) {
   if (!imageElement) return;
 
-  const { alt = "", highPriority = false, fallbackSrc = "" } = options;
+  const {
+    alt = "",
+    highPriority = false,
+    fallbackSrc = "",
+    loading = "",
+    fetchPriority = "",
+  } = options;
   const config = buildResponsiveImageConfig(src, options);
+  const normalizedLoading = String(loading || "").trim().toLowerCase();
+  const normalizedFetchPriority = String(fetchPriority || "").trim().toLowerCase();
 
   imageElement.alt = alt;
   imageElement.width = config.width;
   imageElement.height = config.height;
   imageElement.decoding = "async";
-  imageElement.loading = highPriority ? "eager" : "lazy";
+  imageElement.loading = normalizedLoading || (highPriority ? "eager" : "lazy");
 
-  if (highPriority) {
+  if (normalizedFetchPriority) {
+    imageElement.fetchPriority = normalizedFetchPriority;
+  } else if (highPriority) {
     imageElement.fetchPriority = "high";
   } else {
     imageElement.removeAttribute("fetchpriority");
