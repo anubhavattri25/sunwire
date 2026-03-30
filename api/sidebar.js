@@ -21,8 +21,11 @@ const {
 
 const SIDEBAR_CACHE_TTL_MS = 30 * 60 * 1000;
 const SIDEBAR_FALLBACK_CACHE_TTL_MS = 2 * 60 * 1000;
-let cachedSidebarPayload = null;
-let cachedSidebarExpiresAt = 0;
+const sidebarCache = globalThis.__SUNWIRE_SIDEBAR_CACHE__ || {
+  payload: null,
+  expiresAt: 0,
+};
+globalThis.__SUNWIRE_SIDEBAR_CACHE__ = sidebarCache;
 const marketBoardHistory = new Map();
 
 async function fetchJsonNoCache(url) {
@@ -262,8 +265,8 @@ function rememberMarketBoard(board = {}) {
 }
 
 function backfillHistoryFromCachedPayload() {
-  if (!cachedSidebarPayload?.marketBoard) return;
-  rememberMarketBoard(cachedSidebarPayload.marketBoard);
+  if (!sidebarCache.payload?.marketBoard) return;
+  rememberMarketBoard(sidebarCache.payload.marketBoard);
 }
 
 function parseGoldBoard(html = "") {
@@ -502,13 +505,14 @@ async function fetchPeopleReading() {
     const items = records
       .map((record) => toApiArticle(record))
       .filter(Boolean)
+      .filter((article) => Number(article.syntheticViews || 0) > 0)
       .sort((left, right) => {
         const readerDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
         if (readerDiff !== 0) return readerDiff;
         return new Date(right.created_at || right.published_at || 0).getTime()
           - new Date(left.created_at || left.published_at || 0).getTime();
       })
-      .slice(0, 6)
+      .slice(0, 4)
       .map((article) => ({
         id: article.id,
         title: article.title,
@@ -604,9 +608,9 @@ module.exports = async (req, res) => {
     marketBoard: MARKET_BOARD_FALLBACK,
   };
 
-  if (cachedSidebarPayload && cachedSidebarExpiresAt > Date.now()) {
+  if (sidebarCache.payload && sidebarCache.expiresAt > Date.now()) {
     res.setHeader("Cache-Control", "no-store, max-age=0");
-    res.status(200).json(cachedSidebarPayload);
+    res.status(200).json(sidebarCache.payload);
     return;
   }
 
@@ -623,7 +627,7 @@ module.exports = async (req, res) => {
     fetchPeopleReading(),
   ]);
 
-  cachedSidebarPayload = normalizeSidebarPayload({
+  sidebarCache.payload = normalizeSidebarPayload({
     generatedAt: new Date().toISOString(),
     startup,
     events,
@@ -633,7 +637,7 @@ module.exports = async (req, res) => {
     peopleReadingDegraded: Boolean(peopleReading.degraded),
     peopleReadingMessage: cleanText(peopleReading.message || ""),
   }, fallback);
-  cachedSidebarExpiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
+  sidebarCache.expiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
   res.setHeader("Cache-Control", "no-store, max-age=0");
-  res.status(200).json(cachedSidebarPayload);
+  res.status(200).json(sidebarCache.payload);
 };

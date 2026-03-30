@@ -3112,7 +3112,7 @@ body[data-home-mode="archive"] .category-zone {
   padding: 14px 16px 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 14px;
 }
 
 .people-reading-item {
@@ -3121,16 +3121,16 @@ body[data-home-mode="archive"] .category-zone {
 
 .people-reading-link {
   display: grid;
-  grid-template-columns: 64px minmax(0, 1fr) auto;
-  gap: 12px;
-  align-items: center;
+  grid-template-columns: 58px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: start;
   color: inherit;
   text-decoration: none;
 }
 
 .people-reading-thumb {
-  width: 64px;
-  height: 64px;
+  width: 58px;
+  height: 58px;
   object-fit: cover;
   border-radius: 14px;
   background: rgba(17, 17, 17, 0.08);
@@ -3146,24 +3146,49 @@ body[data-home-mode="archive"] .category-zone {
 .people-reading-copy strong {
   display: block;
   font-family: "Inter Tight", sans-serif;
-  font-size: 1rem;
-  line-height: 1.12;
+  font-size: 0.98rem;
+  line-height: 1.1;
   letter-spacing: -0.03em;
   color: var(--ink);
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .people-reading-copy span {
-  font-size: 0.88rem;
-  line-height: 1.34;
+  font-size: 0.84rem;
+  line-height: 1.28;
   color: #7b6d5c;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  overflow: hidden;
 }
 
 .people-reading-count {
   align-self: start;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  min-width: 48px;
+  text-align: right;
+}
+
+.people-reading-count strong {
   font-family: "Inter Tight", sans-serif;
-  font-size: 1.08rem;
+  font-size: 1.18rem;
   font-weight: 900;
   color: #6d5320;
+}
+
+.people-reading-count small {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #9a8050;
 }
 
 @media (min-width: 901px) {
@@ -3224,5 +3249,9 @@ body[data-home-mode="archive"] .category-zone {
   .people-reading-thumb {
     width: 56px;
     height: 56px;
+  }
+
+  .people-reading-count {
+    min-width: 42px;
   }
 }

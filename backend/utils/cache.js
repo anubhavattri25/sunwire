@@ -22,6 +22,12 @@ function clearPublicStoryCaches() {
   if (featuredExpiryState && typeof featuredExpiryState === 'object') {
     featuredExpiryState.lastRunAt = 0;
   }
+
+  const sidebarCache = globalThis.__SUNWIRE_SIDEBAR_CACHE__;
+  if (sidebarCache && typeof sidebarCache === 'object') {
+    sidebarCache.payload = null;
+    sidebarCache.expiresAt = 0;
+  }
 }
 
 function buildCacheKey(...parts) {

@@ -140,8 +140,10 @@ const dom = {
   liveUpdatesCountBadge: document.getElementById("liveUpdatesCountBadge"),
   liveUpdatesPreviewBadge: document.getElementById("liveUpdatesPreviewBadge"),
   liveUpdatesPreviewList: document.getElementById("liveUpdatesPreviewList"),
-  saveStorySignalsButton: document.getElementById("saveStorySignalsButton"),
-  clearStorySignalsButton: document.getElementById("clearStorySignalsButton"),
+  saveReaderPulseButton: document.getElementById("saveReaderPulseButton"),
+  clearReaderPulseButton: document.getElementById("clearReaderPulseButton"),
+  saveLiveUpdatesButton: document.getElementById("saveLiveUpdatesButton"),
+  clearLiveUpdatesButton: document.getElementById("clearLiveUpdatesButton"),
   accessForm: document.getElementById("accessForm"),
   accessEmailInput: document.getElementById("accessEmailInput"),
   grantAccessButton: document.getElementById("grantAccessButton"),
@@ -661,6 +663,40 @@ function getStorySignalsPayload(article = {}) {
   };
 }
 
+function emptyReaderPulsePayload(article = {}) {
+  return {
+    enabled: false,
+    baseCount: 0,
+    incrementBy: 0,
+    everyMinutes: 15,
+    startedAt: normalizeSignalDate(signalStartFallback(article)),
+  };
+}
+
+function emptyLiveUpdatesPayload(article = {}) {
+  return {
+    enabled: false,
+    startedAt: normalizeSignalDate(signalStartFallback(article)),
+    minGapMinutes: 10,
+    maxGapMinutes: 20,
+    items: [],
+  };
+}
+
+function setStorySignalsButtonsBusy(activeButton = null, busy = false, busyLabel = "Saving...") {
+  [
+    dom.saveReaderPulseButton,
+    dom.clearReaderPulseButton,
+    dom.saveLiveUpdatesButton,
+    dom.clearLiveUpdatesButton,
+  ].forEach((button) => {
+    if (!button) return;
+    if (!button.dataset.label) button.dataset.label = button.textContent || "";
+    button.disabled = busy;
+    button.textContent = busy && button === activeButton ? busyLabel : button.dataset.label;
+  });
+}
+
 function renderStorySignalsPreview() {
   const article = findArchiveArticleById(state.selectedSignalArticleId);
   if (!article) {
@@ -690,12 +726,15 @@ function renderStorySignalsPreview() {
       ? `${activeCount} live / ${timeline.length} total`
       : "No queue";
   }
-  setStorySignalsStatus(
-    currentVisitors > 0
-      ? `Current visitor count preview: ${formatCompactNumber(currentVisitors)} readers.`
-      : "Add visitor numbers or queued updates, then save.",
-    false
-  );
+  if (currentVisitors > 0 && timeline.length) {
+    setStorySignalsStatus(`Previewing ${formatCompactNumber(currentVisitors)} readers and ${timeline.length} queued live updates.`);
+  } else if (currentVisitors > 0) {
+    setStorySignalsStatus(`Current visitor count preview: ${formatCompactNumber(currentVisitors)} readers.`);
+  } else if (timeline.length) {
+    setStorySignalsStatus(`${timeline.length} live updates are queued in preview. Push Live Updates to publish them.`);
+  } else {
+    setStorySignalsStatus("Add visitor numbers or queued updates, then push them.");
+  }
 
   if (!dom.liveUpdatesPreviewList) return;
   dom.liveUpdatesPreviewList.replaceChildren();
@@ -1810,7 +1849,7 @@ async function loadArchiveData(options = {}) {
   renderArchive(data.items || []);
 }
 
-async function handleSaveStorySignals() {
+async function handleStorySignalsMutation(payload = {}, options = {}) {
   const article = findArchiveArticleById(state.selectedSignalArticleId);
   if (!article || state.storySignalsBusy) {
     setStorySignalsStatus("Choose an article from Watch All News first.", true);
@@ -1818,24 +1857,111 @@ async function handleSaveStorySignals() {
   }
 
   state.storySignalsBusy = true;
-  setButtonBusy(dom.saveStorySignalsButton, true, "Saving...");
-  setStorySignalsStatus("Saving audience pulse and live desk...");
+  setStorySignalsButtonsBusy(options.activeButton || null, true, options.busyLabel || "Saving...");
+  setStorySignalsStatus(cleanText(options.pendingMessage || "Saving dashboard changes..."));
 
   try {
-    const payload = getStorySignalsPayload(article);
     const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(article.id)}&action=story-signals`, {
       method: "PATCH",
       body: JSON.stringify(payload),
     });
-    showToast("Audience pulse and live desk saved.");
-    setStorySignalsStatus("Saved. Homepage counters and live updates will refresh from this article.");
     await loadArchiveData({ forceFresh: true });
     const refreshed = data.article ? findArchiveArticleById(data.article.id) : findArchiveArticleById(article.id);
     applyStorySignalsArticle(refreshed || data.article || article);
+    setStorySignalsStatus(cleanText(options.successMessage || "Saved."));
+    showToast(cleanText(options.toastMessage || "Saved."));
   } finally {
     state.storySignalsBusy = false;
-    setButtonBusy(dom.saveStorySignalsButton, false, "Saving...");
+    setStorySignalsButtonsBusy(options.activeButton || null, false, options.busyLabel || "Saving...");
   }
+}
+
+async function handleSaveReaderPulse() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article) {
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    return;
+  }
+
+  const payload = getStorySignalsPayload(article);
+  if (!payload.readerPulse.enabled) {
+    setStorySignalsStatus("Add a starting visitor count or growth rule, or use Clear People Are Reading.", true);
+    return;
+  }
+
+  await handleStorySignalsMutation(
+    { readerPulse: payload.readerPulse },
+    {
+      activeButton: dom.saveReaderPulseButton,
+      busyLabel: "Pushing...",
+      pendingMessage: "Pushing People Are Reading...",
+      successMessage: "People Are Reading saved. The sidebar will refresh from this story.",
+      toastMessage: "People Are Reading pushed.",
+    }
+  );
+}
+
+async function handleClearReaderPulse() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article) {
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    return;
+  }
+
+  await handleStorySignalsMutation(
+    { readerPulse: emptyReaderPulsePayload(article) },
+    {
+      activeButton: dom.clearReaderPulseButton,
+      busyLabel: "Clearing...",
+      pendingMessage: "Clearing People Are Reading...",
+      successMessage: "People Are Reading cleared for this story.",
+      toastMessage: "People Are Reading cleared.",
+    }
+  );
+}
+
+async function handleSaveLiveUpdates() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article) {
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    return;
+  }
+
+  const payload = getStorySignalsPayload(article);
+  if (!payload.liveUpdates.enabled || !payload.liveUpdates.items.length) {
+    setStorySignalsStatus("Add one short update per line, or use Clear Live Updates.", true);
+    return;
+  }
+
+  await handleStorySignalsMutation(
+    { liveUpdates: payload.liveUpdates },
+    {
+      activeButton: dom.saveLiveUpdatesButton,
+      busyLabel: "Pushing...",
+      pendingMessage: "Pushing Live Updates...",
+      successMessage: "Live Updates saved. The hero timeline will use this queue.",
+      toastMessage: "Live Updates pushed.",
+    }
+  );
+}
+
+async function handleClearLiveUpdates() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article) {
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    return;
+  }
+
+  await handleStorySignalsMutation(
+    { liveUpdates: emptyLiveUpdatesPayload(article) },
+    {
+      activeButton: dom.clearLiveUpdatesButton,
+      busyLabel: "Clearing...",
+      pendingMessage: "Clearing Live Updates...",
+      successMessage: "Live Updates cleared for this story.",
+      toastMessage: "Live Updates cleared.",
+    }
+  );
 }
 
 async function loadRequests(options = {}) {
@@ -2122,18 +2248,40 @@ function attachStorySignalsListeners() {
     element?.addEventListener("change", renderStorySignalsPreview);
   });
 
-  dom.saveStorySignalsButton?.addEventListener("click", async () => {
+  dom.saveReaderPulseButton?.addEventListener("click", async () => {
     try {
-      await handleSaveStorySignals();
+      await handleSaveReaderPulse();
     } catch (error) {
-      setStorySignalsStatus(error.message || "Signal save failed.", true);
-      showToast(error.message || "Signal save failed.");
+      setStorySignalsStatus(error.message || "People Are Reading push failed.", true);
+      showToast(error.message || "People Are Reading push failed.");
     }
   });
 
-  dom.clearStorySignalsButton?.addEventListener("click", () => {
-    resetStorySignalsDashboard();
-    showToast("Watch All News dashboard cleared.");
+  dom.clearReaderPulseButton?.addEventListener("click", async () => {
+    try {
+      await handleClearReaderPulse();
+    } catch (error) {
+      setStorySignalsStatus(error.message || "People Are Reading clear failed.", true);
+      showToast(error.message || "People Are Reading clear failed.");
+    }
+  });
+
+  dom.saveLiveUpdatesButton?.addEventListener("click", async () => {
+    try {
+      await handleSaveLiveUpdates();
+    } catch (error) {
+      setStorySignalsStatus(error.message || "Live Updates push failed.", true);
+      showToast(error.message || "Live Updates push failed.");
+    }
+  });
+
+  dom.clearLiveUpdatesButton?.addEventListener("click", async () => {
+    try {
+      await handleClearLiveUpdates();
+    } catch (error) {
+      setStorySignalsStatus(error.message || "Live Updates clear failed.", true);
+      showToast(error.message || "Live Updates clear failed.");
+    }
   });
 
   dom.storySignalsArticleSelect?.addEventListener("change", (event) => {

@@ -18,6 +18,15 @@ function formatSidebarDate(value = "") {
   });
 }
 
+function trimSidebarCopy(value = "", maxLength = 68) {
+  const normalized = cleanText(value);
+  if (!normalized) return "";
+  if (normalized.length <= maxLength) return normalized;
+  const clipped = normalized.slice(0, maxLength);
+  const boundary = clipped.lastIndexOf(" ");
+  return `${clipped.slice(0, boundary > Math.floor(maxLength * 0.6) ? boundary : maxLength).trim()}...`;
+}
+
 function getPriceIcon(name = "") {
   const normalized = String(name || "").toLowerCase();
   if (normalized.includes("gold")) return "🪙";
@@ -165,7 +174,7 @@ export function renderSidebarData(elements = {}, data = {}) {
     const li = document.createElement("li");
     li.className = "people-reading-item";
     const title = escapeHtml(entry.title || "Sunwire Story");
-    const summary = escapeHtml(entry.summary || "Configured visitor counters will surface here.");
+    const summary = escapeHtml(trimSidebarCopy(entry.summary || "Configured visitor counters will surface here."));
     const image = escapeHtml(entry.image_url || "/social-card.svg");
     const href = escapeHtml(entry.href || "/");
     const visitors = new Intl.NumberFormat("en-IN", {
@@ -179,7 +188,10 @@ export function renderSidebarData(elements = {}, data = {}) {
           <strong>${title}</strong>
           <span>${summary}</span>
         </span>
-        <span class="people-reading-count">${escapeHtml(visitors)}</span>
+        <span class="people-reading-count">
+          <strong>${escapeHtml(visitors)}</strong>
+          <small>readers</small>
+        </span>
       </a>
     `;
     peopleReadingListEl.appendChild(li);
