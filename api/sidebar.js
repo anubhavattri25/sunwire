@@ -101,6 +101,41 @@ const MARKET_BOARD_FALLBACK = {
   ],
 };
 
+function normalizeSidebarPayload(payload = {}, fallback = {}) {
+  const fallbackTool = fallback.tool || { ...pickDailyNicheTool() };
+  const fallbackEvents = Array.isArray(fallback.events) && fallback.events.length
+    ? fallback.events
+    : pickDailyThree(EVENTS_FALLBACKS);
+  const fallbackMarketBoard = fallback.marketBoard?.items?.length
+    ? fallback.marketBoard
+    : MARKET_BOARD_FALLBACK;
+
+  const tool = payload?.tool && (payload.tool.tool || payload.tool.use || payload.tool.link)
+    ? payload.tool
+    : fallbackTool;
+  const events = Array.isArray(payload?.events) && payload.events.length
+    ? pickDailyThree(payload.events.filter((event) => cleanText(event?.name || "")))
+    : fallbackEvents;
+  const marketItems = Array.isArray(payload?.marketBoard?.items)
+    ? payload.marketBoard.items.filter((item) => cleanText(item?.name || ""))
+    : [];
+  const marketBoard = marketItems.length
+    ? {
+      ...fallbackMarketBoard,
+      ...(payload.marketBoard || {}),
+      items: marketItems.slice(0, 3),
+    }
+    : fallbackMarketBoard;
+
+  return {
+    generatedAt: payload?.generatedAt || new Date().toISOString(),
+    startup: payload?.startup || fallback.startup || pickDailyOne(STARTUP_FALLBACKS),
+    events,
+    tool,
+    marketBoard,
+  };
+}
+
 function normalizeText(text = "") {
   return cleanText(String(text).replace(/&nbsp;/gi, " "));
 }
@@ -492,13 +527,13 @@ module.exports = async (req, res) => {
     fetchMarketBoard().catch(() => fallback.marketBoard),
   ]);
 
-  cachedSidebarPayload = {
+  cachedSidebarPayload = normalizeSidebarPayload({
     generatedAt: new Date().toISOString(),
     startup,
     events,
     tool,
     marketBoard,
-  };
+  }, fallback);
   cachedSidebarExpiresAt = Date.now() + SIDEBAR_CACHE_TTL_MS;
   res.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=43200");
   res.status(200).json(cachedSidebarPayload);

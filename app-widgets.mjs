@@ -32,6 +32,21 @@ function parseSignedAmount(value = "") {
   return Number.isFinite(amount) ? amount : 0;
 }
 
+const FALLBACK_EVENTS = [
+  { name: "Web Summit", about: "Startup, product, and market trends in global tech.", link: "https://websummit.com/" },
+  { name: "Nvidia GTC", about: "GPU, AI infrastructure, and model performance updates.", link: "https://www.nvidia.com/gtc/" },
+  { name: "OpenAI Dev Day", about: "New model APIs, product launches, and developer tools.", link: "https://openai.com/" },
+];
+
+const FALLBACK_PRICES = {
+  meta: "Latest India market snapshot.",
+  items: [
+    { name: "Gold", today: "Rs. 1,46,670", change: "+3,760", deltaDirection: "up" },
+    { name: "Silver", today: "Rs. 2,50,000", change: "+15,000", deltaDirection: "up" },
+    { name: "Nifty 50", today: "22,590.00", change: "+210.00", deltaDirection: "up" },
+  ],
+};
+
 export function renderTopTrendingTopics(listEl, stories = [], options = {}) {
   if (!listEl) return;
 
@@ -70,10 +85,12 @@ export function renderSidebarData(elements = {}, data = {}) {
     priceBoardSourcesEl,
   } = elements;
 
-  const events = Array.isArray(data?.events) ? data.events : [];
+  const events = Array.isArray(data?.events) && data.events.length ? data.events : FALLBACK_EVENTS;
   const tool = data?.tool || {};
-  const prices = Array.isArray(data?.marketBoard?.items) ? data.marketBoard.items.slice(0, 3) : [];
-  const marketBoard = data?.marketBoard || {};
+  const prices = Array.isArray(data?.marketBoard?.items) && data.marketBoard.items.length
+    ? data.marketBoard.items.slice(0, 3)
+    : FALLBACK_PRICES.items;
+  const marketBoard = data?.marketBoard?.items?.length ? data.marketBoard : FALLBACK_PRICES;
   const priceBoardDateEl = priceBoardMetaEl?.closest(".sidebar-card--prices")?.querySelector(".price-moves-date");
   const marketBoardTimestamp = marketBoard?.asOf
     ? new Date(marketBoard.asOf).toLocaleString("en-IN", {

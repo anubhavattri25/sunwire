@@ -89,7 +89,7 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
-const DEFERRED_ASSET_VERSION = "20260326-13";
+const DEFERRED_ASSET_VERSION = "20260331-14";
 const ADMIN_DASHBOARD_ASSET_VERSION = "20260327-10";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
@@ -2405,7 +2405,7 @@ async function fetchJson(url, { forceFresh = false } = {}) {
 }
 
 async function fetchSidebarData(forceRefresh = false) {
-  return fetchJson("/api/sidebar?v=20260326-sidebar", { forceFresh: forceRefresh });
+  return fetchJson("/api/sidebar?v=20260331-sidebar2", { forceFresh: forceRefresh });
 }
 
 function renderFlatNewsGrid(container, stories = [], variant = "dense") {
