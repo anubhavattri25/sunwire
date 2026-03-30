@@ -4,6 +4,7 @@ const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const NEWSROOM_ROLE_STORAGE_KEY = "sunwire:newsroom-role:v1";
 const AUTH_UI_OVERRIDE_STORAGE_KEY = "sunwire:auth-ui-override:v1";
+const ADMIN_GLOBAL_STATUS_STORAGE_KEY = "sunwire:admin-global-status:v1";
 const DISPLAY_TIMEZONE = "Asia/Kolkata";
 const MIN_BODY_WORDS = 500;
 const MIN_SUMMARY_WORDS = 20;
@@ -28,6 +29,7 @@ const dom = {
   adminPageEyebrow: document.getElementById("adminPageEyebrow"),
   adminPageTitle: document.getElementById("adminPageTitle"),
   adminPageDescription: document.getElementById("adminPageDescription"),
+  adminGlobalStatus: document.getElementById("adminGlobalStatus"),
   navRequests: document.getElementById("navRequests"),
   navRequestsCount: document.getElementById("navRequestsCount"),
   navEditNews: document.getElementById("navEditNews"),
@@ -172,6 +174,64 @@ function setStatus(message, isError = false) {
   dom.formStatus.classList.toggle("text-slate-500", !isError);
 }
 
+function saveGlobalStatus(message = "", isError = false) {
+  try {
+    if (!message) {
+      window.sessionStorage.removeItem(ADMIN_GLOBAL_STATUS_STORAGE_KEY);
+      return;
+    }
+    window.sessionStorage.setItem(ADMIN_GLOBAL_STATUS_STORAGE_KEY, JSON.stringify({
+      message: cleanText(message),
+      isError: Boolean(isError),
+      expiresAt: Date.now() + (30 * 60 * 1000),
+    }));
+  } catch (_) {
+    // Ignore storage failures for status persistence.
+  }
+}
+
+function readGlobalStatus() {
+  try {
+    const raw = window.sessionStorage.getItem(ADMIN_GLOBAL_STATUS_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!parsed?.message) return null;
+    if (Number(parsed.expiresAt || 0) && Number(parsed.expiresAt) < Date.now()) {
+      window.sessionStorage.removeItem(ADMIN_GLOBAL_STATUS_STORAGE_KEY);
+      return null;
+    }
+    return {
+      message: cleanText(parsed.message),
+      isError: Boolean(parsed.isError),
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
+function setGlobalStatus(message = "", isError = false, options = {}) {
+  const normalized = cleanText(message);
+  const shouldPersist = options.persist !== false;
+  if (!dom.adminGlobalStatus) return;
+
+  if (!normalized) {
+    dom.adminGlobalStatus.hidden = true;
+    if (shouldPersist) saveGlobalStatus("", false);
+    return;
+  }
+
+  dom.adminGlobalStatus.hidden = false;
+  dom.adminGlobalStatus.textContent = normalized;
+  dom.adminGlobalStatus.classList.toggle("border-red-300", Boolean(isError));
+  dom.adminGlobalStatus.classList.toggle("bg-red-500/15", Boolean(isError));
+  dom.adminGlobalStatus.classList.toggle("text-red-50", Boolean(isError));
+  dom.adminGlobalStatus.classList.toggle("border-white/20", !isError);
+  dom.adminGlobalStatus.classList.toggle("bg-white/10", !isError);
+  dom.adminGlobalStatus.classList.toggle("text-white/90", !isError);
+
+  if (shouldPersist) saveGlobalStatus(normalized, isError);
+}
+
 function setRequestMeta(message = "") {
   if (!dom.requestListMeta) return;
   dom.requestListMeta.textContent = cleanText(message);
@@ -187,6 +247,11 @@ function buildIndexingStatusMessage(actionLabel = "Story pushed", indexing = nul
   return error
     ? `${actionText}. Indexing request failed: ${error}.`
     : `${actionText}. Indexing request failed.`;
+}
+
+function isIndexingStatusError(indexing = null) {
+  if (!indexing || typeof indexing !== "object") return false;
+  return indexing.ok !== true;
 }
 
 function showToast(message) {
@@ -1435,6 +1500,7 @@ async function handleApproveRequest() {
     });
     const statusMessage = buildIndexingStatusMessage("Request approved and published", data.indexing);
     await Promise.all([loadRequests(), loadAdminSummary()]);
+    setGlobalStatus(statusMessage, isIndexingStatusError(data.indexing));
     setRequestMeta(statusMessage);
     setStatus(statusMessage);
     showToast(statusMessage);
@@ -1575,6 +1641,7 @@ async function handleSubmit(event) {
 
       applyArticleToForm(data.adminArticle || {});
       const statusMessage = buildIndexingStatusMessage(isUpdate ? "Story updated" : "Story pushed", data.indexing);
+      setGlobalStatus(statusMessage, isIndexingStatusError(data.indexing));
       setStatus(statusMessage);
       showToast(statusMessage);
       await loadPageData();
@@ -1757,6 +1824,10 @@ async function init() {
   });
 
   try {
+    const persistedStatus = readGlobalStatus();
+    if (persistedStatus?.message) {
+      setGlobalStatus(persistedStatus.message, persistedStatus.isError, { persist: false });
+    }
     const editId = new URL(window.location.href).searchParams.get("edit");
     if (editId && isAdminRole()) {
       setViewMode("edit-news", { skipUrl: true });
