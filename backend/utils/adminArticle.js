@@ -17,6 +17,8 @@ const ADMIN_CATEGORIES = [
 ];
 const ADMIN_PLACEMENTS = ['headline', 'trending'];
 const FEATURED_EXPIRY_INTERVAL_MS = 60 * 1000;
+const MAX_READER_COUNT = 100000000;
+const MAX_LIVE_UPDATES = 40;
 const featuredExpiryState = globalThis.__SUNWIRE_FEATURED_EXPIRY_STATE__ || {
   lastRunAt: 0,
 };
@@ -25,6 +27,220 @@ globalThis.__SUNWIRE_FEATURED_EXPIRY_STATE__ = featuredExpiryState;
 
 function cleanText(value = '') {
   return String(value || '').trim();
+}
+
+function normalizeInteger(value, fallback = 0, { min = 0, max = Number.MAX_SAFE_INTEGER } = {}) {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(min, numeric));
+}
+
+function normalizeIsoDateTime(value = '') {
+  const normalized = cleanText(value);
+  if (!normalized) return '';
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toISOString();
+}
+
+function normalizeLiveUpdateItems(items = [], maxItems = MAX_LIVE_UPDATES) {
+  const sourceItems = Array.isArray(items)
+    ? items
+    : String(items || '')
+      .split(/\n+/)
+      .map((entry) => ({ text: entry }));
+
+  return sourceItems
+    .map((entry) => {
+      if (typeof entry === 'string') {
+        return { text: cleanText(entry) };
+      }
+      return {
+        text: cleanText(entry?.text || entry?.title || entry?.label || ''),
+      };
+    })
+    .filter((entry) => entry.text)
+    .slice(0, maxItems);
+}
+
+function normalizeManualReaderPulse(value = {}, fallback = {}) {
+  const source = value && typeof value === 'object' ? value : {};
+  const fallbackSource = fallback && typeof fallback === 'object' ? fallback : {};
+  const baseCount = normalizeInteger(
+    source.baseCount ?? source.startCount ?? fallbackSource.baseCount ?? fallbackSource.startCount ?? 0,
+    0,
+    { min: 0, max: MAX_READER_COUNT }
+  );
+  const incrementBy = normalizeInteger(
+    source.incrementBy ?? source.stepCount ?? fallbackSource.incrementBy ?? fallbackSource.stepCount ?? 0,
+    0,
+    { min: 0, max: MAX_READER_COUNT }
+  );
+  const everyMinutes = normalizeInteger(
+    source.everyMinutes ?? source.stepMinutes ?? fallbackSource.everyMinutes ?? fallbackSource.stepMinutes ?? 15,
+    15,
+    { min: 1, max: 24 * 60 }
+  );
+  const startedAt = normalizeIsoDateTime(
+    source.startedAt
+    || source.startAt
+    || fallbackSource.startedAt
+    || fallbackSource.startAt
+    || ''
+  );
+  const enabled = Boolean(
+    source.enabled
+    ?? fallbackSource.enabled
+    ?? (baseCount > 0 || incrementBy > 0)
+  );
+
+  return {
+    enabled,
+    baseCount,
+    incrementBy,
+    everyMinutes,
+    startedAt,
+  };
+}
+
+function normalizeManualLiveUpdates(value = {}, fallback = {}) {
+  const source = value && typeof value === 'object' ? value : {};
+  const fallbackSource = fallback && typeof fallback === 'object' ? fallback : {};
+  const items = normalizeLiveUpdateItems(
+    source.items
+    || source.queue
+    || fallbackSource.items
+    || fallbackSource.queue
+    || []
+  );
+  const minGapMinutes = normalizeInteger(
+    source.minGapMinutes ?? source.intervalMin ?? fallbackSource.minGapMinutes ?? fallbackSource.intervalMin ?? 10,
+    10,
+    { min: 1, max: 24 * 60 }
+  );
+  const requestedMaxGap = normalizeInteger(
+    source.maxGapMinutes ?? source.intervalMax ?? fallbackSource.maxGapMinutes ?? fallbackSource.intervalMax ?? 20,
+    20,
+    { min: minGapMinutes, max: 48 * 60 }
+  );
+  const startedAt = normalizeIsoDateTime(
+    source.startedAt
+    || source.startAt
+    || fallbackSource.startedAt
+    || fallbackSource.startAt
+    || ''
+  );
+  const enabled = Boolean(
+    source.enabled
+    ?? fallbackSource.enabled
+    ?? items.length
+  );
+
+  return {
+    enabled,
+    startedAt,
+    minGapMinutes,
+    maxGapMinutes: Math.max(minGapMinutes, requestedMaxGap),
+    items,
+  };
+}
+
+function hashSeed(value = '') {
+  let hash = 2166136261;
+  const normalized = String(value || '');
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function resolveDeterministicStep(seed = '', index = 0, min = 10, max = 20) {
+  const safeMin = Math.max(1, Number(min || 10));
+  const safeMax = Math.max(safeMin, Number(max || safeMin));
+  const spread = safeMax - safeMin + 1;
+  return safeMin + (hashSeed(`${seed}:${index}`) % spread);
+}
+
+function resolveTimelineAnchor({
+  startedAt = '',
+  fallbackStartAt = '',
+  publishedAt = '',
+} = {}) {
+  return normalizeIsoDateTime(startedAt || fallbackStartAt || publishedAt || '') || '';
+}
+
+function buildLiveUpdateTimeline(liveUpdates = {}, options = {}) {
+  const normalized = normalizeManualLiveUpdates(liveUpdates);
+  const anchor = resolveTimelineAnchor({
+    startedAt: normalized.startedAt,
+    fallbackStartAt: options.fallbackStartAt,
+    publishedAt: options.publishedAt,
+  });
+  const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
+  if (!normalized.enabled || !normalized.items.length || Number.isNaN(anchorMs)) return [];
+
+  const seed = cleanText(options.seed || options.articleId || options.slug || options.title || 'sunwire-live');
+  let currentMs = anchorMs;
+
+  return normalized.items.map((item, index) => {
+    currentMs += resolveDeterministicStep(
+      seed,
+      index,
+      normalized.minGapMinutes,
+      normalized.maxGapMinutes
+    ) * 60 * 1000;
+
+    return {
+      id: `${seed}-${index + 1}`,
+      text: item.text,
+      scheduledAt: new Date(currentMs).toISOString(),
+    };
+  });
+}
+
+function getLiveUpdateSnapshot(liveUpdates = {}, options = {}) {
+  const timeline = buildLiveUpdateTimeline(liveUpdates, options);
+  if (!timeline.length) {
+    return {
+      items: [],
+      active: [],
+      next: null,
+      total: 0,
+    };
+  }
+
+  const asOf = options.asOf ? new Date(options.asOf) : new Date();
+  const asOfMs = Number.isNaN(asOf.getTime()) ? Date.now() : asOf.getTime();
+  const active = timeline.filter((item) => new Date(item.scheduledAt).getTime() <= asOfMs);
+  const next = timeline.find((item) => new Date(item.scheduledAt).getTime() > asOfMs) || null;
+
+  return {
+    items: timeline,
+    active: active.slice().reverse(),
+    next,
+    total: timeline.length,
+  };
+}
+
+function computeSyntheticVisitorCount(readerPulse = {}, options = {}) {
+  const normalized = normalizeManualReaderPulse(readerPulse);
+  if (!normalized.enabled) return 0;
+
+  const anchor = resolveTimelineAnchor({
+    startedAt: normalized.startedAt,
+    fallbackStartAt: options.fallbackStartAt,
+    publishedAt: options.publishedAt,
+  });
+  const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
+  const asOf = options.asOf ? new Date(options.asOf) : new Date();
+  const asOfMs = Number.isNaN(asOf.getTime()) ? Date.now() : asOf.getTime();
+  const elapsedMs = Number.isNaN(anchorMs) ? 0 : Math.max(0, asOfMs - anchorMs);
+  const increments = normalized.incrementBy > 0
+    ? Math.floor(elapsedMs / (normalized.everyMinutes * 60 * 1000))
+    : 0;
+
+  return normalized.baseCount + (increments * normalized.incrementBy);
 }
 
 function normalizeAdminCategory(value = '') {
@@ -155,6 +371,8 @@ function buildManualRawContent({
   metaTitle = '',
   metaDescription = '',
   publishedAt = '',
+  readerPulse = {},
+  liveUpdates = {},
 } = {}) {
   const normalizedContent = String(content || '')
     .replace(/\u00a0/g, ' ')
@@ -180,6 +398,8 @@ function buildManualRawContent({
   const normalizedBackground = normalizeBackgroundItems(background, 6);
   const normalizedIndiaPulse = cleanText(indiaPulse || '');
   const normalizedMetaTitle = cleanText(metaTitle || normalizedTitle);
+  const normalizedReaderPulse = normalizeManualReaderPulse(readerPulse);
+  const normalizedLiveUpdates = normalizeManualLiveUpdates(liveUpdates);
   const summary = trimToLength(normalizedSubheadline || normalizedContent, 240);
   const normalizedMetaDescription = trimToLength(
     metaDescription || summary || normalizedContent,
@@ -212,11 +432,15 @@ function buildManualRawContent({
     featured_category: normalizedCategory,
     publishedAt,
     image: cleanText(imageUrl || ''),
+    readerPulse: normalizedReaderPulse,
+    liveUpdates: normalizedLiveUpdates,
   };
 }
 
 function toAdminArticleInput(record = {}) {
   const metadata = parseManualRawContent(record?.raw_content || '');
+  const readerPulse = normalizeManualReaderPulse(metadata?.readerPulse || metadata?.reader_pulse || {});
+  const liveUpdates = normalizeManualLiveUpdates(metadata?.liveUpdates || metadata?.live_updates || {});
   return {
     id: record?.id || '',
     headline: cleanText(record?.title || ''),
@@ -239,6 +463,8 @@ function toAdminArticleInput(record = {}) {
     featuredUntil: record?.featured_until ? new Date(record.featured_until).toISOString() : '',
     createdAt: record?.created_at ? new Date(record.created_at).toISOString() : '',
     publishedAt: record?.published_at ? new Date(record.published_at).toISOString() : '',
+    readerPulse,
+    liveUpdates,
   };
 }
 
@@ -246,11 +472,16 @@ module.exports = {
   ADMIN_CATEGORIES,
   ADMIN_PLACEMENTS,
   buildFeaturedOrderBy,
+  buildLiveUpdateTimeline,
   buildManualRawContent,
   buildManualSourceUrl,
+  computeSyntheticVisitorCount,
   expireFeaturedArticles,
+  getLiveUpdateSnapshot,
   normalizeAdminCategory,
   normalizeAdminPlacement,
+  normalizeManualLiveUpdates,
+  normalizeManualReaderPulse,
   parseManualRawContent,
   toAdminArticleInput,
 };

@@ -24,6 +24,13 @@ const articleSelect = {
   manual_upload: true,
 };
 
+const {
+  computeSyntheticVisitorCount,
+  getLiveUpdateSnapshot,
+  normalizeManualLiveUpdates,
+  normalizeManualReaderPulse,
+} = require("../utils/adminArticle");
+
 function parseRawContentMetadata(value) {
   if (!value) return {};
   try {
@@ -40,6 +47,19 @@ function toApiArticle(record) {
   const publisherReview = metadata.publisherReview && typeof metadata.publisherReview === 'object'
     ? metadata.publisherReview
     : null;
+  const readerPulse = normalizeManualReaderPulse(metadata.readerPulse || metadata.reader_pulse || {});
+  const liveUpdates = normalizeManualLiveUpdates(metadata.liveUpdates || metadata.live_updates || {});
+  const syntheticViews = computeSyntheticVisitorCount(readerPulse, {
+    fallbackStartAt: record.created_at || '',
+    publishedAt: record.published_at || '',
+  });
+  const liveUpdateSnapshot = getLiveUpdateSnapshot(liveUpdates, {
+    articleId: record.id,
+    slug: metadata.slug || record.slug || '',
+    title: record.title || '',
+    fallbackStartAt: record.created_at || '',
+    publishedAt: record.published_at || '',
+  });
   return {
     id: record.id,
     slug: metadata.slug || record.slug || '',
@@ -77,6 +97,13 @@ function toApiArticle(record) {
     manual_upload: Boolean(record.manual_upload || metadata.manual_upload),
     publisher_review: publisherReview,
     review_ready: Boolean(publisherReview?.eligibleForPublisherNetwork),
+    readerPulse,
+    liveUpdates,
+    syntheticViews,
+    activeLiveUpdates: liveUpdateSnapshot.active,
+    nextLiveUpdateAt: liveUpdateSnapshot.next?.scheduledAt || '',
+    liveUpdateCount: Number(liveUpdateSnapshot.total || 0),
+    activeLiveUpdateCount: Number(liveUpdateSnapshot.active.length || 0),
   };
 }
 

@@ -61,7 +61,7 @@ const categoryNewsTitleEl = document.getElementById("categoryNewsTitle");
 const moreNewsTitleEl = document.getElementById("moreNewsTitle");
 const paginationShellEl = paginationEl?.closest(".pagination-shell");
 
-const eventsListEl = document.getElementById("eventsList");
+const peopleReadingListEl = document.getElementById("peopleReadingList");
 const priceBoardMetaEl = document.getElementById("priceBoardMeta");
 const priceBoardListEl = document.getElementById("priceBoardList");
 const priceBoardSourcesEl = document.getElementById("priceBoardSources");
@@ -69,6 +69,9 @@ const toolNameEl = document.getElementById("toolName");
 const toolUseEl = document.getElementById("toolUse");
 const toolLinkEl = document.getElementById("toolLink");
 const homepageSidebarEl = document.getElementById("homepageSidebar");
+const heroLiveUpdatesPanelEl = document.getElementById("heroLiveUpdatesPanel");
+const heroLiveUpdatesListEl = document.getElementById("heroLiveUpdatesList");
+const heroLiveUpdatesMetaEl = document.getElementById("heroLiveUpdatesMeta");
 
 const newsCardTemplate = document.getElementById("newsCardTemplate");
 const sectionPanelTemplate = document.getElementById("sectionPanelTemplate");
@@ -89,8 +92,8 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
-const DEFERRED_ASSET_VERSION = "20260331-15";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260327-10";
+const DEFERRED_ASSET_VERSION = "20260331-16";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-13";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -1439,6 +1442,9 @@ function compareHomepagePriority(a, b) {
   const manualFeaturedDiff = Number(isActiveFeaturedManualStory(b)) - Number(isActiveFeaturedManualStory(a));
   if (manualFeaturedDiff !== 0) return manualFeaturedDiff;
 
+  const syntheticViewsDiff = Number(b.syntheticViews || 0) - Number(a.syntheticViews || 0);
+  if (syntheticViewsDiff !== 0) return syntheticViewsDiff;
+
   const priorityFlagDiff = Number(isIndiaPriorityStory(b)) - Number(isIndiaPriorityStory(a));
   if (priorityFlagDiff !== 0) return priorityFlagDiff;
 
@@ -1656,6 +1662,8 @@ function sortStoriesForTrending(stories = [], mode = "trending") {
       if (timeDiff !== 0) return timeDiff;
     }
 
+    const syntheticViewsDiff = Number(b.syntheticViews || 0) - Number(a.syntheticViews || 0);
+    if (syntheticViewsDiff !== 0) return syntheticViewsDiff;
     const trendingDiff = Number(b.trendingScore || 0) - Number(a.trendingScore || 0);
     if (trendingDiff !== 0) return trendingDiff;
     const priorityDiff = Number(b.priority || 0) - Number(a.priority || 0);
@@ -2048,6 +2056,52 @@ function renderTicker(stories = []) {
   tickerTrack.textContent = headlines ? `${headlines}    ${headlines}` : "BREAKING: SpaceX Announces Starship Flight 4 for June 7";
 }
 
+function formatCompactCount(value = 0) {
+  const amount = Number(value || 0);
+  return new Intl.NumberFormat("en-IN", {
+    notation: amount >= 1000 ? "compact" : "standard",
+    maximumFractionDigits: amount >= 1000 ? 1 : 0,
+  }).format(amount);
+}
+
+function renderHeroLiveUpdates(story = null) {
+  if (!heroLiveUpdatesPanelEl || !heroLiveUpdatesListEl || !heroLiveUpdatesMetaEl) return;
+  heroLiveUpdatesListEl.innerHTML = "";
+
+  const updates = Array.isArray(story?.activeLiveUpdates) ? story.activeLiveUpdates.slice(0, 4) : [];
+  const totalQueued = Number(story?.liveUpdateCount || 0);
+  const nextUpdateAt = cleanText(story?.nextLiveUpdateAt || "");
+
+  if (!story) {
+    heroLiveUpdatesMetaEl.textContent = "Waiting for queued updates";
+    heroLiveUpdatesListEl.innerHTML = "<li>Live updates will appear here after you queue them from Watch All News.</li>";
+    return;
+  }
+
+  if (!updates.length) {
+    heroLiveUpdatesMetaEl.textContent = totalQueued
+      ? (nextUpdateAt ? `Next update ${timeAgo(nextUpdateAt)}` : "Updates are queued")
+      : "No live timeline queued";
+    heroLiveUpdatesListEl.innerHTML = totalQueued
+      ? "<li>The timeline is queued. New short updates will auto-drop here at staggered times.</li>"
+      : "<li>Add short updates from Watch All News to turn this hero into a live timeline.</li>";
+    return;
+  }
+
+  heroLiveUpdatesMetaEl.textContent = `${updates.length} live now${totalQueued > updates.length ? ` • ${totalQueued - updates.length} queued` : ""}`;
+
+  updates.forEach((update) => {
+    const item = document.createElement("li");
+    const text = cleanText(update?.text || "");
+    const scheduledAt = cleanText(update?.scheduledAt || "");
+    item.innerHTML = `
+      <strong>${escapeHtml(text || "Live update")}</strong>
+      <span>${escapeHtml(scheduledAt ? timeAgo(scheduledAt) : "just now")}</span>
+    `;
+    heroLiveUpdatesListEl.appendChild(item);
+  });
+}
+
 function renderHero(story) {
   if (!story) {
     headlineOfTheDayLink.textContent = "No headline available yet.";
@@ -2064,6 +2118,7 @@ function renderHero(story) {
       sizes: "(max-width: 1200px) 100vw, 80vw",
       highPriority: true,
     });
+    renderHeroLiveUpdates(null);
     return;
   }
 
@@ -2093,6 +2148,7 @@ function renderHero(story) {
     fallbackSrc: buildFallbackImage(story),
     highPriority: true,
   });
+  renderHeroLiveUpdates(story);
 }
 
 function createNewsCard(story, variant = "standard") {
@@ -2260,7 +2316,7 @@ async function hydrateSidebar(forceRefresh = false) {
       toolNameEl,
       toolUseEl,
       toolLinkEl,
-      eventsListEl,
+      peopleReadingListEl,
       priceBoardMetaEl,
       priceBoardListEl,
       priceBoardSourcesEl,
@@ -2405,7 +2461,7 @@ async function fetchJson(url, { forceFresh = false } = {}) {
 }
 
 async function fetchSidebarData(forceRefresh = false) {
-  return fetchJson("/api/sidebar?v=20260331-sidebar4", { forceFresh: true });
+  return fetchJson("/api/sidebar?v=20260331-sidebar5", { forceFresh: true });
 }
 
 function renderFlatNewsGrid(container, stories = [], variant = "dense") {

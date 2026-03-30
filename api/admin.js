@@ -20,6 +20,9 @@ const {
 const {
   buildManualRawContent,
   buildManualSourceUrl,
+  normalizeManualLiveUpdates,
+  normalizeManualReaderPulse,
+  parseManualRawContent,
   expireFeaturedArticles,
   normalizeAdminCategory,
   toAdminArticleInput,
@@ -164,6 +167,8 @@ function normalizeAdminPayload(body = {}) {
   const subheadline = cleanText(body?.subheadline || '');
   const source = cleanText(body?.source || '');
   const primarySourceName = cleanText(body?.primarySourceName || source);
+  const hasReaderPulse = Boolean(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'readerPulse'));
+  const hasLiveUpdates = Boolean(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'liveUpdates'));
 
   return {
     id: cleanText(body?.id || ''),
@@ -185,6 +190,8 @@ function normalizeAdminPayload(body = {}) {
     metaDescription: cleanText(body?.metaDescription || ''),
     showOnHero: Boolean(body?.showOnHero),
     featuredUntil: parseFeaturedUntil(body),
+    readerPulse: hasReaderPulse ? normalizeManualReaderPulse(body?.readerPulse || {}) : null,
+    liveUpdates: hasLiveUpdates ? normalizeManualLiveUpdates(body?.liveUpdates || {}) : null,
   };
 }
 
@@ -240,6 +247,19 @@ async function saveManualArticle(tx, payload = {}, options = {}) {
   const createdAt = existing?.created_at || new Date();
   const publishedAt = options.publishedAt || existing?.published_at || new Date();
   const slug = slugify(payload.title || `manual-${publishedAt.getTime()}`);
+  const existingMetadata = parseManualRawContent(existing?.raw_content || '');
+  const readerPulse = payload.readerPulse === null
+    ? normalizeManualReaderPulse(existingMetadata.readerPulse || existingMetadata.reader_pulse || {})
+    : normalizeManualReaderPulse(
+      payload.readerPulse || {},
+      existingMetadata.readerPulse || existingMetadata.reader_pulse || {}
+    );
+  const liveUpdates = payload.liveUpdates === null
+    ? normalizeManualLiveUpdates(existingMetadata.liveUpdates || existingMetadata.live_updates || {})
+    : normalizeManualLiveUpdates(
+      payload.liveUpdates || {},
+      existingMetadata.liveUpdates || existingMetadata.live_updates || {}
+    );
   const rawContent = buildManualRawContent({
     title: payload.title,
     subheadline: payload.subheadline,
@@ -258,6 +278,8 @@ async function saveManualArticle(tx, payload = {}, options = {}) {
     metaTitle: payload.metaTitle,
     metaDescription: payload.metaDescription,
     publishedAt: publishedAt.toISOString(),
+    readerPulse,
+    liveUpdates,
   });
   const sourceUrl = buildManualSourceUrl({ slug, createdAt });
   const wordCount = Number(rawContent.wordCount || 0) || null;
@@ -309,6 +331,39 @@ async function saveManualArticle(tx, payload = {}, options = {}) {
   });
 }
 
+async function updateManualStorySignals(articleId = '', body = {}) {
+  const existing = await prisma.article.findFirst({
+    where: {
+      id: cleanText(articleId || ''),
+      manual_upload: true,
+    },
+    select: articleSelect,
+  });
+
+  if (!existing) return null;
+
+  const metadata = parseManualRawContent(existing.raw_content || '');
+  const updatedRawContent = {
+    ...metadata,
+    readerPulse: normalizeManualReaderPulse(
+      body?.readerPulse || {},
+      metadata.readerPulse || metadata.reader_pulse || {}
+    ),
+    liveUpdates: normalizeManualLiveUpdates(
+      body?.liveUpdates || {},
+      metadata.liveUpdates || metadata.live_updates || {}
+    ),
+  };
+
+  return prisma.article.update({
+    where: { id: existing.id },
+    data: {
+      raw_content: JSON.stringify(updatedRawContent),
+    },
+    select: articleSelect,
+  });
+}
+
 async function renderAdminPage(req, res) {
   if (req.method !== 'GET') {
     res.status(405).send('Method not allowed');
@@ -339,7 +394,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260331-12"></script>',
+    '<script type="module" src="/admin/news.js?v=20260331-13"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -670,33 +725,43 @@ async function handleNews(req, res) {
     if (!session) return;
 
     const action = cleanText(req.query?.action || '').toLowerCase();
-    if (action !== 'remove-hero') {
+    if (!['remove-hero', 'story-signals'].includes(action)) {
       return res.status(400).json({ error: 'Unsupported admin news action.' });
     }
 
     const articleId = cleanText(req.query?.id || '');
     if (!articleId) return res.status(400).json({ error: 'Manual article id is required.' });
+    let updated = null;
 
-    const existing = await prisma.article.findFirst({
-      where: {
-        id: articleId,
-        manual_upload: true,
-      },
-      select: articleSelect,
-    });
+    if (action === 'story-signals') {
+      const body = await readJsonBody(req);
+      updated = await updateManualStorySignals(articleId, body);
+    } else {
+      const existing = await prisma.article.findFirst({
+        where: {
+          id: articleId,
+          manual_upload: true,
+        },
+        select: articleSelect,
+      });
 
-    if (!existing) {
-      return res.status(404).json({ error: 'Manual article not found.' });
+      if (!existing) {
+        return res.status(404).json({ error: 'Manual article not found.' });
+      }
+
+      updated = await prisma.article.update({
+        where: { id: existing.id },
+        data: {
+          is_featured: false,
+          featured_until: null,
+        },
+        select: articleSelect,
+      });
     }
 
-    const updated = await prisma.article.update({
-      where: { id: existing.id },
-      data: {
-        is_featured: false,
-        featured_until: null,
-      },
-      select: articleSelect,
-    });
+    if (!updated) {
+      return res.status(404).json({ error: 'Manual article not found.' });
+    }
 
     await invalidateCache();
 
@@ -812,6 +877,8 @@ async function handleRequests(req, res) {
       showOnHero: payload.showOnHero,
       durationMinutes: 0,
       featuredUntil: payload.featuredUntil ? new Date(payload.featuredUntil).toISOString() : '',
+      readerPulse: payload.readerPulse,
+      liveUpdates: payload.liveUpdates,
     });
 
     return res.status(201).json({

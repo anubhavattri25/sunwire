@@ -11,6 +11,14 @@ function cleanText(text = "") {
     .trim();
 }
 
+const prisma = require("../backend/config/database");
+const { articleSelect, toApiArticle } = require("../backend/models/Article");
+const {
+  getDatabaseBusyMessage,
+  isDatabaseCoolingDown,
+  markDatabasePressure,
+} = require("../backend/utils/databaseAvailability");
+
 const SIDEBAR_CACHE_TTL_MS = 30 * 60 * 1000;
 const SIDEBAR_FALLBACK_CACHE_TTL_MS = 2 * 60 * 1000;
 let cachedSidebarPayload = null;
@@ -109,6 +117,26 @@ const MARKET_BOARD_FALLBACK = {
   ],
 };
 
+function buildArticleHref(article = {}) {
+  const slug = cleanText(article.slug || article.title || article.id || "story")
+    .toLowerCase()
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-");
+  if (!slug) return "/";
+
+  const params = new URLSearchParams();
+  if (article.id) params.set("id", String(article.id || "").trim());
+  if (article.source_url || article.sourceUrl || article.url) {
+    params.set("u", String(article.source_url || article.sourceUrl || article.url || "").trim());
+  }
+  if (article.title) params.set("t", cleanText(article.title || ""));
+  if (article.category) params.set("c", cleanText(article.category || ""));
+  params.set("sw", "2");
+  return `/article/${slug}?${params.toString()}`;
+}
+
 function normalizeSidebarPayload(payload = {}, fallback = {}) {
   const fallbackTool = fallback.tool || { ...pickDailyNicheTool() };
   const fallbackEvents = Array.isArray(fallback.events) && fallback.events.length
@@ -141,6 +169,9 @@ function normalizeSidebarPayload(payload = {}, fallback = {}) {
     events,
     tool,
     marketBoard,
+    peopleReading: Array.isArray(payload?.peopleReading) ? payload.peopleReading : [],
+    peopleReadingDegraded: Boolean(payload?.peopleReadingDegraded),
+    peopleReadingMessage: cleanText(payload?.peopleReadingMessage || ""),
   };
 }
 
@@ -451,6 +482,57 @@ function pickDailyThree(items = []) {
   return picked;
 }
 
+async function fetchPeopleReading() {
+  if (isDatabaseCoolingDown()) {
+    return {
+      items: [],
+      degraded: true,
+      message: getDatabaseBusyMessage(),
+    };
+  }
+
+  try {
+    const records = await prisma.article.findMany({
+      where: { manual_upload: true },
+      select: articleSelect,
+      orderBy: [{ created_at: "desc" }],
+      take: 80,
+    });
+
+    const items = records
+      .map((record) => toApiArticle(record))
+      .filter(Boolean)
+      .sort((left, right) => {
+        const readerDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
+        if (readerDiff !== 0) return readerDiff;
+        return new Date(right.created_at || right.published_at || 0).getTime()
+          - new Date(left.created_at || left.published_at || 0).getTime();
+      })
+      .slice(0, 6)
+      .map((article) => ({
+        id: article.id,
+        title: article.title,
+        summary: article.summary || article.subheadline || "",
+        image_url: article.image_url || "",
+        visitors: Number(article.syntheticViews || 0),
+        href: buildArticleHref(article),
+      }));
+
+    return {
+      items,
+      degraded: false,
+      message: "",
+    };
+  } catch (error) {
+    markDatabasePressure(error);
+    return {
+      items: [],
+      degraded: true,
+      message: getDatabaseBusyMessage(),
+    };
+  }
+}
+
 async function fetchStartupSpotlight() {
   const endpoint = "https://hn.algolia.com/api/v1/search_by_date?query=ai startup raises funding&tags=story&hitsPerPage=30&page=0";
   const payload = await fetchJsonNoCache(endpoint);
@@ -530,7 +612,7 @@ module.exports = async (req, res) => {
 
   let eventsUsedFallback = false;
 
-  const [startup, events, tool, marketBoard] = await Promise.all([
+  const [startup, events, tool, marketBoard, peopleReading] = await Promise.all([
     fetchStartupSpotlight().catch(() => fallback.startup),
     fetchUpcomingEvents().catch(() => {
       eventsUsedFallback = true;
@@ -538,6 +620,7 @@ module.exports = async (req, res) => {
     }),
     fetchToolOfDay().catch(() => fallback.tool),
     fetchMarketBoard().catch(() => fallback.marketBoard),
+    fetchPeopleReading(),
   ]);
 
   cachedSidebarPayload = normalizeSidebarPayload({
@@ -546,6 +629,9 @@ module.exports = async (req, res) => {
     events,
     tool,
     marketBoard,
+    peopleReading: peopleReading.items,
+    peopleReadingDegraded: Boolean(peopleReading.degraded),
+    peopleReadingMessage: cleanText(peopleReading.message || ""),
   }, fallback);
   cachedSidebarExpiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
   res.setHeader("Cache-Control", "no-store, max-age=0");

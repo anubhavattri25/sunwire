@@ -34,7 +34,7 @@
     <link rel="stylesheet"
       href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Inter+Tight:wght@600;700;800;900&display=swap" />
   </noscript>
-  <link rel="stylesheet" href="/styles.css?v=20260331-36" />
+  <link rel="stylesheet" href="/styles.css?v=20260331-37" />
 </head>
 
 <body data-home-mode="home">
@@ -142,6 +142,19 @@
             </div>
           </div>
         </div>
+
+        <section class="hero-live-panel" id="heroLiveUpdatesPanel" aria-labelledby="heroLiveUpdatesTitle">
+          <div class="hero-live-panel__header">
+            <div>
+              <p class="hero-live-panel__eyebrow">Live Updates</p>
+              <h2 class="hero-live-panel__title" id="heroLiveUpdatesTitle">Rolling timeline</h2>
+            </div>
+            <span class="hero-live-panel__meta" id="heroLiveUpdatesMeta">Waiting for queued updates</span>
+          </div>
+          <ul class="hero-live-panel__list" id="heroLiveUpdatesList">
+            <li>Live updates will appear here after you queue them from Watch All News.</li>
+          </ul>
+        </section>
       </div>
 
       <!-- RIGHT: SIDEBAR CARDS -->
@@ -174,12 +187,12 @@
         </article>
 
         <!-- LATEST UPDATES CARD -->
-        <article class="sidebar-card sidebar-card--updates">
+        <article class="sidebar-card sidebar-card--reading">
           <div class="sidebar-card__header">
-            <span class="updates-icon">⚡</span> Latest Updates
+            <span class="updates-icon">👁</span> People Are Reading
           </div>
-          <ul class="event-list" id="eventsList">
-            <li>Loading events…</li>
+          <ul class="people-reading-list" id="peopleReadingList">
+            <li>Loading audience pulse…</li>
           </ul>
         </article>
       </aside>
@@ -303,7 +316,7 @@
     })();
   </script>
 
-  <script type="module" src="/app.js?v=20260331-34"></script>
+  <script type="module" src="/app.js?v=20260331-35"></script>
 </body>
 
 </html>

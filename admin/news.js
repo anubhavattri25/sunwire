@@ -124,6 +124,23 @@ const dom = {
   archiveUpdatedAt: document.getElementById("archiveUpdatedAt"),
   archiveGroups: document.getElementById("archiveGroups"),
   archiveEmptyState: document.getElementById("archiveEmptyState"),
+  storySignalsPreview: document.getElementById("storySignalsPreview"),
+  storySignalsHeadline: document.getElementById("storySignalsHeadline"),
+  storySignalsMeta: document.getElementById("storySignalsMeta"),
+  storySignalsStatus: document.getElementById("storySignalsStatus"),
+  readerPulseBaseInput: document.getElementById("readerPulseBaseInput"),
+  readerPulseStepInput: document.getElementById("readerPulseStepInput"),
+  readerPulseMinutesInput: document.getElementById("readerPulseMinutesInput"),
+  readerPulseStartedAtInput: document.getElementById("readerPulseStartedAtInput"),
+  liveUpdatesStartedAtInput: document.getElementById("liveUpdatesStartedAtInput"),
+  liveUpdatesMinGapInput: document.getElementById("liveUpdatesMinGapInput"),
+  liveUpdatesMaxGapInput: document.getElementById("liveUpdatesMaxGapInput"),
+  liveUpdatesQueueInput: document.getElementById("liveUpdatesQueueInput"),
+  liveUpdatesCountBadge: document.getElementById("liveUpdatesCountBadge"),
+  liveUpdatesPreviewBadge: document.getElementById("liveUpdatesPreviewBadge"),
+  liveUpdatesPreviewList: document.getElementById("liveUpdatesPreviewList"),
+  saveStorySignalsButton: document.getElementById("saveStorySignalsButton"),
+  clearStorySignalsButton: document.getElementById("clearStorySignalsButton"),
   accessForm: document.getElementById("accessForm"),
   accessEmailInput: document.getElementById("accessEmailInput"),
   grantAccessButton: document.getElementById("grantAccessButton"),
@@ -151,6 +168,8 @@ const state = {
   formBusy: false,
   requestBusy: false,
   accessBusy: false,
+  storySignalsBusy: false,
+  selectedSignalArticleId: "",
 };
 const dashboardResponseCache = new Map();
 
@@ -165,6 +184,149 @@ function paragraphCount(value = "") {
     .map((entry) => cleanText(entry))
     .filter(Boolean)
     .length;
+}
+
+function normalizePositiveInteger(value, fallback = 0, max = 100000000) {
+  const numeric = Number.parseInt(value, 10);
+  if (!Number.isFinite(numeric)) return fallback;
+  return Math.min(max, Math.max(0, numeric));
+}
+
+function formatCompactNumber(value = 0) {
+  const amount = Number(value || 0);
+  return new Intl.NumberFormat("en-IN", {
+    notation: amount >= 1000 ? "compact" : "standard",
+    maximumFractionDigits: amount >= 1000 ? 1 : 0,
+  }).format(amount);
+}
+
+function normalizeSignalDate(value = "") {
+  const normalized = cleanText(value);
+  if (!normalized) return "";
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return "";
+  return parsed.toISOString();
+}
+
+function hashSeed(value = "") {
+  let hash = 2166136261;
+  const normalized = String(value || "");
+  for (let index = 0; index < normalized.length; index += 1) {
+    hash ^= normalized.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
+
+function signalStepMinutes(seed = "", index = 0, minGap = 10, maxGap = 20) {
+  const safeMin = Math.max(1, normalizePositiveInteger(minGap, 10, 1440));
+  const safeMax = Math.max(safeMin, normalizePositiveInteger(maxGap, 20, 2880));
+  return safeMin + (hashSeed(`${seed}:${index}`) % (safeMax - safeMin + 1));
+}
+
+function normalizeReaderPulseConfig(value = {}, fallback = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const fallbackSource = fallback && typeof fallback === "object" ? fallback : {};
+  const baseCount = normalizePositiveInteger(
+    source.baseCount ?? source.startCount ?? fallbackSource.baseCount ?? fallbackSource.startCount ?? 0,
+    0
+  );
+  const incrementBy = normalizePositiveInteger(
+    source.incrementBy ?? source.stepCount ?? fallbackSource.incrementBy ?? fallbackSource.stepCount ?? 0,
+    0
+  );
+  const everyMinutes = Math.max(1, normalizePositiveInteger(
+    source.everyMinutes ?? source.stepMinutes ?? fallbackSource.everyMinutes ?? fallbackSource.stepMinutes ?? 15,
+    15,
+    1440
+  ));
+  const startedAt = normalizeSignalDate(
+    source.startedAt
+    || source.startAt
+    || fallbackSource.startedAt
+    || fallbackSource.startAt
+    || ""
+  );
+
+  return {
+    enabled: baseCount > 0 || incrementBy > 0,
+    baseCount,
+    incrementBy,
+    everyMinutes,
+    startedAt,
+  };
+}
+
+function normalizeLiveUpdatesConfig(value = {}, fallback = {}) {
+  const source = value && typeof value === "object" ? value : {};
+  const fallbackSource = fallback && typeof fallback === "object" ? fallback : {};
+  const items = (Array.isArray(source.items) ? source.items : String(source.items || source.queue || "").split(/\n+/))
+    .map((entry) => typeof entry === "string" ? cleanText(entry) : cleanText(entry?.text || ""))
+    .filter(Boolean)
+    .slice(0, 40);
+  const minGapMinutes = Math.max(1, normalizePositiveInteger(
+    source.minGapMinutes ?? source.intervalMin ?? fallbackSource.minGapMinutes ?? fallbackSource.intervalMin ?? 10,
+    10,
+    1440
+  ));
+  const maxGapMinutes = Math.max(minGapMinutes, normalizePositiveInteger(
+    source.maxGapMinutes ?? source.intervalMax ?? fallbackSource.maxGapMinutes ?? fallbackSource.intervalMax ?? 20,
+    20,
+    2880
+  ));
+  const startedAt = normalizeSignalDate(
+    source.startedAt
+    || source.startAt
+    || fallbackSource.startedAt
+    || fallbackSource.startAt
+    || ""
+  );
+
+  return {
+    enabled: items.length > 0,
+    startedAt,
+    minGapMinutes,
+    maxGapMinutes,
+    items,
+  };
+}
+
+function computeSyntheticVisitors(readerPulse = {}, fallbackStartAt = "") {
+  const normalized = normalizeReaderPulseConfig(readerPulse);
+  if (!normalized.enabled) return 0;
+  const anchor = normalizeSignalDate(normalized.startedAt || fallbackStartAt || "") || "";
+  const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
+  const elapsedMs = Number.isNaN(anchorMs) ? 0 : Math.max(0, Date.now() - anchorMs);
+  const increments = normalized.incrementBy > 0
+    ? Math.floor(elapsedMs / (normalized.everyMinutes * 60 * 1000))
+    : 0;
+  return normalized.baseCount + (increments * normalized.incrementBy);
+}
+
+function buildLiveUpdateTimelinePreview(liveUpdates = {}, article = {}) {
+  const normalized = normalizeLiveUpdatesConfig(liveUpdates);
+  const anchor = normalizeSignalDate(
+    normalized.startedAt
+    || article.created_at
+    || article.published_at
+    || article.createdAt
+    || article.publishedAt
+    || ""
+  );
+  const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
+  if (!normalized.items.length || Number.isNaN(anchorMs)) return [];
+
+  const seed = cleanText(article.id || article.slug || article.title || "sunwire-live");
+  let currentMs = anchorMs;
+
+  return normalized.items.map((text, index) => {
+    currentMs += signalStepMinutes(seed, index, normalized.minGapMinutes, normalized.maxGapMinutes) * 60 * 1000;
+    return {
+      id: `${seed}-${index + 1}`,
+      text,
+      scheduledAt: new Date(currentMs).toISOString(),
+    };
+  });
 }
 
 function setStatus(message, isError = false) {
@@ -401,6 +563,177 @@ function buildArticleHref(article = {}) {
   if (article.title) params.set("t", cleanText(article.title));
   params.set("sw", "2");
   return `/article/${encodeURIComponent(slug)}?${params.toString()}`;
+}
+
+function findArchiveArticleById(articleId = "") {
+  return state.archiveArticles.find((article) => cleanText(article.id) === cleanText(articleId)) || null;
+}
+
+function signalStartFallback(article = {}) {
+  return cleanText(
+    article.created_at
+    || article.published_at
+    || article.createdAt
+    || article.publishedAt
+    || new Date().toISOString()
+  );
+}
+
+function setStorySignalsStatus(message = "", isError = false) {
+  if (!dom.storySignalsStatus) return;
+  dom.storySignalsStatus.textContent = cleanText(message);
+  dom.storySignalsStatus.classList.toggle("text-red-600", Boolean(isError));
+  dom.storySignalsStatus.classList.toggle("text-slate-500", !isError);
+}
+
+function resetStorySignalsDashboard({ preserveStatus = false } = {}) {
+  state.selectedSignalArticleId = "";
+  if (dom.storySignalsPreview) dom.storySignalsPreview.textContent = "Choose a story";
+  if (dom.storySignalsHeadline) dom.storySignalsHeadline.textContent = "Select a pushed article from Watch All News.";
+  if (dom.storySignalsMeta) dom.storySignalsMeta.textContent = "The dashboard will load its visitor settings and live-update queue here.";
+  if (dom.readerPulseBaseInput) dom.readerPulseBaseInput.value = "";
+  if (dom.readerPulseStepInput) dom.readerPulseStepInput.value = "";
+  if (dom.readerPulseMinutesInput) dom.readerPulseMinutesInput.value = "";
+  if (dom.readerPulseStartedAtInput) dom.readerPulseStartedAtInput.value = "";
+  if (dom.liveUpdatesStartedAtInput) dom.liveUpdatesStartedAtInput.value = "";
+  if (dom.liveUpdatesMinGapInput) dom.liveUpdatesMinGapInput.value = "";
+  if (dom.liveUpdatesMaxGapInput) dom.liveUpdatesMaxGapInput.value = "";
+  if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = "";
+  if (dom.liveUpdatesCountBadge) dom.liveUpdatesCountBadge.textContent = "0 queued";
+  if (dom.liveUpdatesPreviewBadge) dom.liveUpdatesPreviewBadge.textContent = "Waiting";
+  if (dom.liveUpdatesPreviewList) {
+    dom.liveUpdatesPreviewList.replaceChildren();
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "Choose a story to preview scheduled live updates.";
+    dom.liveUpdatesPreviewList.append(empty);
+  }
+  if (!preserveStatus) setStorySignalsStatus("No article selected yet.");
+}
+
+function getStorySignalsPayload(article = {}) {
+  const readerPulse = normalizeReaderPulseConfig({
+    baseCount: dom.readerPulseBaseInput?.value || 0,
+    incrementBy: dom.readerPulseStepInput?.value || 0,
+    everyMinutes: dom.readerPulseMinutesInput?.value || 15,
+    startedAt: dom.readerPulseStartedAtInput?.value || signalStartFallback(article),
+  });
+  const liveUpdates = normalizeLiveUpdatesConfig({
+    startedAt: dom.liveUpdatesStartedAtInput?.value || signalStartFallback(article),
+    minGapMinutes: dom.liveUpdatesMinGapInput?.value || 10,
+    maxGapMinutes: dom.liveUpdatesMaxGapInput?.value || 20,
+    items: String(dom.liveUpdatesQueueInput?.value || "")
+      .split(/\n+/)
+      .map((entry) => cleanText(entry))
+      .filter(Boolean),
+  });
+
+  return {
+    readerPulse,
+    liveUpdates: {
+      ...liveUpdates,
+      items: liveUpdates.items.map((text) => ({ text })),
+    },
+  };
+}
+
+function renderStorySignalsPreview() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article) {
+    resetStorySignalsDashboard({ preserveStatus: true });
+    return;
+  }
+
+  const payload = getStorySignalsPayload(article);
+  const liveItems = Array.isArray(payload.liveUpdates.items) ? payload.liveUpdates.items : [];
+  const currentVisitors = computeSyntheticVisitors(payload.readerPulse, signalStartFallback(article));
+  const timeline = buildLiveUpdateTimelinePreview({
+    ...payload.liveUpdates,
+    items: liveItems.map((item) => item.text),
+  }, article);
+  const activeCount = timeline.filter((item) => new Date(item.scheduledAt).getTime() <= Date.now()).length;
+
+  if (dom.storySignalsPreview) {
+    dom.storySignalsPreview.textContent = currentVisitors > 0
+      ? `${formatCompactNumber(currentVisitors)} reading`
+      : "Reader pulse off";
+  }
+  if (dom.liveUpdatesCountBadge) {
+    dom.liveUpdatesCountBadge.textContent = `${liveItems.length} queued`;
+  }
+  if (dom.liveUpdatesPreviewBadge) {
+    dom.liveUpdatesPreviewBadge.textContent = timeline.length
+      ? `${activeCount} live / ${timeline.length} total`
+      : "No queue";
+  }
+  setStorySignalsStatus(
+    currentVisitors > 0
+      ? `Current visitor count preview: ${formatCompactNumber(currentVisitors)} readers.`
+      : "Add visitor numbers or queued updates, then save.",
+    false
+  );
+
+  if (!dom.liveUpdatesPreviewList) return;
+  dom.liveUpdatesPreviewList.replaceChildren();
+
+  if (!timeline.length) {
+    const empty = document.createElement("p");
+    empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
+    empty.textContent = "No live updates queued for this article yet.";
+    dom.liveUpdatesPreviewList.append(empty);
+    return;
+  }
+
+  timeline.slice(0, 6).forEach((item) => {
+    const card = document.createElement("div");
+    card.className = "rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4";
+
+    const headline = document.createElement("p");
+    headline.className = "text-sm font-semibold text-slate-950";
+    headline.textContent = item.text;
+
+    const meta = document.createElement("p");
+    meta.className = "mt-2 text-xs text-slate-500";
+    meta.textContent = `${fmtDate(item.scheduledAt)} | ${timeAgo(item.scheduledAt)}`;
+
+    card.append(headline, meta);
+    dom.liveUpdatesPreviewList.append(card);
+  });
+}
+
+function applyStorySignalsArticle(article = null) {
+  if (!article) {
+    resetStorySignalsDashboard();
+    return;
+  }
+
+  state.selectedSignalArticleId = cleanText(article.id || "");
+  if (dom.storySignalsHeadline) dom.storySignalsHeadline.textContent = cleanText(article.title || "Untitled story");
+  if (dom.storySignalsMeta) {
+    dom.storySignalsMeta.textContent = [
+      toTitleCase(article.category || "news"),
+      fmtDate(article.created_at || article.published_at || new Date().toISOString()),
+      article.syntheticViews ? `${formatCompactNumber(article.syntheticViews)} reading now` : "",
+    ].filter(Boolean).join(" | ");
+  }
+
+  const readerPulse = normalizeReaderPulseConfig(article.readerPulse || article.reader_pulse || {}, {
+    startedAt: signalStartFallback(article),
+  });
+  const liveUpdates = normalizeLiveUpdatesConfig(article.liveUpdates || article.live_updates || {}, {
+    startedAt: signalStartFallback(article),
+  });
+
+  if (dom.readerPulseBaseInput) dom.readerPulseBaseInput.value = readerPulse.baseCount ? String(readerPulse.baseCount) : "";
+  if (dom.readerPulseStepInput) dom.readerPulseStepInput.value = readerPulse.incrementBy ? String(readerPulse.incrementBy) : "";
+  if (dom.readerPulseMinutesInput) dom.readerPulseMinutesInput.value = String(readerPulse.everyMinutes || 15);
+  if (dom.readerPulseStartedAtInput) dom.readerPulseStartedAtInput.value = toLocalDateTimeValue(readerPulse.startedAt || signalStartFallback(article));
+  if (dom.liveUpdatesStartedAtInput) dom.liveUpdatesStartedAtInput.value = toLocalDateTimeValue(liveUpdates.startedAt || signalStartFallback(article));
+  if (dom.liveUpdatesMinGapInput) dom.liveUpdatesMinGapInput.value = String(liveUpdates.minGapMinutes || 10);
+  if (dom.liveUpdatesMaxGapInput) dom.liveUpdatesMaxGapInput.value = String(liveUpdates.maxGapMinutes || 20);
+  if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = liveUpdates.items.join("\n");
+
+  renderStorySignalsPreview();
 }
 
 function setButtonBusy(button, busy, busyLabel) {
@@ -1239,6 +1572,7 @@ function renderArchive(items = []) {
   dom.archiveGroups.replaceChildren();
 
   if (!state.archiveArticles.length) {
+    resetStorySignalsDashboard({ preserveStatus: true });
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
     empty.textContent = "No pushed articles yet.";
@@ -1254,6 +1588,12 @@ function renderArchive(items = []) {
   });
 
   groups.forEach((articles, key) => {
+    const sortedArticles = [...articles].sort((left, right) => {
+      const syntheticDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
+      if (syntheticDiff !== 0) return syntheticDiff;
+      return new Date(right.created_at || right.published_at || 0).getTime()
+        - new Date(left.created_at || left.published_at || 0).getTime();
+    });
     const section = document.createElement("section");
     section.className = "archive-group";
 
@@ -1274,7 +1614,7 @@ function renderArchive(items = []) {
     const list = document.createElement("div");
     list.className = "grid gap-4";
 
-    articles.forEach((article) => {
+    sortedArticles.forEach((article) => {
       const card = document.createElement("article");
       card.className = "rounded-[24px] border border-slate-200 bg-white p-4";
 
@@ -1289,10 +1629,21 @@ function renderArchive(items = []) {
         toTitleCase(article.category || "news"),
         cleanText(article.source || ""),
         article.is_featured ? "Hero live" : "",
+        article.syntheticViews ? `${formatCompactNumber(article.syntheticViews)} reading` : "",
+        article.liveUpdateCount ? `${article.liveUpdateCount} queued updates` : "",
       ].filter(Boolean).join(" | ");
 
       const actions = document.createElement("div");
       actions.className = "mt-4 flex flex-wrap gap-2";
+
+      const manageButton = document.createElement("button");
+      manageButton.type = "button";
+      manageButton.className = "rounded-full border border-slate-300 bg-amber-100 px-4 py-2 text-xs font-semibold text-slate-900 transition hover:bg-amber-200";
+      manageButton.textContent = "Manage Live Desk";
+      manageButton.addEventListener("click", () => {
+        applyStorySignalsArticle(article);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
 
       const editLink = document.createElement("a");
       editLink.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
@@ -1306,7 +1657,7 @@ function renderArchive(items = []) {
       openLink.rel = "noopener noreferrer";
       openLink.textContent = "Open";
 
-      actions.append(editLink, openLink);
+      actions.append(manageButton, editLink, openLink);
       card.append(headline, meta, actions);
       list.append(card);
     });
@@ -1314,6 +1665,10 @@ function renderArchive(items = []) {
     section.append(list);
     dom.archiveGroups.append(section);
   });
+
+  if (state.selectedSignalArticleId) {
+    applyStorySignalsArticle(findArchiveArticleById(state.selectedSignalArticleId));
+  }
 }
 
 function applyArticleToForm(article = {}) {
@@ -1411,6 +1766,34 @@ async function loadArchiveData(options = {}) {
     setStatus(data.message);
   }
   renderArchive(data.items || []);
+}
+
+async function handleSaveStorySignals() {
+  const article = findArchiveArticleById(state.selectedSignalArticleId);
+  if (!article || state.storySignalsBusy) {
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    return;
+  }
+
+  state.storySignalsBusy = true;
+  setButtonBusy(dom.saveStorySignalsButton, true, "Saving...");
+  setStorySignalsStatus("Saving audience pulse and live desk...");
+
+  try {
+    const payload = getStorySignalsPayload(article);
+    const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(article.id)}&action=story-signals`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    });
+    showToast("Audience pulse and live desk saved.");
+    setStorySignalsStatus("Saved. Homepage counters and live updates will refresh from this article.");
+    await loadArchiveData({ forceFresh: true });
+    const refreshed = data.article ? findArchiveArticleById(data.article.id) : findArchiveArticleById(article.id);
+    applyStorySignalsArticle(refreshed || data.article || article);
+  } finally {
+    state.storySignalsBusy = false;
+    setButtonBusy(dom.saveStorySignalsButton, false, "Saving...");
+  }
 }
 
 async function loadRequests(options = {}) {
@@ -1682,6 +2065,36 @@ function attachQuickDurationButtons() {
   });
 }
 
+function attachStorySignalsListeners() {
+  [
+    dom.readerPulseBaseInput,
+    dom.readerPulseStepInput,
+    dom.readerPulseMinutesInput,
+    dom.readerPulseStartedAtInput,
+    dom.liveUpdatesStartedAtInput,
+    dom.liveUpdatesMinGapInput,
+    dom.liveUpdatesMaxGapInput,
+    dom.liveUpdatesQueueInput,
+  ].forEach((element) => {
+    element?.addEventListener("input", renderStorySignalsPreview);
+    element?.addEventListener("change", renderStorySignalsPreview);
+  });
+
+  dom.saveStorySignalsButton?.addEventListener("click", async () => {
+    try {
+      await handleSaveStorySignals();
+    } catch (error) {
+      setStorySignalsStatus(error.message || "Signal save failed.", true);
+      showToast(error.message || "Signal save failed.");
+    }
+  });
+
+  dom.clearStorySignalsButton?.addEventListener("click", () => {
+    resetStorySignalsDashboard();
+    showToast("Watch All News dashboard cleared.");
+  });
+}
+
 function attachNavHandlers() {
   [
     [dom.navRequests, "news-requests"],
@@ -1727,8 +2140,10 @@ async function init() {
   syncRoleVisibility();
   attachDraftPreviewListeners();
   attachQuickDurationButtons();
+  attachStorySignalsListeners();
   attachNavHandlers();
   setAccessStatus("Add an email to allow request-based publishing access.");
+  resetStorySignalsDashboard({ preserveStatus: true });
 
   dom.addKeyPointButton?.addEventListener("click", () => dom.keyPointsList?.append(createKeyPointRow()));
   dom.addFactSheetRowButton?.addEventListener("click", () => dom.factSheetRows?.append(createFactSheetRow()));

@@ -161,6 +161,12 @@ function toNewsRequestPayload(payload = {}) {
     showOnHero: Boolean(payload.showOnHero),
     durationMinutes: Number(payload.durationMinutes || 0) || 0,
     featuredUntil: cleanText(payload.featuredUntil || ''),
+    readerPulse: payload.readerPulse && typeof payload.readerPulse === 'object'
+      ? payload.readerPulse
+      : null,
+    liveUpdates: payload.liveUpdates && typeof payload.liveUpdates === 'object'
+      ? payload.liveUpdates
+      : null,
   };
 }
 

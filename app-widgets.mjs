@@ -38,6 +38,10 @@ const FALLBACK_EVENTS = [
   { name: "OpenAI Dev Day", about: "New model APIs, product launches, and developer tools.", link: "https://openai.com/" },
 ];
 
+const FALLBACK_PEOPLE_READING = [
+  { title: "Sunwire audience queue is warming up", summary: "Configure visitor growth for your pushed stories from Watch All News.", visitors: 0, href: "/admin/news?mode=watch-all-news" },
+];
+
 const FALLBACK_PRICES = {
   meta: "Latest India market snapshot.",
   items: [
@@ -79,13 +83,15 @@ export function renderSidebarData(elements = {}, data = {}) {
     toolNameEl,
     toolUseEl,
     toolLinkEl,
-    eventsListEl,
+    peopleReadingListEl,
     priceBoardMetaEl,
     priceBoardListEl,
     priceBoardSourcesEl,
   } = elements;
 
-  const events = (Array.isArray(data?.events) && data.events.length ? data.events : FALLBACK_EVENTS).slice(0, 3);
+  const peopleReading = (Array.isArray(data?.peopleReading) && data.peopleReading.length
+    ? data.peopleReading
+    : FALLBACK_PEOPLE_READING).slice(0, 4);
   const tool = data?.tool || {};
   const prices = Array.isArray(data?.marketBoard?.items) && data.marketBoard.items.length
     ? data.marketBoard.items.slice(0, 3)
@@ -148,21 +154,34 @@ export function renderSidebarData(elements = {}, data = {}) {
       : "";
   }
 
-  if (!eventsListEl) return;
-  eventsListEl.innerHTML = "";
-  if (!events.length) {
-    eventsListEl.innerHTML = "<li>No upcoming events found.</li>";
+  if (!peopleReadingListEl) return;
+  peopleReadingListEl.innerHTML = "";
+  if (!peopleReading.length) {
+    peopleReadingListEl.innerHTML = "<li>No reader pulse stories yet.</li>";
     return;
   }
 
-  events.forEach((event) => {
+  peopleReading.forEach((entry) => {
     const li = document.createElement("li");
-    const name = escapeHtml(event.name || "AI Event");
-    const about = escapeHtml(event.about || "Latest sessions and practical AI insights.");
-    const href = String(event.link || "").trim();
-    li.innerHTML = href
-      ? `<a class="event-link" href="${escapeHtml(href)}" target="_blank" rel="noopener noreferrer"><strong>${name}</strong><span>${about}</span></a>`
-      : `<div><strong>${name}</strong><span>${about}</span></div>`;
-    eventsListEl.appendChild(li);
+    li.className = "people-reading-item";
+    const title = escapeHtml(entry.title || "Sunwire Story");
+    const summary = escapeHtml(entry.summary || "Configured visitor counters will surface here.");
+    const image = escapeHtml(entry.image_url || "/social-card.svg");
+    const href = escapeHtml(entry.href || "/");
+    const visitors = new Intl.NumberFormat("en-IN", {
+      notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
+      maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
+    }).format(Number(entry.visitors || 0));
+    li.innerHTML = `
+      <a class="people-reading-link" href="${href}" target="_self" rel="noopener noreferrer">
+        <img class="people-reading-thumb" src="${image}" alt="${title}" loading="lazy" decoding="async" />
+        <span class="people-reading-copy">
+          <strong>${title}</strong>
+          <span>${summary}</span>
+        </span>
+        <span class="people-reading-count">${escapeHtml(visitors)}</span>
+      </a>
+    `;
+    peopleReadingListEl.appendChild(li);
   });
 }
