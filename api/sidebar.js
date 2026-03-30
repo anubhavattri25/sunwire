@@ -12,6 +12,7 @@ function cleanText(text = "") {
 }
 
 const SIDEBAR_CACHE_TTL_MS = 30 * 60 * 1000;
+const SIDEBAR_FALLBACK_CACHE_TTL_MS = 2 * 60 * 1000;
 let cachedSidebarPayload = null;
 let cachedSidebarExpiresAt = 0;
 const marketBoardHistory = new Map();
@@ -522,14 +523,19 @@ module.exports = async (req, res) => {
   };
 
   if (cachedSidebarPayload && cachedSidebarExpiresAt > Date.now()) {
-    res.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=43200");
+    res.setHeader("Cache-Control", "no-store, max-age=0");
     res.status(200).json(cachedSidebarPayload);
     return;
   }
 
+  let eventsUsedFallback = false;
+
   const [startup, events, tool, marketBoard] = await Promise.all([
     fetchStartupSpotlight().catch(() => fallback.startup),
-    fetchUpcomingEvents().catch(() => fallback.events),
+    fetchUpcomingEvents().catch(() => {
+      eventsUsedFallback = true;
+      return fallback.events;
+    }),
     fetchToolOfDay().catch(() => fallback.tool),
     fetchMarketBoard().catch(() => fallback.marketBoard),
   ]);
@@ -541,7 +547,7 @@ module.exports = async (req, res) => {
     tool,
     marketBoard,
   }, fallback);
-  cachedSidebarExpiresAt = Date.now() + SIDEBAR_CACHE_TTL_MS;
-  res.setHeader("Cache-Control", "public, s-maxage=21600, stale-while-revalidate=43200");
+  cachedSidebarExpiresAt = Date.now() + (eventsUsedFallback ? SIDEBAR_FALLBACK_CACHE_TTL_MS : SIDEBAR_CACHE_TTL_MS);
+  res.setHeader("Cache-Control", "no-store, max-age=0");
   res.status(200).json(cachedSidebarPayload);
 };
