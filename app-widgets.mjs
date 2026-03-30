@@ -166,34 +166,63 @@ export function renderSidebarData(elements = {}, data = {}) {
   if (!peopleReadingListEl) return;
   peopleReadingListEl.innerHTML = "";
   if (!peopleReading.length) {
-    peopleReadingListEl.innerHTML = "<li>No reader pulse stories yet.</li>";
+    const empty = document.createElement("li");
+    empty.className = "people-reading-empty";
+    empty.textContent = "No reader pulse stories yet.";
+    peopleReadingListEl.appendChild(empty);
     return;
   }
 
-  peopleReading.forEach((entry) => {
-    const li = document.createElement("li");
-    li.className = "people-reading-item";
-    const title = escapeHtml(entry.title || "Sunwire Story");
-    const summary = escapeHtml(trimSidebarCopy(entry.summary || "Configured visitor counters will surface here."));
-    const image = escapeHtml(entry.image_url || "/social-card.svg");
-    const href = escapeHtml(entry.href || "/");
-    const visitors = new Intl.NumberFormat("en-IN", {
-      notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
-      maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
-    }).format(Number(entry.visitors || 0));
-    li.innerHTML = `
-      <a class="people-reading-link" href="${href}" target="_self" rel="noopener noreferrer">
-        <img class="people-reading-thumb" src="${image}" alt="${title}" loading="lazy" decoding="async" />
-        <span class="people-reading-copy">
-          <strong>${title}</strong>
-          <span>${summary}</span>
-        </span>
-        <span class="people-reading-count">
-          <strong>${escapeHtml(visitors)}</strong>
-          <small>readers</small>
-        </span>
-      </a>
-    `;
-    peopleReadingListEl.appendChild(li);
-  });
+  try {
+    peopleReading.forEach((entry) => {
+      const li = document.createElement("li");
+      li.className = "people-reading-item";
+
+      const link = document.createElement("a");
+      link.className = "people-reading-link";
+      link.href = String(entry.href || "/").trim() || "/";
+      link.target = "_self";
+      link.rel = "noopener noreferrer";
+
+      const image = document.createElement("img");
+      image.className = "people-reading-thumb";
+      image.src = String(entry.image_url || "/social-card.svg").trim() || "/social-card.svg";
+      image.alt = cleanText(entry.title || "Sunwire Story") || "Sunwire Story";
+      image.loading = "lazy";
+      image.decoding = "async";
+
+      const copy = document.createElement("span");
+      copy.className = "people-reading-copy";
+
+      const headline = document.createElement("strong");
+      headline.textContent = cleanText(entry.title || "Sunwire Story") || "Sunwire Story";
+
+      const summary = document.createElement("span");
+      summary.textContent = trimSidebarCopy(entry.summary || "Configured visitor counters will surface here.");
+
+      copy.append(headline, summary);
+
+      const count = document.createElement("span");
+      count.className = "people-reading-count";
+
+      const countValue = document.createElement("strong");
+      countValue.textContent = new Intl.NumberFormat("en-IN", {
+        notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
+        maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
+      }).format(Number(entry.visitors || 0));
+
+      const countLabel = document.createElement("small");
+      countLabel.textContent = "readers";
+
+      count.append(countValue, countLabel);
+      link.append(image, copy, count);
+      li.append(link);
+      peopleReadingListEl.appendChild(li);
+    });
+  } catch (_) {
+    const fallback = document.createElement("li");
+    fallback.className = "people-reading-empty";
+    fallback.textContent = "Reader pulse is loading.";
+    peopleReadingListEl.appendChild(fallback);
+  }
 }
