@@ -92,8 +92,8 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
-const DEFERRED_ASSET_VERSION = "20260401-1";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260401-1";
+const DEFERRED_ASSET_VERSION = "20260401-2";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260401-2";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -2100,9 +2100,16 @@ function renderHeroLiveUpdates(story = null) {
   if (!heroLiveUpdatesPanelEl || !heroLiveUpdatesListEl || !heroLiveUpdatesMetaEl) return;
   heroLiveUpdatesListEl.innerHTML = "";
 
-  const updates = Array.isArray(story?.activeLiveUpdates) ? story.activeLiveUpdates.slice(0, 4) : [];
+  const activeUpdates = Array.isArray(story?.activeLiveUpdates) ? [...story.activeLiveUpdates] : [];
+  const timelineUpdates = Array.isArray(story?.liveUpdateTimeline) ? [...story.liveUpdateTimeline] : [];
+  const activeKeys = new Set(activeUpdates.map((item) => `${cleanText(item?.text || "")}|${cleanText(item?.scheduledAt || "")}`));
+  const upcomingUpdates = timelineUpdates
+    .filter((item) => !activeKeys.has(`${cleanText(item?.text || "")}|${cleanText(item?.scheduledAt || "")}`))
+    .sort((left, right) => new Date(left?.scheduledAt || 0).getTime() - new Date(right?.scheduledAt || 0).getTime());
+  const updates = [...activeUpdates, ...upcomingUpdates].slice(0, 10);
   const totalQueued = Number(story?.liveUpdateCount || 0);
   const nextUpdateAt = cleanText(story?.nextLiveUpdateAt || "");
+  const liveNowCount = activeUpdates.length;
 
   if (!story) {
     heroLiveUpdatesMetaEl.textContent = "Waiting for live desk";
@@ -2120,7 +2127,9 @@ function renderHeroLiveUpdates(story = null) {
     return;
   }
 
-  heroLiveUpdatesMetaEl.textContent = `${updates.length} live now${totalQueued > updates.length ? ` • ${totalQueued - updates.length} scheduled` : ""}`;
+  heroLiveUpdatesMetaEl.textContent = liveNowCount
+    ? `${liveNowCount} live now${totalQueued > liveNowCount ? ` • ${totalQueued - liveNowCount} scheduled` : ""}`
+    : (nextUpdateAt ? `Next line ${timeAgo(nextUpdateAt)}` : "Quick lines are scheduled");
 
   updates.forEach((update) => {
     const item = document.createElement("li");

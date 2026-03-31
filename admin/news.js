@@ -900,7 +900,7 @@ function renderLiveUpdatesPreview() {
     return;
   }
 
-  timeline.slice(0, 6).forEach((item) => {
+  timeline.slice(0, 12).forEach((item) => {
     const card = document.createElement("div");
     card.className = "rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4";
 

@@ -101,6 +101,7 @@ function toApiArticle(record) {
     liveUpdates,
     syntheticViews,
     activeLiveUpdates: liveUpdateSnapshot.active,
+    liveUpdateTimeline: liveUpdateSnapshot.items,
     nextLiveUpdateAt: liveUpdateSnapshot.next?.scheduledAt || '',
     liveUpdateCount: Number(liveUpdateSnapshot.total || 0),
     activeLiveUpdateCount: Number(liveUpdateSnapshot.active.length || 0),
