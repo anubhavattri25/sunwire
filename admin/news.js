@@ -12,6 +12,7 @@ const MIN_PARAGRAPHS = 4;
 const MIN_KEY_POINTS = 3;
 const MIN_FACT_ROWS = 4;
 const MIN_BACKGROUND = 2;
+const LIVE_UPDATE_WORD_LIMIT = 20;
 const ADMIN_ROLE = "admin";
 const SUBMITTER_ROLE = "submitter";
 const ROLE = String(window.__SUNWIRE_ADMIN_ROLE__ || "").trim().toLowerCase();
@@ -793,13 +794,8 @@ function syncLiveUpdatesScheduleState() {
   }
 }
 
-function setStorySignalsButtonsBusy(activeButton = null, busy = false, busyLabel = "Saving...") {
-  [
-    dom.saveReaderPulseButton,
-    dom.clearReaderPulseButton,
-    dom.saveLiveUpdatesButton,
-    dom.clearLiveUpdatesButton,
-  ].forEach((button) => {
+function setSignalButtonsBusy(buttons = [], activeButton = null, busy = false, busyLabel = "Saving...") {
+  buttons.forEach((button) => {
     if (!button) return;
     if (!button.dataset.label) button.dataset.label = button.textContent || "";
     button.disabled = busy;
@@ -2100,12 +2096,12 @@ async function handleStorySignalsMutation(payload = {}, options = {}) {
     || (cleanText(state.featuredArticle?.id || "") === cleanText(options.articleId || "") ? state.featuredArticle : null);
   const setStatus = typeof options.setStatus === "function" ? options.setStatus : setStorySignalsStatus;
   if (!article || state.storySignalsBusy) {
-    setStatus("Choose an article from Watch All News first.", true);
+    setStatus(state.storySignalsBusy ? "Another push is already in progress. Please wait a moment." : "Choose an article from Watch All News first.", true);
     return;
   }
 
   state.storySignalsBusy = true;
-  setStorySignalsButtonsBusy(options.activeButton || null, true, options.busyLabel || "Saving...");
+  setSignalButtonsBusy(options.buttons || [], options.activeButton || null, true, options.busyLabel || "Saving...");
   setStatus(cleanText(options.pendingMessage || "Saving dashboard changes..."));
 
   try {
@@ -2125,7 +2121,7 @@ async function handleStorySignalsMutation(payload = {}, options = {}) {
     showToast(cleanText(options.toastMessage || "Saved."));
   } finally {
     state.storySignalsBusy = false;
-    setStorySignalsButtonsBusy(options.activeButton || null, false, options.busyLabel || "Saving...");
+    setSignalButtonsBusy(options.buttons || [], options.activeButton || null, false, options.busyLabel || "Saving...");
   }
 }
 
@@ -2148,6 +2144,7 @@ async function handleSaveReaderPulse() {
       articleId: article.id,
       kind: "readerPulse",
       activeButton: dom.saveReaderPulseButton,
+      buttons: [dom.saveReaderPulseButton, dom.clearReaderPulseButton],
       setStatus: setStorySignalsStatus,
       busyLabel: "Pushing...",
       pendingMessage: "Pushing People Are Reading...",
@@ -2170,6 +2167,7 @@ async function handleClearReaderPulse() {
       articleId: article.id,
       kind: "readerPulse",
       activeButton: dom.clearReaderPulseButton,
+      buttons: [dom.saveReaderPulseButton, dom.clearReaderPulseButton],
       setStatus: setStorySignalsStatus,
       busyLabel: "Clearing...",
       pendingMessage: "Clearing People Are Reading...",
@@ -2191,9 +2189,9 @@ async function handleSaveLiveUpdates() {
     setLiveUpdatesStatus("Add one short update per line, or use Clear Live Updates.", true);
     return;
   }
-  const longLine = liveUpdates.items.find((item) => wordCount(item.text || "") > 10);
+  const longLine = liveUpdates.items.find((item) => wordCount(item.text || "") > LIVE_UPDATE_WORD_LIMIT);
   if (longLine) {
-    setLiveUpdatesStatus(`Keep each live update line within 10 words. "${longLine.text}" is too long.`, true);
+    setLiveUpdatesStatus(`Keep each live update line within ${LIVE_UPDATE_WORD_LIMIT} words. "${longLine.text}" is too long.`, true);
     return;
   }
 
@@ -2203,6 +2201,7 @@ async function handleSaveLiveUpdates() {
       articleId: article.id,
       kind: "liveUpdates",
       activeButton: dom.saveLiveUpdatesButton,
+      buttons: [dom.saveLiveUpdatesButton, dom.clearLiveUpdatesButton],
       setStatus: setLiveUpdatesStatus,
       busyLabel: "Pushing...",
       pendingMessage: "Pushing Live Updates...",
@@ -2227,6 +2226,7 @@ async function handleClearLiveUpdates() {
       articleId: article.id,
       kind: "liveUpdates",
       activeButton: dom.clearLiveUpdatesButton,
+      buttons: [dom.saveLiveUpdatesButton, dom.clearLiveUpdatesButton],
       setStatus: setLiveUpdatesStatus,
       busyLabel: "Clearing...",
       pendingMessage: "Clearing Live Updates...",
