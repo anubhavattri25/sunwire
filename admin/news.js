@@ -616,9 +616,7 @@ function findArchiveArticleById(articleId = "") {
 }
 
 function resolveLiveUpdatesTargetArticle() {
-  const featuredId = cleanText(state.featuredArticle?.id || "");
-  if (!featuredId) return null;
-  return findArchiveArticleById(featuredId) || state.featuredArticle || null;
+  return findArchiveArticleById(state.selectedLiveUpdatesArticleId) || null;
 }
 
 function signalStartFallback(article = {}) {
@@ -681,8 +679,8 @@ function resetReaderPulseDashboard({ preserveStatus = false } = {}) {
 function resetLiveUpdatesDashboard() {
   state.selectedLiveUpdatesArticleId = "";
   if (dom.liveUpdatesArticleSelect) dom.liveUpdatesArticleSelect.value = "";
-  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Push a hero story first.";
-  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "Live Updates now attach to the story currently running on the homepage hero.";
+  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Select a pushed article from Watch All News.";
+  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "The dashboard will load this story's quick live lines here.";
   if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = false;
   if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = "10";
   syncLiveUpdatesScheduleState();
@@ -693,7 +691,7 @@ function resetLiveUpdatesDashboard() {
     dom.liveUpdatesPreviewList.replaceChildren();
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "Push a hero story first, then add quick live lines here.";
+    empty.textContent = "Choose a story to preview quick live lines.";
     dom.liveUpdatesPreviewList.append(empty);
   }
 }
@@ -844,7 +842,7 @@ function renderLiveUpdatesPreview() {
       dom.liveUpdatesPreviewList.replaceChildren();
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Push a hero story first, then add quick live lines here.";
+      empty.textContent = "Choose a story to preview quick live lines.";
       dom.liveUpdatesPreviewList.append(empty);
     }
     return;
@@ -873,7 +871,7 @@ function renderLiveUpdatesPreview() {
   if (!timeline.length) {
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "No quick live lines pushed for the homepage hero yet.";
+    empty.textContent = "No quick live lines pushed for this story yet.";
     dom.liveUpdatesPreviewList.append(empty);
     return;
   }
@@ -890,7 +888,7 @@ function renderLiveUpdatesPreview() {
     meta.className = "mt-2 text-xs text-slate-500";
     meta.textContent = liveUpdates.mode === "scheduled"
       ? `${fmtDate(item.scheduledAt)} | ${timeAgo(item.scheduledAt)}`
-      : "Push goes live instantly on the homepage";
+      : "Push goes live instantly";
 
     card.append(headline, meta);
     dom.liveUpdatesPreviewList.append(card);
@@ -908,8 +906,8 @@ function applyLiveUpdatesArticle(article = null) {
   if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = cleanText(article.title || "Untitled story");
   if (dom.liveUpdatesMeta) {
     dom.liveUpdatesMeta.textContent = [
-      "Homepage hero",
       toTitleCase(article.category || "news"),
+      fmtDate(article.created_at || article.published_at || new Date().toISOString()),
       article.liveUpdateCount ? `${article.liveUpdateCount} live lines saved` : "No quick lines saved yet",
     ].filter(Boolean).join(" | ");
   }
@@ -1007,12 +1005,14 @@ function renderSignalBoards() {
     if (!liveStories.length) {
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Homepage hero stories with saved live lines will appear here.";
+      empty.textContent = "Stories with saved live lines will appear here.";
       dom.liveUpdatesPushedList.append(empty);
     } else {
       liveStories.forEach((article) => {
         dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
+          selectedId: state.selectedLiveUpdatesArticleId,
           meta: `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`,
+          onSelect: applyLiveUpdatesArticle,
         }));
       });
     }
@@ -1381,7 +1381,6 @@ function renderFeaturedStatus(article) {
         : "Turn hero on to request homepage priority for this story.";
     }
     if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = true;
-    resetLiveUpdatesDashboard();
     syncFeaturedPreview();
     return;
   }
@@ -1392,9 +1391,6 @@ function renderFeaturedStatus(article) {
     dom.featuredMeta.textContent = `${toTitleCase(article.category || "news")} | ${expiry}`;
   }
   if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = !isAdminRole();
-  if (state.mode === "watch-all-news") {
-    applyLiveUpdatesArticle(findArchiveArticleById(article.id) || article);
-  }
   syncFeaturedPreview();
 }
 
@@ -1946,7 +1942,16 @@ function renderArchive(items = []) {
       openLink.textContent = "Open";
       openLink.addEventListener("click", (event) => event.stopPropagation());
 
-      actions.append(readerButton, editLink, openLink);
+      const liveButton = document.createElement("button");
+      liveButton.type = "button";
+      liveButton.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
+      liveButton.textContent = "Use in Live";
+      liveButton.addEventListener("click", () => {
+        applyLiveUpdatesArticle(article);
+        window.scrollTo({ top: 0, behavior: "smooth" });
+      });
+
+      actions.append(readerButton, liveButton, editLink, openLink);
       card.append(headline, meta, actions);
       list.append(card);
     });
@@ -2154,7 +2159,7 @@ async function handleClearReaderPulse() {
 async function handleSaveLiveUpdates() {
   const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Push a hero story first. Live Updates attach to the current homepage hero.", true);
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
     return;
   }
 
@@ -2178,8 +2183,8 @@ async function handleSaveLiveUpdates() {
       busyLabel: "Pushing...",
       pendingMessage: "Pushing Live Updates...",
       successMessage: liveUpdates.mode === "scheduled"
-        ? "Live Updates saved. The homepage hero will release them on schedule."
-        : "Live Updates saved. The homepage hero will reflect them instantly.",
+        ? "Live Updates saved. This story will release them on schedule."
+        : "Live Updates saved. This story will reflect them instantly.",
       toastMessage: "Live Updates pushed.",
     }
   );
@@ -2188,7 +2193,7 @@ async function handleSaveLiveUpdates() {
 async function handleClearLiveUpdates() {
   const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Push a hero story first. Live Updates attach to the current homepage hero.", true);
+    setStorySignalsStatus("Choose an article from Watch All News first.", true);
     return;
   }
 
@@ -2543,6 +2548,15 @@ function attachStorySignalsListeners() {
       return;
     }
     applyStorySignalsArticle(article);
+  });
+
+  dom.liveUpdatesArticleSelect?.addEventListener("change", (event) => {
+    const article = findArchiveArticleById(event.target.value || "");
+    if (!article) {
+      applyLiveUpdatesArticle(null);
+      return;
+    }
+    applyLiveUpdatesArticle(article);
   });
 }
 

@@ -180,7 +180,7 @@ export function renderSidebarData(elements = {}, data = {}) {
       notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
       maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
     }).format(Number(entry.visitors || 0));
-    const headline = trimSidebarCopy(entry.title || "Sunwire Story", 54);
+    const headline = trimSidebarCopy(entry.title || "Sunwire Story", 44);
     return `
       <li class="people-reading-item">
         <a class="people-reading-link" href="${escapeHtml(String(entry.href || "/").trim() || "/")}" target="_self" rel="noopener noreferrer">

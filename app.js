@@ -92,8 +92,8 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
-const DEFERRED_ASSET_VERSION = "20260331-22";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-20";
+const DEFERRED_ASSET_VERSION = "20260331-23";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-21";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -1898,6 +1898,24 @@ function buildHomepageDeskSections(allStories = [], categoryMap = {}, latestPool
   })).filter((section) => section.stories.length);
 }
 
+function selectLiveDeskStory(stories = [], categoryMap = {}) {
+  const pool = dedupeStories(filterDisplayableStories([
+    ...(Array.isArray(stories) ? stories : []),
+    ...CATEGORY_KEYS.flatMap((key) => categoryMap[key] || []),
+  ]))
+    .filter((story) => Number(story.liveUpdateCount || story.activeLiveUpdateCount || 0) > 0)
+    .sort((left, right) => {
+      const activeDiff = Number(right.activeLiveUpdateCount || 0) - Number(left.activeLiveUpdateCount || 0);
+      if (activeDiff !== 0) return activeDiff;
+      const queuedDiff = Number(right.liveUpdateCount || 0) - Number(left.liveUpdateCount || 0);
+      if (queuedDiff !== 0) return queuedDiff;
+      return new Date(getDisplayTimestamp(right) || 0).getTime()
+        - new Date(getDisplayTimestamp(left) || 0).getTime();
+    });
+
+  return pool[0] || null;
+}
+
 function buildGlobalLayout(mainStories = [], categoryMap = {}) {
   const filteredMainStories = filterDisplayableStories(mainStories);
   const allStories = filterDisplayableStories([
@@ -1956,8 +1974,9 @@ function buildGlobalLayout(mainStories = [], categoryMap = {}) {
     hero,
     ...trending,
   ].filter(Boolean));
+  const liveDeskStory = selectLiveDeskStory(allStoriesPool, categoryMap);
 
-  return { hero, trending, topSections, moreSections, tickerStories };
+  return { hero, liveDeskStory, trending, topSections, moreSections, tickerStories };
 }
 
 function buildFocusedLayout(stories = [], filter = "all") {
@@ -1975,9 +1994,11 @@ function buildFocusedLayout(stories = [], filter = "all") {
   const deskStories = focusedPool.length ? focusedPool : latestPool;
   const label = filter === "latest" ? "Latest" : activeDeskLabel();
   const fullGridStories = deskStories.slice(0, getPageSizeForFilter(filter));
+  const liveDeskStory = selectLiveDeskStory(renderableStories);
 
   return {
     hero: null,
+    liveDeskStory,
     trending: [],
     topSections: [],
     moreSections: [],
@@ -2113,7 +2134,8 @@ function renderHeroLiveUpdates(story = null) {
   });
 }
 
-function renderHero(story) {
+function renderHero(story, liveDeskStory = null) {
+  const liveSource = liveDeskStory || story || null;
   if (!story) {
     headlineOfTheDayLink.textContent = "No headline available yet.";
     headlineOfTheDayLink.href = "/";
@@ -2129,7 +2151,7 @@ function renderHero(story) {
       sizes: "(max-width: 1200px) 100vw, 80vw",
       highPriority: true,
     });
-    renderHeroLiveUpdates(null);
+    renderHeroLiveUpdates(liveSource);
     return;
   }
 
@@ -2159,7 +2181,7 @@ function renderHero(story) {
     fallbackSrc: buildFallbackImage(story),
     highPriority: true,
   });
-  renderHeroLiveUpdates(story);
+  renderHeroLiveUpdates(liveSource);
 }
 
 function createNewsCard(story, variant = "standard") {
@@ -2690,7 +2712,7 @@ function renderHomepageLayout(layout) {
   resetCardImagePriorityBudget(hasFullGrid ? 8 : 10);
 
   if (!hasFullGrid) {
-    renderHero(layout.hero);
+    renderHero(layout.hero, layout.liveDeskStory);
     renderTrendingSection(layout.trending || []);
     scheduleTopSectionsRender(layout.topSections || [], "dense");
     const recentStories = Array.isArray(layout.moreSections?.[0]?.stories)
@@ -2708,6 +2730,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
   const normalizedQuery = cleanText(query);
   const resolvedLayout = layout || {
     hero: stories[0] || null,
+    liveDeskStory: selectLiveDeskStory(stories),
     trending: stories.slice(1, HOME_FIRST_PAGE_STORY_COUNT + 1),
     topSections: [],
     moreSections: [],
@@ -2726,7 +2749,7 @@ function renderSearchResults(query = "", stories = [], layout = null) {
   if (hasResults) {
     resetCardImagePriorityBudget(10);
     renderTicker(stories);
-    renderHero(resolvedLayout.hero);
+    renderHero(resolvedLayout.hero, resolvedLayout.liveDeskStory);
     renderTrendingSection(resolvedLayout.trending);
     scheduleTopSectionsRender(resolvedLayout.topSections, "dense");
     scheduleHomepageArticlePrefetch(4);
