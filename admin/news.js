@@ -760,7 +760,31 @@ function getReaderPulsePayload(article = {}) {
 }
 
 function getLiveUpdatesPayload(article = {}) {
-  return getStorySignalsPayload(article).liveUpdates;
+  const existing = normalizeLiveUpdatesConfig(article.liveUpdates || article.live_updates || {}, {
+    startedAt: signalStartFallback(article),
+  });
+  const inputItems = String(dom.liveUpdatesQueueInput?.value || "")
+    .split(/\n+/)
+    .map((entry) => cleanText(entry))
+    .filter(Boolean);
+  const includesExistingQueue = existing.items.length > 0
+    && inputItems.length >= existing.items.length
+    && existing.items.every((item, index) => item === inputItems[index]);
+  const scheduleEnabled = Boolean(dom.liveUpdatesScheduleToggle?.checked);
+  const liveUpdates = normalizeLiveUpdatesConfig({
+    mode: scheduleEnabled ? "scheduled" : "instant",
+    scheduleEnabled,
+    intervalMinutes: dom.liveUpdatesIntervalInput?.value || existing.intervalMinutes || 10,
+    startedAt: existing.startedAt || new Date().toISOString(),
+    items: includesExistingQueue
+      ? inputItems
+      : [...existing.items, ...inputItems],
+  }, existing);
+
+  return {
+    ...liveUpdates,
+    items: liveUpdates.items.map((text) => ({ text })),
+  };
 }
 
 function emptyReaderPulsePayload(article = {}) {

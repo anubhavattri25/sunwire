@@ -520,20 +520,7 @@ async function fetchPeopleReading() {
         return new Date(right.created_at || right.published_at || 0).getTime()
           - new Date(left.created_at || left.published_at || 0).getTime();
       });
-    const chosenIds = new Set(prioritized.slice(0, 4).map((article) => article.id));
-    const backfilled = articles
-      .filter((article) => !chosenIds.has(article.id))
-      .sort((left, right) =>
-        new Date(right.created_at || right.published_at || 0).getTime()
-          - new Date(left.created_at || left.published_at || 0).getTime()
-      )
-      .slice(0, Math.max(0, 4 - prioritized.length))
-      .map((article, index) => ({
-        ...article,
-        syntheticViews: fallbackReaderCount(article, prioritized.length + index),
-      }));
-
-    const items = [...prioritized.slice(0, 4), ...backfilled]
+    const items = prioritized
       .slice(0, 4)
       .map((article) => ({
         id: article.id,
