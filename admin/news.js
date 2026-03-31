@@ -150,6 +150,7 @@ const dom = {
   clearReaderPulseButton: document.getElementById("clearReaderPulseButton"),
   saveLiveUpdatesButton: document.getElementById("saveLiveUpdatesButton"),
   clearLiveUpdatesButton: document.getElementById("clearLiveUpdatesButton"),
+  liveUpdatesStatus: document.getElementById("liveUpdatesStatus"),
   accessForm: document.getElementById("accessForm"),
   accessEmailInput: document.getElementById("accessEmailInput"),
   grantAccessButton: document.getElementById("grantAccessButton"),
@@ -615,8 +616,29 @@ function findArchiveArticleById(articleId = "") {
   return state.archiveArticles.find((article) => cleanText(article.id) === cleanText(articleId)) || null;
 }
 
+function sortStoriesByNewest(left = {}, right = {}) {
+  return new Date(right.created_at || right.published_at || 0).getTime()
+    - new Date(left.created_at || left.published_at || 0).getTime();
+}
+
+function resolveDefaultLiveUpdatesArticle() {
+  const liveStory = [...state.archiveArticles]
+    .filter((article) => Number(article.liveUpdateCount || 0) > 0)
+    .sort((left, right) => {
+      const liveDiff = Number(right.liveUpdateCount || 0) - Number(left.liveUpdateCount || 0);
+      if (liveDiff !== 0) return liveDiff;
+      return sortStoriesByNewest(left, right);
+    })[0];
+  if (liveStory) return liveStory;
+
+  const latestArchiveStory = [...state.archiveArticles].sort(sortStoriesByNewest)[0];
+  if (latestArchiveStory) return latestArchiveStory;
+
+  return state.featuredArticle || state.recentArticles[0] || null;
+}
+
 function resolveLiveUpdatesTargetArticle() {
-  return findArchiveArticleById(state.selectedLiveUpdatesArticleId) || null;
+  return findArchiveArticleById(state.selectedLiveUpdatesArticleId) || resolveDefaultLiveUpdatesArticle();
 }
 
 function signalStartFallback(article = {}) {
@@ -636,31 +658,33 @@ function setStorySignalsStatus(message = "", isError = false) {
   dom.storySignalsStatus.classList.toggle("text-slate-500", !isError);
 }
 
+function setLiveUpdatesStatus(message = "", isError = false) {
+  if (!dom.liveUpdatesStatus) return;
+  dom.liveUpdatesStatus.textContent = cleanText(message);
+  dom.liveUpdatesStatus.classList.toggle("text-red-600", Boolean(isError));
+  dom.liveUpdatesStatus.classList.toggle("text-slate-500", !isError);
+}
+
 function renderStorySignalsArticleOptions(items = []) {
-  [
-    [dom.storySignalsArticleSelect, state.selectedReaderPulseArticleId],
-    [dom.liveUpdatesArticleSelect, state.selectedLiveUpdatesArticleId],
-  ].forEach(([selectEl, selectedId]) => {
-    if (!selectEl) return;
-    const previousValue = cleanText(selectEl.value || selectedId || "");
-    selectEl.replaceChildren();
+  if (!dom.storySignalsArticleSelect) return;
+  const previousValue = cleanText(dom.storySignalsArticleSelect.value || state.selectedReaderPulseArticleId || "");
+  dom.storySignalsArticleSelect.replaceChildren();
 
-    const placeholder = document.createElement("option");
-    placeholder.value = "";
-    placeholder.textContent = "Select a pushed article";
-    selectEl.append(placeholder);
+  const placeholder = document.createElement("option");
+  placeholder.value = "";
+  placeholder.textContent = "Select a pushed article";
+  dom.storySignalsArticleSelect.append(placeholder);
 
-    items.forEach((article) => {
-      const option = document.createElement("option");
-      option.value = cleanText(article.id || "");
-      option.textContent = cleanText(article.title || "Untitled story");
-      selectEl.append(option);
-    });
-
-    selectEl.value = items.some((article) => cleanText(article.id) === previousValue)
-      ? previousValue
-      : "";
+  items.forEach((article) => {
+    const option = document.createElement("option");
+    option.value = cleanText(article.id || "");
+    option.textContent = cleanText(article.title || "Untitled story");
+    dom.storySignalsArticleSelect.append(option);
   });
+
+  dom.storySignalsArticleSelect.value = items.some((article) => cleanText(article.id) === previousValue)
+    ? previousValue
+    : "";
 }
 
 function resetReaderPulseDashboard({ preserveStatus = false } = {}) {
@@ -678,9 +702,8 @@ function resetReaderPulseDashboard({ preserveStatus = false } = {}) {
 
 function resetLiveUpdatesDashboard() {
   state.selectedLiveUpdatesArticleId = "";
-  if (dom.liveUpdatesArticleSelect) dom.liveUpdatesArticleSelect.value = "";
-  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Select a pushed article from Watch All News.";
-  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "The dashboard will load this story's quick live lines here.";
+  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Live desk source will attach automatically.";
+  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "Push quick lines here and Sunwire will store them separately from People Are Reading.";
   if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = false;
   if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = "10";
   syncLiveUpdatesScheduleState();
@@ -691,9 +714,10 @@ function resetLiveUpdatesDashboard() {
     dom.liveUpdatesPreviewList.replaceChildren();
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "Choose a story to preview quick live lines.";
+    empty.textContent = "Push quick lines and Sunwire will attach them automatically.";
     dom.liveUpdatesPreviewList.append(empty);
   }
+  setLiveUpdatesStatus("Write quick lines here. Sunwire will manage the live desk source automatically.");
 }
 
 function resetStorySignalsDashboard({ preserveStatus = false } = {}) {
@@ -842,9 +866,10 @@ function renderLiveUpdatesPreview() {
       dom.liveUpdatesPreviewList.replaceChildren();
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Choose a story to preview quick live lines.";
+      empty.textContent = "Push quick lines and Sunwire will attach them automatically.";
       dom.liveUpdatesPreviewList.append(empty);
     }
+    setLiveUpdatesStatus("Live desk will use your latest pushed story automatically.");
     return;
   }
 
@@ -865,13 +890,16 @@ function renderLiveUpdatesPreview() {
         : "Instant")
       : "No queue";
   }
+  setLiveUpdatesStatus(liveItems.length
+    ? "Live desk preview is ready."
+    : "Add one short line per row, then push Live Updates.");
   if (!dom.liveUpdatesPreviewList) return;
   dom.liveUpdatesPreviewList.replaceChildren();
 
   if (!timeline.length) {
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "No quick live lines pushed for this story yet.";
+    empty.textContent = "No quick live lines are queued yet.";
     dom.liveUpdatesPreviewList.append(empty);
     return;
   }
@@ -902,10 +930,10 @@ function applyLiveUpdatesArticle(article = null) {
   }
 
   state.selectedLiveUpdatesArticleId = cleanText(article.id || "");
-  if (dom.liveUpdatesArticleSelect) dom.liveUpdatesArticleSelect.value = state.selectedLiveUpdatesArticleId;
   if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = cleanText(article.title || "Untitled story");
   if (dom.liveUpdatesMeta) {
     dom.liveUpdatesMeta.textContent = [
+      "Managed automatically",
       toTitleCase(article.category || "news"),
       fmtDate(article.created_at || article.published_at || new Date().toISOString()),
       article.liveUpdateCount ? `${article.liveUpdateCount} live lines saved` : "No quick lines saved yet",
@@ -971,14 +999,10 @@ function renderSignalBoards() {
     .sort((left, right) => {
       const liveDiff = Number(right.liveUpdateCount || 0) - Number(left.liveUpdateCount || 0);
       if (liveDiff !== 0) return liveDiff;
-      return new Date(right.created_at || right.published_at || 0).getTime()
-        - new Date(left.created_at || left.published_at || 0).getTime();
+      return sortStoriesByNewest(left, right);
     })
     .slice(0, 12);
-  const defaultLiveArticle = !state.selectedLiveUpdatesArticleId && liveStories.length
-    ? liveStories[0]
-    : null;
-  const selectedLiveId = cleanText(state.selectedLiveUpdatesArticleId || defaultLiveArticle?.id || "");
+  const liveDeskArticle = resolveLiveUpdatesTargetArticle();
 
   if (dom.readerPulsePushedCount) {
     dom.readerPulsePushedCount.textContent = `${readerStories.length} live`;
@@ -1014,16 +1038,14 @@ function renderSignalBoards() {
     } else {
       liveStories.forEach((article) => {
         dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
-          selectedId: selectedLiveId,
           meta: `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`,
-          onSelect: applyLiveUpdatesArticle,
         }));
       });
     }
   }
 
-  if (defaultLiveArticle) {
-    applyLiveUpdatesArticle(defaultLiveArticle);
+  if (liveDeskArticle && (!state.selectedLiveUpdatesArticleId || !findArchiveArticleById(state.selectedLiveUpdatesArticleId))) {
+    applyLiveUpdatesArticle(liveDeskArticle);
   }
 }
 
@@ -1907,8 +1929,7 @@ function renderArchive(items = []) {
 
     sortedArticles.forEach((article) => {
       const card = document.createElement("article");
-      const isSelected = cleanText(article.id || "") === cleanText(state.selectedReaderPulseArticleId || "")
-        || cleanText(article.id || "") === cleanText(state.selectedLiveUpdatesArticleId || "");
+      const isSelected = cleanText(article.id || "") === cleanText(state.selectedReaderPulseArticleId || "");
       card.className = `rounded-[24px] border bg-white p-4 transition ${isSelected ? "border-slate-950 shadow-lg shadow-slate-200/70" : "border-slate-200"}`;
 
       const headline = document.createElement("p");
@@ -1950,16 +1971,7 @@ function renderArchive(items = []) {
       openLink.textContent = "Open";
       openLink.addEventListener("click", (event) => event.stopPropagation());
 
-      const liveButton = document.createElement("button");
-      liveButton.type = "button";
-      liveButton.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
-      liveButton.textContent = "Use in Live";
-      liveButton.addEventListener("click", () => {
-        applyLiveUpdatesArticle(article);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
-
-      actions.append(readerButton, liveButton, editLink, openLink);
+      actions.append(readerButton, editLink, openLink);
       card.append(headline, meta, actions);
       list.append(card);
     });
@@ -2086,14 +2098,15 @@ async function loadArchiveData(options = {}) {
 async function handleStorySignalsMutation(payload = {}, options = {}) {
   const article = findArchiveArticleById(options.articleId || "")
     || (cleanText(state.featuredArticle?.id || "") === cleanText(options.articleId || "") ? state.featuredArticle : null);
+  const setStatus = typeof options.setStatus === "function" ? options.setStatus : setStorySignalsStatus;
   if (!article || state.storySignalsBusy) {
-    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    setStatus("Choose an article from Watch All News first.", true);
     return;
   }
 
   state.storySignalsBusy = true;
   setStorySignalsButtonsBusy(options.activeButton || null, true, options.busyLabel || "Saving...");
-  setStorySignalsStatus(cleanText(options.pendingMessage || "Saving dashboard changes..."));
+  setStatus(cleanText(options.pendingMessage || "Saving dashboard changes..."));
 
   try {
     const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(article.id)}&action=story-signals`, {
@@ -2108,7 +2121,7 @@ async function handleStorySignalsMutation(payload = {}, options = {}) {
     } else if (options.kind === "liveUpdates") {
       applyLiveUpdatesArticle(nextArticle);
     }
-    setStorySignalsStatus(cleanText(options.successMessage || "Saved."));
+    setStatus(cleanText(options.successMessage || "Saved."));
     showToast(cleanText(options.toastMessage || "Saved."));
   } finally {
     state.storySignalsBusy = false;
@@ -2135,6 +2148,7 @@ async function handleSaveReaderPulse() {
       articleId: article.id,
       kind: "readerPulse",
       activeButton: dom.saveReaderPulseButton,
+      setStatus: setStorySignalsStatus,
       busyLabel: "Pushing...",
       pendingMessage: "Pushing People Are Reading...",
       successMessage: "People Are Reading saved. The sidebar will refresh from this story.",
@@ -2156,6 +2170,7 @@ async function handleClearReaderPulse() {
       articleId: article.id,
       kind: "readerPulse",
       activeButton: dom.clearReaderPulseButton,
+      setStatus: setStorySignalsStatus,
       busyLabel: "Clearing...",
       pendingMessage: "Clearing People Are Reading...",
       successMessage: "People Are Reading cleared for this story.",
@@ -2167,18 +2182,18 @@ async function handleClearReaderPulse() {
 async function handleSaveLiveUpdates() {
   const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    setLiveUpdatesStatus("Push a story first so Live Updates has somewhere to attach.", true);
     return;
   }
 
   const liveUpdates = getLiveUpdatesPayload(article);
   if (!liveUpdates.enabled || !liveUpdates.items.length) {
-    setStorySignalsStatus("Add one short update per line, or use Clear Live Updates.", true);
+    setLiveUpdatesStatus("Add one short update per line, or use Clear Live Updates.", true);
     return;
   }
   const longLine = liveUpdates.items.find((item) => wordCount(item.text || "") > 10);
   if (longLine) {
-    setStorySignalsStatus(`Keep each live update line within 10 words. "${longLine.text}" is too long.`, true);
+    setLiveUpdatesStatus(`Keep each live update line within 10 words. "${longLine.text}" is too long.`, true);
     return;
   }
 
@@ -2188,11 +2203,12 @@ async function handleSaveLiveUpdates() {
       articleId: article.id,
       kind: "liveUpdates",
       activeButton: dom.saveLiveUpdatesButton,
+      setStatus: setLiveUpdatesStatus,
       busyLabel: "Pushing...",
       pendingMessage: "Pushing Live Updates...",
       successMessage: liveUpdates.mode === "scheduled"
-        ? "Live Updates saved. This story will release them on schedule."
-        : "Live Updates saved. This story will reflect them instantly.",
+        ? "Live Updates saved. Sunwire will release them on schedule."
+        : "Live Updates saved. Sunwire will reflect them instantly.",
       toastMessage: "Live Updates pushed.",
     }
   );
@@ -2201,7 +2217,7 @@ async function handleSaveLiveUpdates() {
 async function handleClearLiveUpdates() {
   const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    setLiveUpdatesStatus("Live desk is already empty.", true);
     return;
   }
 
@@ -2211,9 +2227,10 @@ async function handleClearLiveUpdates() {
       articleId: article.id,
       kind: "liveUpdates",
       activeButton: dom.clearLiveUpdatesButton,
+      setStatus: setLiveUpdatesStatus,
       busyLabel: "Clearing...",
       pendingMessage: "Clearing Live Updates...",
-      successMessage: "Live Updates cleared for this story.",
+      successMessage: "Live Updates cleared.",
       toastMessage: "Live Updates cleared.",
     }
   );
@@ -2534,7 +2551,7 @@ function attachStorySignalsListeners() {
     try {
       await handleSaveLiveUpdates();
     } catch (error) {
-      setStorySignalsStatus(error.message || "Live Updates push failed.", true);
+      setLiveUpdatesStatus(error.message || "Live Updates push failed.", true);
       showToast(error.message || "Live Updates push failed.");
     }
   });
@@ -2543,7 +2560,7 @@ function attachStorySignalsListeners() {
     try {
       await handleClearLiveUpdates();
     } catch (error) {
-      setStorySignalsStatus(error.message || "Live Updates clear failed.", true);
+      setLiveUpdatesStatus(error.message || "Live Updates clear failed.", true);
       showToast(error.message || "Live Updates clear failed.");
     }
   });
@@ -2558,14 +2575,6 @@ function attachStorySignalsListeners() {
     applyStorySignalsArticle(article);
   });
 
-  dom.liveUpdatesArticleSelect?.addEventListener("change", (event) => {
-    const article = findArchiveArticleById(event.target.value || "");
-    if (!article) {
-      applyLiveUpdatesArticle(null);
-      return;
-    }
-    applyLiveUpdatesArticle(article);
-  });
 }
 
 function attachNavHandlers() {
