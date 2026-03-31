@@ -394,7 +394,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260331-19"></script>',
+    '<script type="module" src="/admin/news.js?v=20260331-20"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');
@@ -735,6 +735,13 @@ async function handleNews(req, res) {
 
     if (action === 'story-signals') {
       const body = await readJsonBody(req);
+      const liveUpdateItems = Array.isArray(body?.liveUpdates?.items)
+        ? body.liveUpdates.items
+        : [];
+      const invalidLiveUpdate = liveUpdateItems.find((item) => countWords(String(item?.text || item || '')) > 10);
+      if (invalidLiveUpdate) {
+        return res.status(400).json({ error: 'Each live update line must stay within 10 words.' });
+      }
       updated = await updateManualStorySignals(articleId, body);
     } else {
       const existing = await prisma.article.findFirst({

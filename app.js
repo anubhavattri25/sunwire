@@ -92,8 +92,8 @@ const SEARCH_CACHE_TTL_MS = 5 * 60 * 1000;
 const SEARCH_FETCH_PAGE_SIZE = 100;
 const API_RESPONSE_TTL_MS = 5 * 60 * 1000;
 const ARTICLE_CACHE_PREFIX = "sunwire-article-cache:v2:";
-const DEFERRED_ASSET_VERSION = "20260331-21";
-const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-19";
+const DEFERRED_ASSET_VERSION = "20260331-22";
+const ADMIN_DASHBOARD_ASSET_VERSION = "20260331-20";
 const GOOGLE_AUTH_SESSION_STORAGE_KEY = "sunwire:google-auth-session:v1";
 const GOOGLE_AUTH_ID_TOKEN_STORAGE_KEY = "sunwire:google-auth-id-token:v1";
 const GOOGLE_AUTH_REQUEST_STORAGE_KEY = "sunwire:google-auth-request:v1";
@@ -2084,22 +2084,22 @@ function renderHeroLiveUpdates(story = null) {
   const nextUpdateAt = cleanText(story?.nextLiveUpdateAt || "");
 
   if (!story) {
-    heroLiveUpdatesMetaEl.textContent = "Waiting for queued updates";
+    heroLiveUpdatesMetaEl.textContent = "Waiting for live desk";
     heroLiveUpdatesListEl.innerHTML = "<li>Live updates will appear here after you queue them from Watch All News.</li>";
     return;
   }
 
   if (!updates.length) {
     heroLiveUpdatesMetaEl.textContent = totalQueued
-      ? (nextUpdateAt ? `Next update ${timeAgo(nextUpdateAt)}` : "Updates are queued")
+      ? (nextUpdateAt ? `Next line ${timeAgo(nextUpdateAt)}` : "Quick lines are scheduled")
       : "No live timeline queued";
     heroLiveUpdatesListEl.innerHTML = totalQueued
-      ? "<li>The timeline is queued. New short updates will auto-drop here at staggered times.</li>"
-      : "<li>Add short updates from Watch All News to turn this hero into a live timeline.</li>";
+      ? "<li>Quick lines are scheduled. They will drop here automatically.</li>"
+      : "<li>Add quick live lines from Watch All News to turn this hero into a live timeline.</li>";
     return;
   }
 
-  heroLiveUpdatesMetaEl.textContent = `${updates.length} live now${totalQueued > updates.length ? ` • ${totalQueued - updates.length} queued` : ""}`;
+  heroLiveUpdatesMetaEl.textContent = `${updates.length} live now${totalQueued > updates.length ? ` • ${totalQueued - updates.length} scheduled` : ""}`;
 
   updates.forEach((update) => {
     const item = document.createElement("li");

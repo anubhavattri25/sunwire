@@ -140,6 +140,13 @@ function buildArticleHref(article = {}) {
   return `/article/${slug}?${params.toString()}`;
 }
 
+function fallbackReaderCount(article = {}, index = 0) {
+  const viewCount = Number(article.views || 0);
+  const shareCount = Number(article.shares || 0);
+  const seededFloor = Math.max(48, 120 - (index * 14));
+  return Math.max(seededFloor, viewCount, shareCount * 12);
+}
+
 function normalizeSidebarPayload(payload = {}, fallback = {}) {
   const fallbackTool = fallback.tool || { ...pickDailyNicheTool() };
   const fallbackEvents = Array.isArray(fallback.events) && fallback.events.length
@@ -502,16 +509,31 @@ async function fetchPeopleReading() {
       take: 80,
     });
 
-    const items = records
+    const articles = records
       .map((record) => toApiArticle(record))
-      .filter(Boolean)
+      .filter(Boolean);
+    const prioritized = articles
       .filter((article) => Number(article.syntheticViews || 0) > 0)
       .sort((left, right) => {
         const readerDiff = Number(right.syntheticViews || 0) - Number(left.syntheticViews || 0);
         if (readerDiff !== 0) return readerDiff;
         return new Date(right.created_at || right.published_at || 0).getTime()
           - new Date(left.created_at || left.published_at || 0).getTime();
-      })
+      });
+    const chosenIds = new Set(prioritized.slice(0, 4).map((article) => article.id));
+    const backfilled = articles
+      .filter((article) => !chosenIds.has(article.id))
+      .sort((left, right) =>
+        new Date(right.created_at || right.published_at || 0).getTime()
+          - new Date(left.created_at || left.published_at || 0).getTime()
+      )
+      .slice(0, Math.max(0, 4 - prioritized.length))
+      .map((article, index) => ({
+        ...article,
+        syntheticViews: fallbackReaderCount(article, prioritized.length + index),
+      }));
+
+    const items = [...prioritized.slice(0, 4), ...backfilled]
       .slice(0, 4)
       .map((article) => ({
         id: article.id,

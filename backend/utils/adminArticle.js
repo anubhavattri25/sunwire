@@ -113,16 +113,47 @@ function normalizeManualLiveUpdates(value = {}, fallback = {}) {
     || fallbackSource.queue
     || []
   );
-  const minGapMinutes = normalizeInteger(
-    source.minGapMinutes ?? source.intervalMin ?? fallbackSource.minGapMinutes ?? fallbackSource.intervalMin ?? 10,
+  const requestedMode = cleanText(
+    source.mode
+    || source.releaseMode
+    || fallbackSource.mode
+    || fallbackSource.releaseMode
+    || ''
+  ).toLowerCase();
+  const hasScheduleFlag = Object.prototype.hasOwnProperty.call(source, 'scheduleEnabled')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'scheduleEnabled');
+  const hasInterval = Object.prototype.hasOwnProperty.call(source, 'intervalMinutes')
+    || Object.prototype.hasOwnProperty.call(source, 'everyMinutes')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'intervalMinutes')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'everyMinutes');
+  const hasLegacyGapConfig = Object.prototype.hasOwnProperty.call(source, 'minGapMinutes')
+    || Object.prototype.hasOwnProperty.call(source, 'maxGapMinutes')
+    || Object.prototype.hasOwnProperty.call(source, 'intervalMin')
+    || Object.prototype.hasOwnProperty.call(source, 'intervalMax')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'minGapMinutes')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'maxGapMinutes')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'intervalMin')
+    || Object.prototype.hasOwnProperty.call(fallbackSource, 'intervalMax');
+  const intervalMinutes = normalizeInteger(
+    source.intervalMinutes
+    ?? source.everyMinutes
+    ?? fallbackSource.intervalMinutes
+    ?? fallbackSource.everyMinutes
+    ?? source.minGapMinutes
+    ?? source.intervalMin
+    ?? fallbackSource.minGapMinutes
+    ?? fallbackSource.intervalMin
+    ?? 10,
     10,
     { min: 1, max: 24 * 60 }
   );
-  const requestedMaxGap = normalizeInteger(
-    source.maxGapMinutes ?? source.intervalMax ?? fallbackSource.maxGapMinutes ?? fallbackSource.intervalMax ?? 20,
-    20,
-    { min: minGapMinutes, max: 48 * 60 }
-  );
+  const scheduleEnabled = requestedMode === 'scheduled'
+    || (requestedMode !== 'instant' && Boolean(
+      source.scheduleEnabled
+      ?? fallbackSource.scheduleEnabled
+      ?? hasInterval
+      ?? hasLegacyGapConfig
+    ));
   const startedAt = normalizeIsoDateTime(
     source.startedAt
     || source.startAt
@@ -139,8 +170,11 @@ function normalizeManualLiveUpdates(value = {}, fallback = {}) {
   return {
     enabled,
     startedAt,
-    minGapMinutes,
-    maxGapMinutes: Math.max(minGapMinutes, requestedMaxGap),
+    mode: scheduleEnabled ? 'scheduled' : 'instant',
+    scheduleEnabled,
+    intervalMinutes,
+    minGapMinutes: intervalMinutes,
+    maxGapMinutes: intervalMinutes,
     items,
   };
 }
@@ -172,15 +206,26 @@ function resolveTimelineAnchor({
 
 function buildLiveUpdateTimeline(liveUpdates = {}, options = {}) {
   const normalized = normalizeManualLiveUpdates(liveUpdates);
+  if (!normalized.enabled || !normalized.items.length) return [];
+
   const anchor = resolveTimelineAnchor({
     startedAt: normalized.startedAt,
     fallbackStartAt: options.fallbackStartAt,
     publishedAt: options.publishedAt,
-  });
-  const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
-  if (!normalized.enabled || !normalized.items.length || Number.isNaN(anchorMs)) return [];
+  }) || new Date().toISOString();
+  const anchorMs = new Date(anchor).getTime();
+  if (Number.isNaN(anchorMs)) return [];
 
   const seed = cleanText(options.seed || options.articleId || options.slug || options.title || 'sunwire-live');
+
+  if (normalized.mode !== 'scheduled') {
+    return normalized.items.map((item, index) => ({
+      id: `${seed}-${index + 1}`,
+      text: item.text,
+      scheduledAt: anchor,
+    }));
+  }
+
   let currentMs = anchorMs;
 
   return normalized.items.map((item, index) => {

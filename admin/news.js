@@ -135,12 +135,11 @@ const dom = {
   readerPulseStartedAtInput: document.getElementById("readerPulseStartedAtInput"),
   readerPulsePushedCount: document.getElementById("readerPulsePushedCount"),
   readerPulsePushedList: document.getElementById("readerPulsePushedList"),
-  liveUpdatesStartedAtInput: document.getElementById("liveUpdatesStartedAtInput"),
   liveUpdatesArticleSelect: document.getElementById("liveUpdatesArticleSelect"),
   liveUpdatesHeadline: document.getElementById("liveUpdatesHeadline"),
   liveUpdatesMeta: document.getElementById("liveUpdatesMeta"),
-  liveUpdatesMinGapInput: document.getElementById("liveUpdatesMinGapInput"),
-  liveUpdatesMaxGapInput: document.getElementById("liveUpdatesMaxGapInput"),
+  liveUpdatesScheduleToggle: document.getElementById("liveUpdatesScheduleToggle"),
+  liveUpdatesIntervalInput: document.getElementById("liveUpdatesIntervalInput"),
   liveUpdatesQueueInput: document.getElementById("liveUpdatesQueueInput"),
   liveUpdatesCountBadge: document.getElementById("liveUpdatesCountBadge"),
   liveUpdatesPreviewBadge: document.getElementById("liveUpdatesPreviewBadge"),
@@ -275,16 +274,42 @@ function normalizeLiveUpdatesConfig(value = {}, fallback = {}) {
     .map((entry) => typeof entry === "string" ? cleanText(entry) : cleanText(entry?.text || ""))
     .filter(Boolean)
     .slice(0, 40);
-  const minGapMinutes = Math.max(1, normalizePositiveInteger(
-    source.minGapMinutes ?? source.intervalMin ?? fallbackSource.minGapMinutes ?? fallbackSource.intervalMin ?? 10,
+  const requestedMode = cleanText(
+    source.mode
+    || source.releaseMode
+    || fallbackSource.mode
+    || fallbackSource.releaseMode
+    || ""
+  ).toLowerCase();
+  const intervalMinutes = Math.max(1, normalizePositiveInteger(
+    source.intervalMinutes
+    ?? source.everyMinutes
+    ?? fallbackSource.intervalMinutes
+    ?? fallbackSource.everyMinutes
+    ?? source.minGapMinutes
+    ?? source.intervalMin
+    ?? fallbackSource.minGapMinutes
+    ?? fallbackSource.intervalMin
+    ?? 10,
     10,
     1440
   ));
-  const maxGapMinutes = Math.max(minGapMinutes, normalizePositiveInteger(
-    source.maxGapMinutes ?? source.intervalMax ?? fallbackSource.maxGapMinutes ?? fallbackSource.intervalMax ?? 20,
-    20,
-    2880
-  ));
+  const scheduleEnabled = requestedMode === "scheduled"
+    || Boolean(source.scheduleEnabled ?? fallbackSource.scheduleEnabled)
+    || (!requestedMode && (
+      Object.prototype.hasOwnProperty.call(source, "intervalMinutes")
+      || Object.prototype.hasOwnProperty.call(source, "everyMinutes")
+      || Object.prototype.hasOwnProperty.call(source, "minGapMinutes")
+      || Object.prototype.hasOwnProperty.call(source, "maxGapMinutes")
+      || Object.prototype.hasOwnProperty.call(source, "intervalMin")
+      || Object.prototype.hasOwnProperty.call(source, "intervalMax")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "intervalMinutes")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "everyMinutes")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "minGapMinutes")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "maxGapMinutes")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "intervalMin")
+      || Object.prototype.hasOwnProperty.call(fallbackSource, "intervalMax")
+    ));
   const startedAt = normalizeSignalDate(
     source.startedAt
     || source.startAt
@@ -296,8 +321,11 @@ function normalizeLiveUpdatesConfig(value = {}, fallback = {}) {
   return {
     enabled: items.length > 0,
     startedAt,
-    minGapMinutes,
-    maxGapMinutes,
+    mode: scheduleEnabled ? "scheduled" : "instant",
+    scheduleEnabled,
+    intervalMinutes,
+    minGapMinutes: intervalMinutes,
+    maxGapMinutes: intervalMinutes,
     items,
   };
 }
@@ -322,12 +350,19 @@ function buildLiveUpdateTimelinePreview(liveUpdates = {}, article = {}) {
     || article.published_at
     || article.createdAt
     || article.publishedAt
-    || ""
+    || new Date().toISOString()
   );
   const anchorMs = anchor ? new Date(anchor).getTime() : NaN;
   if (!normalized.items.length || Number.isNaN(anchorMs)) return [];
 
   const seed = cleanText(article.id || article.slug || article.title || "sunwire-live");
+  if (normalized.mode !== "scheduled") {
+    return normalized.items.map((text, index) => ({
+      id: `${seed}-${index + 1}`,
+      text,
+      scheduledAt: anchor,
+    }));
+  }
   let currentMs = anchorMs;
 
   return normalized.items.map((text, index) => {
@@ -580,6 +615,12 @@ function findArchiveArticleById(articleId = "") {
   return state.archiveArticles.find((article) => cleanText(article.id) === cleanText(articleId)) || null;
 }
 
+function resolveLiveUpdatesTargetArticle() {
+  const featuredId = cleanText(state.featuredArticle?.id || "");
+  if (!featuredId) return null;
+  return findArchiveArticleById(featuredId) || state.featuredArticle || null;
+}
+
 function signalStartFallback(article = {}) {
   return cleanText(
     article.created_at
@@ -640,19 +681,19 @@ function resetReaderPulseDashboard({ preserveStatus = false } = {}) {
 function resetLiveUpdatesDashboard() {
   state.selectedLiveUpdatesArticleId = "";
   if (dom.liveUpdatesArticleSelect) dom.liveUpdatesArticleSelect.value = "";
-  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Select a pushed article from Watch All News.";
-  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "The dashboard will load this story's live timeline queue here.";
-  if (dom.liveUpdatesStartedAtInput) dom.liveUpdatesStartedAtInput.value = "";
-  if (dom.liveUpdatesMinGapInput) dom.liveUpdatesMinGapInput.value = "";
-  if (dom.liveUpdatesMaxGapInput) dom.liveUpdatesMaxGapInput.value = "";
+  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Push a hero story first.";
+  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "Live Updates now attach to the story currently running on the homepage hero.";
+  if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = false;
+  if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = "10";
+  syncLiveUpdatesScheduleState();
   if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = "";
-  if (dom.liveUpdatesCountBadge) dom.liveUpdatesCountBadge.textContent = "0 queued";
+  if (dom.liveUpdatesCountBadge) dom.liveUpdatesCountBadge.textContent = "0 lines";
   if (dom.liveUpdatesPreviewBadge) dom.liveUpdatesPreviewBadge.textContent = "Waiting";
   if (dom.liveUpdatesPreviewList) {
     dom.liveUpdatesPreviewList.replaceChildren();
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "Choose a story to preview scheduled live updates.";
+    empty.textContent = "Push a hero story first, then add quick live lines here.";
     dom.liveUpdatesPreviewList.append(empty);
   }
 }
@@ -670,10 +711,12 @@ function getStorySignalsPayload(article = {}) {
     everyMinutes: dom.readerPulseMinutesInput?.value || 15,
     startedAt: dom.readerPulseStartedAtInput?.value || signalStartFallback(article),
   });
+  const scheduleEnabled = Boolean(dom.liveUpdatesScheduleToggle?.checked);
   const liveUpdates = normalizeLiveUpdatesConfig({
-    startedAt: dom.liveUpdatesStartedAtInput?.value || signalStartFallback(article),
-    minGapMinutes: dom.liveUpdatesMinGapInput?.value || 10,
-    maxGapMinutes: dom.liveUpdatesMaxGapInput?.value || 20,
+    mode: scheduleEnabled ? "scheduled" : "instant",
+    scheduleEnabled,
+    intervalMinutes: dom.liveUpdatesIntervalInput?.value || 10,
+    startedAt: new Date().toISOString(),
     items: String(dom.liveUpdatesQueueInput?.value || "")
       .split(/\n+/)
       .map((entry) => cleanText(entry))
@@ -710,11 +753,22 @@ function emptyReaderPulsePayload(article = {}) {
 function emptyLiveUpdatesPayload(article = {}) {
   return {
     enabled: false,
+    mode: "instant",
+    scheduleEnabled: false,
+    intervalMinutes: 10,
     startedAt: normalizeSignalDate(signalStartFallback(article)),
-    minGapMinutes: 10,
-    maxGapMinutes: 20,
     items: [],
   };
+}
+
+function syncLiveUpdatesScheduleState() {
+  const enabled = Boolean(dom.liveUpdatesScheduleToggle?.checked);
+  if (dom.liveUpdatesIntervalInput) {
+    dom.liveUpdatesIntervalInput.disabled = !enabled;
+    if (enabled && !cleanText(dom.liveUpdatesIntervalInput.value || "")) {
+      dom.liveUpdatesIntervalInput.value = "10";
+    }
+  }
 }
 
 function setStorySignalsButtonsBusy(activeButton = null, busy = false, busyLabel = "Saving...") {
@@ -782,15 +836,15 @@ function applyStorySignalsArticle(article = null) {
 }
 
 function renderLiveUpdatesPreview() {
-  const article = findArchiveArticleById(state.selectedLiveUpdatesArticleId);
+  const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    if (dom.liveUpdatesCountBadge) dom.liveUpdatesCountBadge.textContent = "0 queued";
+    if (dom.liveUpdatesCountBadge) dom.liveUpdatesCountBadge.textContent = "0 lines";
     if (dom.liveUpdatesPreviewBadge) dom.liveUpdatesPreviewBadge.textContent = "Waiting";
     if (dom.liveUpdatesPreviewList) {
       dom.liveUpdatesPreviewList.replaceChildren();
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Choose a story to preview scheduled live updates.";
+      empty.textContent = "Push a hero story first, then add quick live lines here.";
       dom.liveUpdatesPreviewList.append(empty);
     }
     return;
@@ -802,14 +856,15 @@ function renderLiveUpdatesPreview() {
     ...liveUpdates,
     items: liveItems.map((item) => item.text),
   }, article);
-  const activeCount = timeline.filter((item) => new Date(item.scheduledAt).getTime() <= Date.now()).length;
 
   if (dom.liveUpdatesCountBadge) {
-    dom.liveUpdatesCountBadge.textContent = `${liveItems.length} queued`;
+    dom.liveUpdatesCountBadge.textContent = `${liveItems.length} lines`;
   }
   if (dom.liveUpdatesPreviewBadge) {
     dom.liveUpdatesPreviewBadge.textContent = timeline.length
-      ? `${activeCount} live / ${timeline.length} total`
+      ? (liveUpdates.mode === "scheduled"
+        ? `Every ${liveUpdates.intervalMinutes || 10} min`
+        : "Instant")
       : "No queue";
   }
   if (!dom.liveUpdatesPreviewList) return;
@@ -818,7 +873,7 @@ function renderLiveUpdatesPreview() {
   if (!timeline.length) {
     const empty = document.createElement("p");
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-    empty.textContent = "No live updates queued for this article yet.";
+    empty.textContent = "No quick live lines pushed for the homepage hero yet.";
     dom.liveUpdatesPreviewList.append(empty);
     return;
   }
@@ -833,7 +888,9 @@ function renderLiveUpdatesPreview() {
 
     const meta = document.createElement("p");
     meta.className = "mt-2 text-xs text-slate-500";
-    meta.textContent = `${fmtDate(item.scheduledAt)} | ${timeAgo(item.scheduledAt)}`;
+    meta.textContent = liveUpdates.mode === "scheduled"
+      ? `${fmtDate(item.scheduledAt)} | ${timeAgo(item.scheduledAt)}`
+      : "Push goes live instantly on the homepage";
 
     card.append(headline, meta);
     dom.liveUpdatesPreviewList.append(card);
@@ -851,18 +908,18 @@ function applyLiveUpdatesArticle(article = null) {
   if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = cleanText(article.title || "Untitled story");
   if (dom.liveUpdatesMeta) {
     dom.liveUpdatesMeta.textContent = [
+      "Homepage hero",
       toTitleCase(article.category || "news"),
-      fmtDate(article.created_at || article.published_at || new Date().toISOString()),
-      article.liveUpdateCount ? `${article.liveUpdateCount} queued updates` : "",
+      article.liveUpdateCount ? `${article.liveUpdateCount} live lines saved` : "No quick lines saved yet",
     ].filter(Boolean).join(" | ");
   }
 
   const liveUpdates = normalizeLiveUpdatesConfig(article.liveUpdates || article.live_updates || {}, {
     startedAt: signalStartFallback(article),
   });
-  if (dom.liveUpdatesStartedAtInput) dom.liveUpdatesStartedAtInput.value = toLocalDateTimeValue(liveUpdates.startedAt || signalStartFallback(article));
-  if (dom.liveUpdatesMinGapInput) dom.liveUpdatesMinGapInput.value = String(liveUpdates.minGapMinutes || 10);
-  if (dom.liveUpdatesMaxGapInput) dom.liveUpdatesMaxGapInput.value = String(liveUpdates.maxGapMinutes || 20);
+  if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = liveUpdates.mode === "scheduled";
+  if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = String(liveUpdates.intervalMinutes || 10);
+  syncLiveUpdatesScheduleState();
   if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = liveUpdates.items.join("\n");
 
   renderLiveUpdatesPreview();
@@ -872,9 +929,16 @@ function createSignalStoryCard(article = {}, options = {}) {
   const card = document.createElement("button");
   card.type = "button";
   const isSelected = cleanText(article.id || "") === cleanText(options.selectedId || "");
+  const isInteractive = typeof options.onSelect === "function";
   card.className = `w-full rounded-[22px] border px-4 py-4 text-left transition ${
-    isSelected ? "border-slate-950 bg-amber-50" : "border-slate-200 bg-slate-50 hover:border-slate-300 hover:bg-white"
+    isSelected ? "border-slate-950 bg-amber-50" : "border-slate-200 bg-slate-50"
   }`;
+  if (isInteractive) {
+    card.classList.add("hover:border-slate-300", "hover:bg-white");
+  } else {
+    card.disabled = true;
+    card.classList.add("cursor-default");
+  }
 
   const title = document.createElement("p");
   title.className = "text-sm font-semibold leading-6 text-slate-950";
@@ -885,9 +949,11 @@ function createSignalStoryCard(article = {}, options = {}) {
   meta.textContent = cleanText(options.meta || "");
 
   card.append(title, meta);
-  card.addEventListener("click", () => {
-    if (typeof options.onSelect === "function") options.onSelect(article);
-  });
+  if (isInteractive) {
+    card.addEventListener("click", () => {
+      options.onSelect(article);
+    });
+  }
   return card;
 }
 
@@ -941,14 +1007,12 @@ function renderSignalBoards() {
     if (!liveStories.length) {
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Stories pushed to Live Updates will appear here.";
+      empty.textContent = "Homepage hero stories with saved live lines will appear here.";
       dom.liveUpdatesPushedList.append(empty);
     } else {
       liveStories.forEach((article) => {
         dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
-          selectedId: state.selectedLiveUpdatesArticleId,
-          meta: `${Number(article.liveUpdateCount || 0)} queued updates • ${fmtDate(article.created_at || article.published_at || "")}`,
-          onSelect: applyLiveUpdatesArticle,
+          meta: `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`,
         }));
       });
     }
@@ -1317,6 +1381,7 @@ function renderFeaturedStatus(article) {
         : "Turn hero on to request homepage priority for this story.";
     }
     if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = true;
+    resetLiveUpdatesDashboard();
     syncFeaturedPreview();
     return;
   }
@@ -1327,6 +1392,9 @@ function renderFeaturedStatus(article) {
     dom.featuredMeta.textContent = `${toTitleCase(article.category || "news")} | ${expiry}`;
   }
   if (dom.featuredRemoveButton) dom.featuredRemoveButton.hidden = !isAdminRole();
+  if (state.mode === "watch-all-news") {
+    applyLiveUpdatesArticle(findArchiveArticleById(article.id) || article);
+  }
   syncFeaturedPreview();
 }
 
@@ -1864,15 +1932,6 @@ function renderArchive(items = []) {
         window.scrollTo({ top: 0, behavior: "smooth" });
       });
 
-      const liveButton = document.createElement("button");
-      liveButton.type = "button";
-      liveButton.className = "rounded-full border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-900 transition hover:border-slate-950";
-      liveButton.textContent = "Use in Live";
-      liveButton.addEventListener("click", () => {
-        applyLiveUpdatesArticle(article);
-        window.scrollTo({ top: 0, behavior: "smooth" });
-      });
-
       const editLink = document.createElement("a");
       editLink.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
       editLink.href = `/admin/news?edit=${encodeURIComponent(article.id)}`;
@@ -1887,7 +1946,7 @@ function renderArchive(items = []) {
       openLink.textContent = "Open";
       openLink.addEventListener("click", (event) => event.stopPropagation());
 
-      actions.append(readerButton, liveButton, editLink, openLink);
+      actions.append(readerButton, editLink, openLink);
       card.append(headline, meta, actions);
       list.append(card);
     });
@@ -2012,7 +2071,8 @@ async function loadArchiveData(options = {}) {
 }
 
 async function handleStorySignalsMutation(payload = {}, options = {}) {
-  const article = findArchiveArticleById(options.articleId || "");
+  const article = findArchiveArticleById(options.articleId || "")
+    || (cleanText(state.featuredArticle?.id || "") === cleanText(options.articleId || "") ? state.featuredArticle : null);
   if (!article || state.storySignalsBusy) {
     setStorySignalsStatus("Choose an article from Watch All News first.", true);
     return;
@@ -2092,15 +2152,20 @@ async function handleClearReaderPulse() {
 }
 
 async function handleSaveLiveUpdates() {
-  const article = findArchiveArticleById(state.selectedLiveUpdatesArticleId);
+  const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    setStorySignalsStatus("Push a hero story first. Live Updates attach to the current homepage hero.", true);
     return;
   }
 
   const liveUpdates = getLiveUpdatesPayload(article);
   if (!liveUpdates.enabled || !liveUpdates.items.length) {
     setStorySignalsStatus("Add one short update per line, or use Clear Live Updates.", true);
+    return;
+  }
+  const longLine = liveUpdates.items.find((item) => wordCount(item.text || "") > 10);
+  if (longLine) {
+    setStorySignalsStatus(`Keep each live update line within 10 words. "${longLine.text}" is too long.`, true);
     return;
   }
 
@@ -2112,16 +2177,18 @@ async function handleSaveLiveUpdates() {
       activeButton: dom.saveLiveUpdatesButton,
       busyLabel: "Pushing...",
       pendingMessage: "Pushing Live Updates...",
-      successMessage: "Live Updates saved. The hero timeline will use this queue.",
+      successMessage: liveUpdates.mode === "scheduled"
+        ? "Live Updates saved. The homepage hero will release them on schedule."
+        : "Live Updates saved. The homepage hero will reflect them instantly.",
       toastMessage: "Live Updates pushed.",
     }
   );
 }
 
 async function handleClearLiveUpdates() {
-  const article = findArchiveArticleById(state.selectedLiveUpdatesArticleId);
+  const article = resolveLiveUpdatesTargetArticle();
   if (!article) {
-    setStorySignalsStatus("Choose an article from Watch All News first.", true);
+    setStorySignalsStatus("Push a hero story first. Live Updates attach to the current homepage hero.", true);
     return;
   }
 
@@ -2420,13 +2487,16 @@ function attachStorySignalsListeners() {
   });
 
   [
-    dom.liveUpdatesStartedAtInput,
-    dom.liveUpdatesMinGapInput,
-    dom.liveUpdatesMaxGapInput,
+    dom.liveUpdatesScheduleToggle,
+    dom.liveUpdatesIntervalInput,
     dom.liveUpdatesQueueInput,
   ].forEach((element) => {
     element?.addEventListener("input", renderLiveUpdatesPreview);
     element?.addEventListener("change", renderLiveUpdatesPreview);
+  });
+  dom.liveUpdatesScheduleToggle?.addEventListener("change", () => {
+    syncLiveUpdatesScheduleState();
+    renderLiveUpdatesPreview();
   });
 
   dom.saveReaderPulseButton?.addEventListener("click", async () => {
@@ -2473,15 +2543,6 @@ function attachStorySignalsListeners() {
       return;
     }
     applyStorySignalsArticle(article);
-  });
-
-  dom.liveUpdatesArticleSelect?.addEventListener("change", (event) => {
-    const article = findArchiveArticleById(event.target.value || "");
-    if (!article) {
-      applyLiveUpdatesArticle(null);
-      return;
-    }
-    applyLiveUpdatesArticle(article);
   });
 }
 

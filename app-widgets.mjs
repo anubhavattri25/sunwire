@@ -180,13 +180,13 @@ export function renderSidebarData(elements = {}, data = {}) {
       notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
       maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
     }).format(Number(entry.visitors || 0));
+    const headline = trimSidebarCopy(entry.title || "Sunwire Story", 54);
     return `
       <li class="people-reading-item">
         <a class="people-reading-link" href="${escapeHtml(String(entry.href || "/").trim() || "/")}" target="_self" rel="noopener noreferrer">
           <img class="people-reading-thumb" src="${escapeHtml(String(entry.image_url || "/social-card.svg").trim() || "/social-card.svg")}" alt="${escapeHtml(cleanText(entry.title || "Sunwire Story") || "Sunwire Story")}" loading="lazy" decoding="async" />
           <span class="people-reading-copy">
-            <strong>${escapeHtml(cleanText(entry.title || "Sunwire Story") || "Sunwire Story")}</strong>
-            <span>${escapeHtml(trimSidebarCopy(entry.summary || "Configured visitor counters will surface here."))}</span>
+            <strong>${escapeHtml(cleanText(headline) || "Sunwire Story")}</strong>
           </span>
           <span class="people-reading-count">
             <strong>${escapeHtml(visitors)}</strong>
