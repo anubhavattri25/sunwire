@@ -979,6 +979,39 @@ function createSignalStoryCard(article = {}, options = {}) {
   return card;
 }
 
+function createLiveUpdatesQueueCard(article = {}) {
+  const card = document.createElement("article");
+  card.className = "rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4";
+
+  const heading = document.createElement("p");
+  heading.className = "text-sm font-semibold leading-6 text-slate-950";
+  heading.textContent = "Current live desk queue";
+
+  const meta = document.createElement("p");
+  meta.className = "mt-2 text-xs text-slate-500";
+  meta.textContent = `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`;
+
+  const timeline = buildLiveUpdateTimelinePreview(
+    normalizeLiveUpdatesConfig(article.liveUpdates || article.live_updates || {}, {
+      startedAt: signalStartFallback(article),
+    }),
+    article
+  );
+  const queue = document.createElement("div");
+  queue.className = "mt-3 space-y-2";
+
+  timeline.slice(0, 3).forEach((item) => {
+    const line = document.createElement("p");
+    line.className = "text-sm leading-6 text-slate-700";
+    line.textContent = item.text;
+    queue.append(line);
+  });
+
+  card.append(heading, meta);
+  if (timeline.length) card.append(queue);
+  return card;
+}
+
 function renderSignalBoards() {
   const readerStories = [...state.archiveArticles]
     .filter((article) => Number(article.syntheticViews || 0) > 0)
@@ -1022,21 +1055,19 @@ function renderSignalBoards() {
   }
 
   if (dom.liveUpdatesPushedCount) {
-    dom.liveUpdatesPushedCount.textContent = `${liveStories.length} live`;
+    dom.liveUpdatesPushedCount.textContent = liveDeskArticle && Number(liveDeskArticle.liveUpdateCount || 0) > 0
+      ? `${Number(liveDeskArticle.liveUpdateCount || 0)} lines`
+      : "0 live";
   }
   if (dom.liveUpdatesPushedList) {
     dom.liveUpdatesPushedList.replaceChildren();
-    if (!liveStories.length) {
+    if (!liveDeskArticle || Number(liveDeskArticle.liveUpdateCount || 0) <= 0) {
       const empty = document.createElement("p");
       empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
-      empty.textContent = "Stories with saved live lines will appear here.";
+      empty.textContent = "The current live desk queue will appear here after you push it.";
       dom.liveUpdatesPushedList.append(empty);
     } else {
-      liveStories.forEach((article) => {
-        dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
-          meta: `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`,
-        }));
-      });
+      dom.liveUpdatesPushedList.append(createLiveUpdatesQueueCard(liveDeskArticle));
     }
   }
 

@@ -354,13 +354,50 @@ async function updateManualStorySignals(articleId = '', body = {}) {
       metadata.liveUpdates || metadata.live_updates || {}
     ),
   };
+  const touchesLiveUpdates = Boolean(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'liveUpdates'));
 
-  return prisma.article.update({
-    where: { id: existing.id },
-    data: {
-      raw_content: JSON.stringify(updatedRawContent),
-    },
-    select: articleSelect,
+  return prisma.$transaction(async (tx) => {
+    if (touchesLiveUpdates) {
+      const otherManualArticles = await tx.article.findMany({
+        where: {
+          manual_upload: true,
+          NOT: { id: existing.id },
+        },
+        select: {
+          id: true,
+          raw_content: true,
+        },
+      });
+
+      await Promise.all(otherManualArticles.map((record) => {
+        const recordMetadata = parseManualRawContent(record.raw_content || '');
+        const clearedRawContent = {
+          ...recordMetadata,
+          liveUpdates: normalizeManualLiveUpdates({
+            enabled: false,
+            scheduleEnabled: false,
+            mode: 'instant',
+            intervalMinutes: 10,
+            items: [],
+          }),
+        };
+
+        return tx.article.update({
+          where: { id: record.id },
+          data: {
+            raw_content: JSON.stringify(clearedRawContent),
+          },
+        });
+      }));
+    }
+
+    return tx.article.update({
+      where: { id: existing.id },
+      data: {
+        raw_content: JSON.stringify(updatedRawContent),
+      },
+      select: articleSelect,
+    });
   });
 }
 
@@ -394,7 +431,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260401-2"></script>',
+    '<script type="module" src="/admin/news.js?v=20260401-3"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

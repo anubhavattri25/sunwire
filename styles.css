@@ -3094,6 +3094,7 @@ body[data-home-mode="archive"] .category-zone {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  align-self: start;
 }
 
 .sidebar-card--reading .sidebar-card__header {
