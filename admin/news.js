@@ -975,6 +975,10 @@ function renderSignalBoards() {
         - new Date(left.created_at || left.published_at || 0).getTime();
     })
     .slice(0, 12);
+  const defaultLiveArticle = !state.selectedLiveUpdatesArticleId && liveStories.length
+    ? liveStories[0]
+    : null;
+  const selectedLiveId = cleanText(state.selectedLiveUpdatesArticleId || defaultLiveArticle?.id || "");
 
   if (dom.readerPulsePushedCount) {
     dom.readerPulsePushedCount.textContent = `${readerStories.length} live`;
@@ -1010,12 +1014,16 @@ function renderSignalBoards() {
     } else {
       liveStories.forEach((article) => {
         dom.liveUpdatesPushedList.append(createSignalStoryCard(article, {
-          selectedId: state.selectedLiveUpdatesArticleId,
+          selectedId: selectedLiveId,
           meta: `${Number(article.liveUpdateCount || 0)} live lines • ${fmtDate(article.created_at || article.published_at || "")}`,
           onSelect: applyLiveUpdatesArticle,
         }));
       });
     }
+  }
+
+  if (defaultLiveArticle) {
+    applyLiveUpdatesArticle(defaultLiveArticle);
   }
 }
 
