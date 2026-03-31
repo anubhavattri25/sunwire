@@ -966,7 +966,7 @@ function applyLiveUpdatesArticle(article = null) {
   if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = liveUpdates.mode === "scheduled";
   if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = String(liveUpdates.intervalMinutes || 10);
   syncLiveUpdatesScheduleState();
-  if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = liveUpdates.items.join("\n");
+  if (dom.liveUpdatesQueueInput) dom.liveUpdatesQueueInput.value = "";
 
   renderLiveUpdatesPreview();
 }

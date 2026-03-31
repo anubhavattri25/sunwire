@@ -68,6 +68,38 @@ function cleanText(value = '') {
   return String(value || '').trim();
 }
 
+function repairInstantLiveUpdates(liveUpdates = {}, referenceTime = '') {
+  const normalized = normalizeManualLiveUpdates(liveUpdates);
+  if (normalized.mode !== 'instant' || normalized.items.length <= 1) return normalized;
+
+  const nowMs = Number.isFinite(new Date(referenceTime).getTime())
+    ? new Date(referenceTime).getTime()
+    : Date.now();
+  const parsedTimes = normalized.items.map((item) => {
+    const value = cleanText(item?.scheduledAt || '');
+    if (!value) return NaN;
+    const parsed = new Date(value).getTime();
+    return Number.isFinite(parsed) ? parsed : NaN;
+  });
+  const hasBrokenTiming = parsedTimes.some((timeMs) => !Number.isFinite(timeMs) || timeMs > nowMs)
+    || parsedTimes.some((timeMs, index) => index > 0 && timeMs <= parsedTimes[index - 1]);
+
+  if (!hasBrokenTiming) return normalized;
+
+  const anchorMs = Number.isFinite(new Date(normalized.startedAt || '').getTime())
+    ? new Date(normalized.startedAt).getTime()
+    : nowMs;
+  const startMs = Math.min(anchorMs, nowMs - ((normalized.items.length - 1) * 60 * 1000));
+
+  return normalizeManualLiveUpdates({
+    ...normalized,
+    items: normalized.items.map((item, index) => ({
+      text: item.text,
+      scheduledAt: new Date(startMs + (index * 60 * 1000)).toISOString(),
+    })),
+  });
+}
+
 function resolveGoogleClientId() {
   return String(
     process.env.GOOGLE_CLIENT_ID
@@ -343,18 +375,42 @@ async function updateManualStorySignals(articleId = '', body = {}) {
   if (!existing) return null;
 
   const metadata = parseManualRawContent(existing.raw_content || '');
+  const touchesLiveUpdates = Boolean(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'liveUpdates'));
+  const currentPushAt = new Date().toISOString();
+  const existingLiveUpdates = repairInstantLiveUpdates(normalizeManualLiveUpdates(
+    metadata.liveUpdates || metadata.live_updates || {}
+  ), currentPushAt);
+  const requestedLiveUpdates = normalizeManualLiveUpdates(
+    body?.liveUpdates || {},
+    existingLiveUpdates
+  );
+  const mergedLiveUpdates = normalizeManualLiveUpdates({
+    ...requestedLiveUpdates,
+    items: requestedLiveUpdates.items.map((item, index) => {
+      const previous = existingLiveUpdates.items[index];
+      if (previous && previous.text === item.text) {
+        return {
+          text: item.text,
+          scheduledAt: previous.scheduledAt || '',
+        };
+      }
+
+      return {
+        text: item.text,
+        scheduledAt: requestedLiveUpdates.mode === 'instant' ? currentPushAt : '',
+      };
+    }),
+  }, existingLiveUpdates);
   const updatedRawContent = {
     ...metadata,
     readerPulse: normalizeManualReaderPulse(
       body?.readerPulse || {},
       metadata.readerPulse || metadata.reader_pulse || {}
     ),
-    liveUpdates: normalizeManualLiveUpdates(
-      body?.liveUpdates || {},
-      metadata.liveUpdates || metadata.live_updates || {}
-    ),
+    liveUpdates: touchesLiveUpdates
+      ? mergedLiveUpdates
+      : existingLiveUpdates,
   };
-  const touchesLiveUpdates = Boolean(body && typeof body === 'object' && Object.prototype.hasOwnProperty.call(body, 'liveUpdates'));
 
   return prisma.$transaction(async (tx) => {
     if (touchesLiveUpdates) {
@@ -431,7 +487,7 @@ async function renderAdminPage(req, res) {
     `window.__SUNWIRE_ADMIN_PAGE_MODE__=${JSON.stringify(mode)};`,
     '(function(){var role=String(window.__SUNWIRE_ADMIN_ROLE__||"").toLowerCase();document.querySelectorAll("[data-admin-only]").forEach(function(node){node.hidden=role!=="admin";});document.querySelectorAll("[data-submitter-only]").forEach(function(node){node.hidden=role!=="submitter";});})();',
     '</script>',
-    '<script type="module" src="/admin/news.js?v=20260401-4"></script>',
+    '<script type="module" src="/admin/news.js?v=20260401-5"></script>',
   ].join('');
 
   res.setHeader('Content-Type', 'text/html; charset=utf-8');

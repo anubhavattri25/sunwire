@@ -53,10 +53,11 @@ function normalizeLiveUpdateItems(items = [], maxItems = MAX_LIVE_UPDATES) {
   return sourceItems
     .map((entry) => {
       if (typeof entry === 'string') {
-        return { text: cleanText(entry) };
+        return { text: cleanText(entry), scheduledAt: '' };
       }
       return {
         text: cleanText(entry?.text || entry?.title || entry?.label || ''),
+        scheduledAt: normalizeIsoDateTime(entry?.scheduledAt || entry?.createdAt || entry?.timestamp || ''),
       };
     })
     .filter((entry) => entry.text)
@@ -204,6 +205,34 @@ function resolveTimelineAnchor({
   return normalizeIsoDateTime(startedAt || fallbackStartAt || publishedAt || '') || '';
 }
 
+function buildInstantLiveUpdateTimeline(items = [], { anchorMs = Date.now(), seed = 'sunwire-live' } = {}) {
+  const sourceItems = Array.isArray(items) ? items : [];
+  if (!sourceItems.length) return [];
+
+  const nowMs = Date.now();
+  const parsedTimes = sourceItems.map((item) => {
+    const value = normalizeIsoDateTime(item?.scheduledAt || '');
+    return value ? new Date(value).getTime() : NaN;
+  });
+  const hasBrokenTiming = parsedTimes.some((timeMs) => !Number.isFinite(timeMs) || timeMs > nowMs)
+    || parsedTimes.some((timeMs, index) => index > 0 && timeMs <= parsedTimes[index - 1]);
+
+  if (!hasBrokenTiming) {
+    return sourceItems.map((item, index) => ({
+      id: `${seed}-${index + 1}`,
+      text: item.text,
+      scheduledAt: new Date(parsedTimes[index]).toISOString(),
+    }));
+  }
+
+  const startMs = Math.min(anchorMs, nowMs - ((sourceItems.length - 1) * 60 * 1000));
+  return sourceItems.map((item, index) => ({
+    id: `${seed}-${index + 1}`,
+    text: item.text,
+    scheduledAt: new Date(startMs + (index * 60 * 1000)).toISOString(),
+  }));
+}
+
 function buildLiveUpdateTimeline(liveUpdates = {}, options = {}) {
   const normalized = normalizeManualLiveUpdates(liveUpdates);
   if (!normalized.enabled || !normalized.items.length) return [];
@@ -219,27 +248,31 @@ function buildLiveUpdateTimeline(liveUpdates = {}, options = {}) {
   const seed = cleanText(options.seed || options.articleId || options.slug || options.title || 'sunwire-live');
 
   if (normalized.mode !== 'scheduled') {
-    return normalized.items.map((item, index) => ({
-      id: `${seed}-${index + 1}`,
-      text: item.text,
-      scheduledAt: anchor,
-    }));
+    return buildInstantLiveUpdateTimeline(normalized.items, {
+      anchorMs,
+      seed,
+    });
   }
 
   let currentMs = anchorMs;
 
   return normalized.items.map((item, index) => {
-    currentMs += resolveDeterministicStep(
-      seed,
-      index,
-      normalized.minGapMinutes,
-      normalized.maxGapMinutes
-    ) * 60 * 1000;
+    const existingScheduledAt = normalizeIsoDateTime(item?.scheduledAt || '');
+    if (existingScheduledAt) {
+      currentMs = new Date(existingScheduledAt).getTime();
+    } else {
+      currentMs += resolveDeterministicStep(
+        seed,
+        index,
+        normalized.minGapMinutes,
+        normalized.maxGapMinutes
+      ) * 60 * 1000;
+    }
 
     return {
       id: `${seed}-${index + 1}`,
       text: item.text,
-      scheduledAt: new Date(currentMs).toISOString(),
+      scheduledAt: existingScheduledAt || new Date(currentMs).toISOString(),
     };
   });
 }
