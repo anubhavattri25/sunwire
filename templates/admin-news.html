@@ -603,7 +603,7 @@
             <div class="mt-6 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
               <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Selected story</p>
               <h3 class="mt-2 break-words font-display text-2xl font-bold tracking-tight text-slate-950" id="storySignalsHeadline">Select a pushed article from Watch All News.</h3>
-              <p class="mt-2 text-sm text-slate-500" id="storySignalsMeta">The dashboard will load its visitor settings and live-update queue here.</p>
+              <p class="mt-2 text-sm text-slate-500" id="storySignalsMeta">The dashboard will load this story's visitor settings here.</p>
             </div>
 
             <div class="mt-6 grid min-w-0 gap-4 md:grid-cols-2">
@@ -655,6 +655,19 @@
                 <p class="mt-2 text-sm text-slate-500">Write one short update per line. Sunwire will release them automatically at random gaps between your min and max timing.</p>
               </div>
               <span class="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900" id="liveUpdatesCountBadge">0 queued</span>
+            </div>
+
+            <label class="mt-6 grid gap-2">
+              <span class="text-sm font-semibold text-slate-900">Choose article</span>
+              <select class="h-12 min-w-0 rounded-2xl border border-slate-300 bg-white px-4 text-sm outline-none transition focus:border-slate-950" id="liveUpdatesArticleSelect">
+                <option value="">Select a pushed article</option>
+              </select>
+            </label>
+
+            <div class="mt-6 rounded-[28px] border border-slate-200 bg-slate-50/80 p-5">
+              <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Selected live story</p>
+              <h3 class="mt-2 break-words font-display text-2xl font-bold tracking-tight text-slate-950" id="liveUpdatesHeadline">Select a pushed article from Watch All News.</h3>
+              <p class="mt-2 text-sm text-slate-500" id="liveUpdatesMeta">The dashboard will load this story's live timeline queue here.</p>
             </div>
 
             <div class="mt-6 grid min-w-0 gap-4 md:grid-cols-3">
@@ -713,7 +726,7 @@
             <div>
               <p class="text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">Watch All News</p>
               <h2 class="mt-2 font-display text-3xl font-bold tracking-tight text-slate-950">Every pushed article, newest day first</h2>
-              <p class="mt-2 text-sm text-slate-500">Articles stay grouped by publish day. Inside each day, stories with the strongest synthetic visitor count float to the top.</p>
+              <p class="mt-2 text-sm text-slate-500">Articles stay grouped by publish day. Inside each day, the newest pushed article appears first.</p>
             </div>
             <div class="flex items-center gap-3">
               <span class="rounded-full bg-slate-100 px-4 py-2 text-xs font-semibold text-slate-900" id="manualTotalCount">0 articles</span>

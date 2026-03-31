@@ -1,3 +1,5 @@
+import { cleanText } from "./shared/client-utils.mjs";
+
 function escapeHtml(text = "") {
   return String(text || "")
     .replace(/&/g, "&amp;")
@@ -173,56 +175,25 @@ export function renderSidebarData(elements = {}, data = {}) {
     return;
   }
 
-  try {
-    peopleReading.forEach((entry) => {
-      const li = document.createElement("li");
-      li.className = "people-reading-item";
-
-      const link = document.createElement("a");
-      link.className = "people-reading-link";
-      link.href = String(entry.href || "/").trim() || "/";
-      link.target = "_self";
-      link.rel = "noopener noreferrer";
-
-      const image = document.createElement("img");
-      image.className = "people-reading-thumb";
-      image.src = String(entry.image_url || "/social-card.svg").trim() || "/social-card.svg";
-      image.alt = cleanText(entry.title || "Sunwire Story") || "Sunwire Story";
-      image.loading = "lazy";
-      image.decoding = "async";
-
-      const copy = document.createElement("span");
-      copy.className = "people-reading-copy";
-
-      const headline = document.createElement("strong");
-      headline.textContent = cleanText(entry.title || "Sunwire Story") || "Sunwire Story";
-
-      const summary = document.createElement("span");
-      summary.textContent = trimSidebarCopy(entry.summary || "Configured visitor counters will surface here.");
-
-      copy.append(headline, summary);
-
-      const count = document.createElement("span");
-      count.className = "people-reading-count";
-
-      const countValue = document.createElement("strong");
-      countValue.textContent = new Intl.NumberFormat("en-IN", {
-        notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
-        maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
-      }).format(Number(entry.visitors || 0));
-
-      const countLabel = document.createElement("small");
-      countLabel.textContent = "readers";
-
-      count.append(countValue, countLabel);
-      link.append(image, copy, count);
-      li.append(link);
-      peopleReadingListEl.appendChild(li);
-    });
-  } catch (_) {
-    const fallback = document.createElement("li");
-    fallback.className = "people-reading-empty";
-    fallback.textContent = "Reader pulse is loading.";
-    peopleReadingListEl.appendChild(fallback);
-  }
+  peopleReadingListEl.innerHTML = peopleReading.map((entry) => {
+    const visitors = new Intl.NumberFormat("en-IN", {
+      notation: Number(entry.visitors || 0) >= 1000 ? "compact" : "standard",
+      maximumFractionDigits: Number(entry.visitors || 0) >= 1000 ? 1 : 0,
+    }).format(Number(entry.visitors || 0));
+    return `
+      <li class="people-reading-item">
+        <a class="people-reading-link" href="${escapeHtml(String(entry.href || "/").trim() || "/")}" target="_self" rel="noopener noreferrer">
+          <img class="people-reading-thumb" src="${escapeHtml(String(entry.image_url || "/social-card.svg").trim() || "/social-card.svg")}" alt="${escapeHtml(cleanText(entry.title || "Sunwire Story") || "Sunwire Story")}" loading="lazy" decoding="async" />
+          <span class="people-reading-copy">
+            <strong>${escapeHtml(cleanText(entry.title || "Sunwire Story") || "Sunwire Story")}</strong>
+            <span>${escapeHtml(trimSidebarCopy(entry.summary || "Configured visitor counters will surface here."))}</span>
+          </span>
+          <span class="people-reading-count">
+            <strong>${escapeHtml(visitors)}</strong>
+            <small>readers</small>
+          </span>
+        </a>
+      </li>
+    `;
+  }).join("");
 }
