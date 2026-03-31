@@ -1417,12 +1417,21 @@ function syncModeInUrl() {
   const defaultMode = defaultModeForRole();
   if (state.mode === defaultMode) url.searchParams.delete("mode");
   else url.searchParams.set("mode", state.mode);
-  if (state.mode !== "edit-news" && !state.currentEditingArticleId) url.searchParams.delete("edit");
+  if (state.mode !== "edit-news") {
+    url.searchParams.delete("edit");
+  } else if (state.currentEditingArticleId) {
+    url.searchParams.set("edit", state.currentEditingArticleId);
+  } else {
+    url.searchParams.delete("edit");
+  }
   window.history.replaceState({}, "", `${url.pathname}${url.search}`);
 }
 
 function setViewMode(mode, options = {}) {
   state.mode = normalizeMode(mode);
+  if (state.mode !== "edit-news" && options.preserveEditState !== true) {
+    state.currentEditingArticleId = "";
+  }
   if (dom.requestDashboardSection) dom.requestDashboardSection.hidden = state.mode !== "news-requests";
   if (dom.editDashboardSection) dom.editDashboardSection.hidden = !["edit-news", "submit-request"].includes(state.mode);
   if (dom.watchAllDashboardSection) dom.watchAllDashboardSection.hidden = state.mode !== "watch-all-news";
@@ -2105,11 +2114,12 @@ function resetForm({ keepStatus = false } = {}) {
 
 async function loadArticleForEdit(articleId) {
   if (!articleId || !isAdminRole()) return;
-  setViewMode("edit-news");
+  setViewMode("edit-news", { preserveEditState: true });
   const data = await fetchJson(`/api/admin?view=news&id=${encodeURIComponent(articleId)}`);
   applyArticleToForm(data.article || {});
   const url = new URL(window.location.href);
   url.pathname = "/admin/news";
+  url.searchParams.set("mode", "edit-news");
   url.searchParams.set("edit", articleId);
   window.history.replaceState({}, "", url.pathname + url.search);
   window.scrollTo({ top: 0, behavior: "smooth" });
@@ -2780,8 +2790,11 @@ async function init() {
     if (persistedStatus?.message) {
       setGlobalStatus(persistedStatus.message, persistedStatus.isError, { persist: false });
     }
-    const editId = new URL(window.location.href).searchParams.get("edit");
-    if (editId && isAdminRole()) {
+    const currentUrl = new URL(window.location.href);
+    const requestedMode = normalizeMode(currentUrl.searchParams.get("mode") || PAGE_MODE);
+    const editId = currentUrl.searchParams.get("edit");
+    const shouldOpenEdit = isAdminRole() && Boolean(editId) && (!currentUrl.searchParams.has("mode") || requestedMode === "edit-news");
+    if (shouldOpenEdit) {
       setViewMode("edit-news", { skipUrl: true });
       await loadPageData({ awaitSummary: true });
       await loadArticleForEdit(editId);
