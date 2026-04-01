@@ -3243,15 +3243,44 @@ body[data-home-mode="archive"] .category-zone {
   }
 
   .people-reading-link {
-    grid-template-columns: 52px minmax(0, 1fr) auto;
+    grid-template-columns: 52px minmax(0, 1fr);
+    grid-template-areas:
+      "thumb copy"
+      "thumb count";
+    row-gap: 8px;
   }
 
   .people-reading-thumb {
+    grid-area: thumb;
     width: 52px;
     height: 52px;
   }
 
+  .people-reading-copy {
+    grid-area: copy;
+  }
+
+  .people-reading-copy strong {
+    font-size: 0.94rem;
+    line-height: 1.18;
+    min-height: 0;
+  }
+
   .people-reading-count {
-    min-width: 42px;
+    grid-area: count;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-self: start;
+    gap: 6px;
+    text-align: left;
+  }
+
+  .people-reading-count strong {
+    font-size: 0.94rem;
+  }
+
+  .people-reading-count small {
+    font-size: 0.68rem;
   }
 }

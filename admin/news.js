@@ -136,9 +136,10 @@ const dom = {
   readerPulseStartedAtInput: document.getElementById("readerPulseStartedAtInput"),
   readerPulsePushedCount: document.getElementById("readerPulsePushedCount"),
   readerPulsePushedList: document.getElementById("readerPulsePushedList"),
+  readerPulsePanel: document.getElementById("readerPulsePanel"),
   liveUpdatesArticleSelect: document.getElementById("liveUpdatesArticleSelect"),
-  liveUpdatesHeadline: document.getElementById("liveUpdatesHeadline"),
-  liveUpdatesMeta: document.getElementById("liveUpdatesMeta"),
+  liveUpdatesPanel: document.getElementById("liveUpdatesPanel"),
+  liveUpdatesPreviewCard: document.getElementById("liveUpdatesPreviewCard"),
   liveUpdatesScheduleToggle: document.getElementById("liveUpdatesScheduleToggle"),
   liveUpdatesIntervalInput: document.getElementById("liveUpdatesIntervalInput"),
   liveUpdatesQueueInput: document.getElementById("liveUpdatesQueueInput"),
@@ -147,6 +148,7 @@ const dom = {
   liveUpdatesPreviewList: document.getElementById("liveUpdatesPreviewList"),
   liveUpdatesPushedCount: document.getElementById("liveUpdatesPushedCount"),
   liveUpdatesPushedList: document.getElementById("liveUpdatesPushedList"),
+  liveUpdatesPushedCard: document.getElementById("liveUpdatesPushedCard"),
   saveReaderPulseButton: document.getElementById("saveReaderPulseButton"),
   clearReaderPulseButton: document.getElementById("clearReaderPulseButton"),
   saveLiveUpdatesButton: document.getElementById("saveLiveUpdatesButton"),
@@ -703,8 +705,6 @@ function resetReaderPulseDashboard({ preserveStatus = false } = {}) {
 
 function resetLiveUpdatesDashboard() {
   state.selectedLiveUpdatesArticleId = "";
-  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = "Live desk source will attach automatically.";
-  if (dom.liveUpdatesMeta) dom.liveUpdatesMeta.textContent = "Push quick lines here and Sunwire will store them separately from People Are Reading.";
   if (dom.liveUpdatesScheduleToggle) dom.liveUpdatesScheduleToggle.checked = false;
   if (dom.liveUpdatesIntervalInput) dom.liveUpdatesIntervalInput.value = "10";
   syncLiveUpdatesScheduleState();
@@ -831,6 +831,7 @@ function renderStorySignalsPreview() {
   const article = findArchiveArticleById(state.selectedReaderPulseArticleId);
   if (!article) {
     if (dom.storySignalsPreview) dom.storySignalsPreview.textContent = "Choose a story";
+    syncWatchAllPanelHeights();
     return;
   }
 
@@ -847,6 +848,7 @@ function renderStorySignalsPreview() {
   } else {
     setStorySignalsStatus("Add visitor numbers, then push People Are Reading.");
   }
+  syncWatchAllPanelHeights();
 }
 
 function applyStorySignalsArticle(article = null) {
@@ -890,6 +892,7 @@ function renderLiveUpdatesPreview() {
       dom.liveUpdatesPreviewList.append(empty);
     }
     setLiveUpdatesStatus("Live desk will use your latest pushed story automatically.");
+    syncWatchAllPanelHeights();
     return;
   }
 
@@ -921,6 +924,7 @@ function renderLiveUpdatesPreview() {
     empty.className = "rounded-2xl bg-slate-50 px-4 py-4 text-sm text-slate-500";
     empty.textContent = "No quick live lines are queued yet.";
     dom.liveUpdatesPreviewList.append(empty);
+    syncWatchAllPanelHeights();
     return;
   }
 
@@ -941,6 +945,7 @@ function renderLiveUpdatesPreview() {
     card.append(headline, meta);
     dom.liveUpdatesPreviewList.append(card);
   });
+  syncWatchAllPanelHeights();
 }
 
 function applyLiveUpdatesArticle(article = null) {
@@ -950,15 +955,6 @@ function applyLiveUpdatesArticle(article = null) {
   }
 
   state.selectedLiveUpdatesArticleId = cleanText(article.id || "");
-  if (dom.liveUpdatesHeadline) dom.liveUpdatesHeadline.textContent = cleanText(article.title || "Untitled story");
-  if (dom.liveUpdatesMeta) {
-    dom.liveUpdatesMeta.textContent = [
-      "Managed automatically",
-      toTitleCase(article.category || "news"),
-      fmtDate(article.created_at || article.published_at || new Date().toISOString()),
-      article.liveUpdateCount ? `${article.liveUpdateCount} live lines saved` : "No quick lines saved yet",
-    ].filter(Boolean).join(" | ");
-  }
 
   const liveUpdates = normalizeLiveUpdatesConfig(article.liveUpdates || article.live_updates || {}, {
     startedAt: signalStartFallback(article),
@@ -1036,6 +1032,20 @@ function createLiveUpdatesQueueCard(article = {}) {
   return card;
 }
 
+function syncWatchAllPanelHeights() {
+  if (!dom.readerPulsePanel || !dom.liveUpdatesPanel) return;
+  if (window.innerWidth < 1280) {
+    dom.liveUpdatesPanel.style.removeProperty("height");
+    return;
+  }
+
+  dom.liveUpdatesPanel.style.removeProperty("height");
+  const readerPulseHeight = Math.ceil(dom.readerPulsePanel.getBoundingClientRect().height || 0);
+  if (readerPulseHeight > 0) {
+    dom.liveUpdatesPanel.style.height = `${readerPulseHeight}px`;
+  }
+}
+
 function renderSignalBoards() {
   const readerStories = [...state.archiveArticles]
     .filter((article) => Number(article.syntheticViews || 0) > 0)
@@ -1098,6 +1108,7 @@ function renderSignalBoards() {
   if (liveDeskArticle && (!state.selectedLiveUpdatesArticleId || !findArchiveArticleById(state.selectedLiveUpdatesArticleId))) {
     applyLiveUpdatesArticle(liveDeskArticle);
   }
+  syncWatchAllPanelHeights();
 }
 
 function setButtonBusy(button, busy, busyLabel) {
@@ -2019,7 +2030,7 @@ function renderArchive(items = []) {
 
       const editLink = document.createElement("a");
       editLink.className = "rounded-full bg-slate-950 px-4 py-2 text-xs font-semibold text-white transition hover:bg-slate-800";
-      editLink.href = `/admin/news?edit=${encodeURIComponent(article.id)}`;
+      editLink.href = `/admin/news?mode=edit-news&edit=${encodeURIComponent(article.id)}`;
       editLink.textContent = "Edit";
       editLink.addEventListener("click", (event) => event.stopPropagation());
 
@@ -2793,7 +2804,7 @@ async function init() {
     const currentUrl = new URL(window.location.href);
     const requestedMode = normalizeMode(currentUrl.searchParams.get("mode") || PAGE_MODE);
     const editId = currentUrl.searchParams.get("edit");
-    const shouldOpenEdit = isAdminRole() && Boolean(editId) && (!currentUrl.searchParams.has("mode") || requestedMode === "edit-news");
+    const shouldOpenEdit = isAdminRole() && Boolean(editId) && requestedMode === "edit-news";
     if (shouldOpenEdit) {
       setViewMode("edit-news", { skipUrl: true });
       await loadPageData({ awaitSummary: true });
@@ -2802,6 +2813,7 @@ async function init() {
       await loadPageData();
     }
     prefetchDashboardData();
+    window.addEventListener("resize", syncWatchAllPanelHeights, { passive: true });
   } catch (error) {
     setStatus(error.message || "Admin dashboard failed to load.", true);
     showToast(error.message || "Admin dashboard failed to load.");
