@@ -648,7 +648,10 @@ function createRandomAuthToken(byteLength = 24) {
 }
 
 function buildGoogleRedirectUri() {
-  return `${window.location.origin}/`;
+  const currentOrigin = cleanText(window.location.origin || "");
+  const isLocalOrigin = /^https?:\/\/(localhost|127(?:\.\d{1,3}){3})(:\d+)?$/i.test(currentOrigin);
+  const preferredOrigin = cleanText(isLocalOrigin ? currentOrigin : SEO_SITE_ORIGIN || currentOrigin);
+  return preferredOrigin.replace(/\/+$/, "");
 }
 
 function buildGoogleLoginUrl() {
@@ -2378,6 +2381,11 @@ function scheduleSidebarHydration({ forceRefresh = false } = {}) {
   if (!homepageSidebarEl) return;
 
   if (forceRefresh) pendingSidebarPayload = null;
+
+  if (window.innerWidth <= 900) {
+    void hydrateSidebar(forceRefresh);
+    return;
+  }
 
   if (isElementNearViewport(homepageSidebarEl, 220)) {
     void hydrateSidebar(forceRefresh);
