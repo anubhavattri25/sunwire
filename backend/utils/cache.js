@@ -27,6 +27,8 @@ function clearPublicStoryCaches() {
   if (sidebarCache && typeof sidebarCache === 'object') {
     sidebarCache.payload = null;
     sidebarCache.expiresAt = 0;
+    sidebarCache.peopleReadingPayload = null;
+    sidebarCache.peopleReadingExpiresAt = 0;
   }
 }
 

@@ -24,6 +24,8 @@ const SIDEBAR_FALLBACK_CACHE_TTL_MS = 2 * 60 * 1000;
 const sidebarBaseCache = globalThis.__SUNWIRE_SIDEBAR_CACHE__ || {
   payload: null,
   expiresAt: 0,
+  peopleReadingPayload: null,
+  peopleReadingExpiresAt: 0,
 };
 globalThis.__SUNWIRE_SIDEBAR_CACHE__ = sidebarBaseCache;
 const marketBoardHistory = new Map();
@@ -493,11 +495,16 @@ function pickDailyThree(items = []) {
 }
 
 async function fetchPeopleReading() {
+  const cachedPeopleReading = sidebarBaseCache.peopleReadingPayload
+    && sidebarBaseCache.peopleReadingExpiresAt > Date.now()
+    ? sidebarBaseCache.peopleReadingPayload
+    : null;
+
   if (isDatabaseCoolingDown()) {
     return {
-      items: [],
+      items: cachedPeopleReading || [],
       degraded: true,
-      message: getDatabaseBusyMessage(),
+      message: cachedPeopleReading?.length ? "" : getDatabaseBusyMessage(),
     };
   }
 
@@ -531,6 +538,11 @@ async function fetchPeopleReading() {
         href: buildArticleHref(article),
       }));
 
+    if (items.length) {
+      sidebarBaseCache.peopleReadingPayload = items;
+      sidebarBaseCache.peopleReadingExpiresAt = Date.now() + SIDEBAR_CACHE_TTL_MS;
+    }
+
     return {
       items,
       degraded: false,
@@ -539,9 +551,9 @@ async function fetchPeopleReading() {
   } catch (error) {
     markDatabasePressure(error);
     return {
-      items: [],
+      items: cachedPeopleReading || [],
       degraded: true,
-      message: getDatabaseBusyMessage(),
+      message: cachedPeopleReading?.length ? "" : getDatabaseBusyMessage(),
     };
   }
 }

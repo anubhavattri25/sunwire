@@ -49,10 +49,6 @@ const FALLBACK_EVENTS = [
   { name: "OpenAI Dev Day", about: "New model APIs, product launches, and developer tools.", link: "https://openai.com/" },
 ];
 
-const FALLBACK_PEOPLE_READING = [
-  { title: "Sunwire audience queue is warming up", summary: "Configure visitor growth for your pushed stories from Watch All News.", visitors: 0, href: "/admin/news?mode=watch-all-news" },
-];
-
 const FALLBACK_PRICES = {
   meta: "Latest India market snapshot.",
   items: [
@@ -100,9 +96,7 @@ export function renderSidebarData(elements = {}, data = {}) {
     priceBoardSourcesEl,
   } = elements;
 
-  const peopleReading = (Array.isArray(data?.peopleReading) && data.peopleReading.length
-    ? data.peopleReading
-    : FALLBACK_PEOPLE_READING).slice(0, 4);
+  const peopleReading = Array.isArray(data?.peopleReading) ? data.peopleReading.slice(0, 4) : [];
   const tool = data?.tool || {};
   const prices = Array.isArray(data?.marketBoard?.items) && data.marketBoard.items.length
     ? data.marketBoard.items.slice(0, 3)
@@ -170,7 +164,8 @@ export function renderSidebarData(elements = {}, data = {}) {
   if (!peopleReading.length) {
     const empty = document.createElement("li");
     empty.className = "people-reading-empty";
-    empty.textContent = "No reader pulse stories yet.";
+    empty.textContent = cleanText(data?.peopleReadingMessage || "")
+      || (data?.peopleReadingDegraded ? "People Are Reading is temporarily unavailable." : "No reader pulse stories yet.");
     peopleReadingListEl.appendChild(empty);
     return;
   }
